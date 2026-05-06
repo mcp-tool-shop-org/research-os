@@ -25,3 +25,24 @@ export class TemplateNotFoundError extends ResearchOSError {
     this.name = 'TemplateNotFoundError';
   }
 }
+
+export class PackNotFoundError extends ResearchOSError {
+  constructor(path: string) {
+    super(`No research.yaml found at ${path}. Run 'research-os init' first.`, 'PACK_NOT_FOUND');
+    this.name = 'PackNotFoundError';
+  }
+}
+
+export class SectionExistsError extends ResearchOSError {
+  constructor(id: string) {
+    super(`Section already exists: ${id}`, 'SECTION_EXISTS');
+    this.name = 'SectionExistsError';
+  }
+}
+
+export class InvalidSectionIdError extends ResearchOSError {
+  constructor(id: string) {
+    super(`Invalid section id: "${id}". Must match pattern NN-slug (e.g. "01-landscape").`, 'INVALID_SECTION_ID');
+    this.name = 'InvalidSectionIdError';
+  }
+}

@@ -1,8 +1,20 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { init } from './intake/index.js';
+import { add as sectionAdd } from './sections/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
+
+function reportError(err: unknown): never {
+  if (err instanceof ResearchOSError) {
+    process.stderr.write(`research-os: ${err.code}: ${err.message}\n`);
+  } else if (err instanceof Error) {
+    process.stderr.write(`research-os: ${err.message}\n`);
+  } else {
+    process.stderr.write(`research-os: unknown error\n`);
+  }
+  process.exit(1);
+}
 
 const program = new Command();
 
@@ -39,14 +51,39 @@ program
       process.stdout.write(`  path: ${result.packPath}\n`);
       process.stdout.write(`  files: ${result.filesWritten.length}\n`);
     } catch (err) {
-      if (err instanceof ResearchOSError) {
-        process.stderr.write(`research-os: ${err.code}: ${err.message}\n`);
-      } else if (err instanceof Error) {
-        process.stderr.write(`research-os: ${err.message}\n`);
-      } else {
-        process.stderr.write(`research-os: unknown error\n`);
-      }
-      process.exit(1);
+      reportError(err);
+    }
+  });
+
+const sectionCmd = program
+  .command('section')
+  .description('Manage sections inside a research-pack');
+
+sectionCmd
+  .command('add')
+  .description('Add a new section to the pack')
+  .argument('<id>', 'Section id, e.g. "01-landscape"')
+  .requiredOption('--purpose <text>', 'What this section investigates')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--max-time <n>', 'Section time budget in minutes', (v) => parseInt(v, 10))
+  .option('--min-sources <n>', 'Minimum sources required for this section', (v) => parseInt(v, 10))
+  .option('--primary-required <n>', 'Primary sources required for this section', (v) => parseInt(v, 10))
+  .action(async (id: string, opts) => {
+    try {
+      const result = await sectionAdd({
+        id,
+        purpose: opts.purpose,
+        packPath: opts.pack,
+        maxTimeMinutes: opts.maxTime,
+        minSources: opts.minSources,
+        primarySourcesRequired: opts.primaryRequired,
+      });
+      process.stdout.write(`section added\n`);
+      process.stdout.write(`  id:    ${result.sectionId}\n`);
+      process.stdout.write(`  path:  ${result.sectionPath}\n`);
+      process.stdout.write(`  files: ${result.filesWritten.length}\n`);
+    } catch (err) {
+      reportError(err);
     }
   });
 
