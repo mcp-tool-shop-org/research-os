@@ -9,6 +9,12 @@ import type {
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
 
+export function normalizeOllamaHost(host: string): string {
+  const trimmed = host.trim().replace(/\/+$/, '');
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
 const SYSTEM_PROMPT = `You are an extractor for a gated research pack. Given the URL, content type, and raw text of a fetched source, return ONE JSON object with these fields and no other prose:
 
 {
@@ -41,7 +47,7 @@ export class OllamaInternExtractor implements Extractor {
   private readonly fetchImpl: typeof fetch;
 
   constructor(config: OllamaConfig = {}) {
-    this.host = config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST;
+    this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
     this.model = config.model ?? process.env.OLLAMA_INTERN_MODEL ?? DEFAULT_MODEL;
     this.timeoutMs = config.timeoutMs ?? 60_000;
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;

@@ -63,3 +63,13 @@ export class NoUrlsProvidedError extends ResearchOSError {
     this.name = 'NoUrlsProvidedError';
   }
 }
+
+export class NoSourcesGatheredError extends ResearchOSError {
+  constructor(sectionId: string) {
+    super(
+      `Section "${sectionId}" has no gathered sources. Run 'research-os gather ${sectionId} --url ...' first. Claim extraction requires source truth.`,
+      'NO_SOURCES_GATHERED',
+    );
+    this.name = 'NoSourcesGatheredError';
+  }
+}

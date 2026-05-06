@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
 import { gather } from './sources/index.js';
+import { extract as claimExtract } from './claims/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -115,6 +116,42 @@ program
       process.stdout.write(`  extracted failed:  ${result.extractedFailed}\n`);
       process.stdout.write(`  cards written:     ${result.cardsWritten}\n`);
       process.stdout.write(`  receipts appended: ${result.receiptsAppended}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const claimCmd = program
+  .command('claim')
+  .description('Manage claims extracted from gathered sources');
+
+claimCmd
+  .command('extract')
+  .description('Extract candidate claims from a section\'s gathered sources')
+  .argument('<section>', 'Section id, e.g. "01-landscape"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await claimExtract({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      process.stdout.write(`claim extraction complete\n`);
+      process.stdout.write(`  section:           ${result.sectionId}\n`);
+      process.stdout.write(`  extractor:         ${result.extractor}\n`);
+      process.stdout.write(`  method:            ${result.extractionMethod}\n`);
+      process.stdout.write(`  sources processed: ${result.sourcesProcessed}\n`);
+      process.stdout.write(`  sources skipped:   ${result.sourcesSkipped}\n`);
+      process.stdout.write(`  sources failed:    ${result.sourcesFailed}\n`);
+      process.stdout.write(`  claims added:      ${result.claimsAdded}\n`);
+      process.stdout.write(`  claims deduped:    ${result.claimsDeduped}\n`);
+      process.stdout.write(`  claims rejected (ungrounded): ${result.claimsRejectedUngrounded}\n`);
+      if (result.failures.length > 0) {
+        process.stdout.write(`\nfailures:\n`);
+        for (const f of result.failures) {
+          process.stdout.write(`  ${f.source_id}: ${f.reason}\n`);
+        }
+      }
     } catch (err) {
       reportError(err);
     }

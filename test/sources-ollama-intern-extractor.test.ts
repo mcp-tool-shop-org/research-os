@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { OllamaInternExtractor } from '../src/sources/extractors/ollama-intern.js';
+import {
+  OllamaInternExtractor,
+  normalizeOllamaHost,
+} from '../src/sources/extractors/ollama-intern.js';
 
 const TEST_HOST = 'http://test-ollama:11434';
 const TEST_MODEL = 'hermes3:8b';
@@ -20,6 +23,30 @@ function makeExtractor(map: Map<string, () => Response>): OllamaInternExtractor 
     fetchImpl: makeFetch(map),
   });
 }
+
+describe('normalizeOllamaHost', () => {
+  it('leaves http:// hosts untouched', () => {
+    expect(normalizeOllamaHost('http://localhost:11434')).toBe('http://localhost:11434');
+  });
+
+  it('leaves https:// hosts untouched', () => {
+    expect(normalizeOllamaHost('https://ollama.example.com')).toBe('https://ollama.example.com');
+  });
+
+  it('adds http:// to bare host:port', () => {
+    expect(normalizeOllamaHost('localhost:11434')).toBe('http://localhost:11434');
+    expect(normalizeOllamaHost('127.0.0.1:11434')).toBe('http://127.0.0.1:11434');
+  });
+
+  it('strips trailing slashes', () => {
+    expect(normalizeOllamaHost('http://localhost:11434/')).toBe('http://localhost:11434');
+    expect(normalizeOllamaHost('localhost:11434//')).toBe('http://localhost:11434');
+  });
+
+  it('handles whitespace around the value', () => {
+    expect(normalizeOllamaHost('  127.0.0.1:11434  ')).toBe('http://127.0.0.1:11434');
+  });
+});
 
 describe('OllamaInternExtractor.available', () => {
   it('returns true when /api/tags lists the model', async () => {
