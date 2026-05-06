@@ -1,0 +1,92 @@
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+import {
+  NoUrlsProvidedError,
+  PackNotFoundError,
+  SectionNotFoundError,
+} from '../errors.js';
+import { fetchOnce } from './fetch.js';
+import { collectUrls } from './url-input.js';
+import { defaultExtractors, pickExtractor } from './extractors/index.js';
+import {
+  appendFetchLog,
+  appendSectionSourceId,
+  buildCard,
+  writeSourceCard,
+} from './cards.js';
+import type { GatherOptions, GatherSummary, Extractor } from './types.js';
+
+export async function gather(options: GatherOptions): Promise<GatherSummary> {
+  const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
+  if (!existsSync(join(packPath, 'research.yaml'))) throw new PackNotFoundError(packPath);
+  if (!existsSync(join(packPath, 'sections', options.sectionId)))
+    throw new SectionNotFoundError(options.sectionId);
+
+  const { urls } = await collectUrls({ urls: options.urls, urlsFile: options.urlsFile });
+  if (urls.length === 0) throw new NoUrlsProvidedError();
+
+  const extractorList: Extractor[] = options.extractors ?? defaultExtractors();
+  const extractor = await pickExtractor(extractorList);
+
+  const summary: GatherSummary = {
+    sectionId: options.sectionId,
+    attempted: urls.length,
+    fetchedOk: 0,
+    fetchedFailed: 0,
+    extractedOk: 0,
+    extractedFailed: 0,
+    cardsWritten: 0,
+    receiptsAppended: 0,
+    sourceIds: [],
+  };
+
+  for (const url of urls) {
+    const { receipt, rawText } = await fetchOnce(url, {
+      sectionId: options.sectionId,
+      packPath,
+      fetchImpl: options.fetchImpl,
+    });
+
+    let receiptToWrite = receipt;
+
+    if (receipt.fetch_outcome === 'ok' && rawText !== null) {
+      summary.fetchedOk += 1;
+      const result = await extractor.extract({
+        url,
+        finalUrl: receipt.final_url,
+        rawText,
+        contentType: receipt.content_type,
+      });
+      if (result.ok) {
+        summary.extractedOk += 1;
+        receiptToWrite = {
+          ...receipt,
+          extraction_outcome: 'ok',
+          extraction_extractor: extractor.name,
+          extraction_error: null,
+        };
+        const card = buildCard({ receipt: receiptToWrite, extraction: result, extractedBy: extractor.name });
+        await writeSourceCard(packPath, card);
+        await appendSectionSourceId(packPath, options.sectionId, card.source_id);
+        summary.cardsWritten += 1;
+        summary.sourceIds.push(card.source_id);
+      } else {
+        summary.extractedFailed += 1;
+        receiptToWrite = {
+          ...receipt,
+          extraction_outcome: 'failed',
+          extraction_extractor: extractor.name,
+          extraction_error: result.error,
+        };
+      }
+    } else {
+      summary.fetchedFailed += 1;
+    }
+
+    await appendFetchLog(packPath, receiptToWrite);
+    summary.receiptsAppended += 1;
+  }
+
+  return summary;
+}

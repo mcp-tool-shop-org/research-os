@@ -46,3 +46,20 @@ export class InvalidSectionIdError extends ResearchOSError {
     this.name = 'InvalidSectionIdError';
   }
 }
+
+export class SectionNotFoundError extends ResearchOSError {
+  constructor(id: string) {
+    super(`Section not found: ${id}. Run 'research-os section add' first.`, 'SECTION_NOT_FOUND');
+    this.name = 'SectionNotFoundError';
+  }
+}
+
+export class NoUrlsProvidedError extends ResearchOSError {
+  constructor() {
+    super(
+      `No URLs provided. Pass --url <url> (repeatable) or --urls-file <path>. 'gather' acquires known sources; discovery/search is a separate step.`,
+      'NO_URLS_PROVIDED',
+    );
+    this.name = 'NoUrlsProvidedError';
+  }
+}

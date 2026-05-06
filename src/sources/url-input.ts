@@ -1,0 +1,50 @@
+import { readFile } from 'node:fs/promises';
+
+export function parseUrlsFileText(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+}
+
+export async function readUrlsFile(path: string): Promise<string[]> {
+  const text = await readFile(path, 'utf8');
+  return parseUrlsFileText(text);
+}
+
+function isValidHttpUrl(candidate: string): boolean {
+  try {
+    const u = new URL(candidate);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function dedupeAndValidate(urls: string[]): { valid: string[]; invalid: string[] } {
+  const seen = new Set<string>();
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const u of urls) {
+    if (!isValidHttpUrl(u)) {
+      invalid.push(u);
+      continue;
+    }
+    const norm = u;
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    valid.push(norm);
+  }
+  return { valid, invalid };
+}
+
+export async function collectUrls(input: {
+  urls?: string[];
+  urlsFile?: string;
+}): Promise<{ urls: string[]; invalid: string[] }> {
+  const collected: string[] = [];
+  if (input.urls) collected.push(...input.urls);
+  if (input.urlsFile) collected.push(...(await readUrlsFile(input.urlsFile)));
+  const { valid, invalid } = dedupeAndValidate(collected);
+  return { urls: valid, invalid };
+}

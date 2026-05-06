@@ -1,5 +1,6 @@
 export * from './intake/index.js';
 export * from './sections/index.js';
+export * from './sources/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,
@@ -8,6 +9,8 @@ export {
   PackNotFoundError,
   SectionExistsError,
   InvalidSectionIdError,
+  SectionNotFoundError,
+  NoUrlsProvidedError,
 } from './errors.js';
 
 export const RESEARCH_OS_VERSION = '0.1.0';

@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
+import { gather } from './sources/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -82,6 +83,38 @@ sectionCmd
       process.stdout.write(`  id:    ${result.sectionId}\n`);
       process.stdout.write(`  path:  ${result.sectionPath}\n`);
       process.stdout.write(`  files: ${result.filesWritten.length}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('gather')
+  .description('Acquire known sources for a section: direct fetch + extraction')
+  .argument('<section>', 'Section id, e.g. "01-landscape"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--url <url>', 'A URL to fetch (repeatable)', (value: string, prev: string[] = []) => {
+    prev.push(value);
+    return prev;
+  })
+  .option('--urls-file <path>', 'File of URLs, one per line; blank lines and # comments allowed')
+  .action(async (section: string, opts) => {
+    try {
+      const result = await gather({
+        sectionId: section,
+        packPath: opts.pack,
+        urls: opts.url,
+        urlsFile: opts.urlsFile,
+      });
+      process.stdout.write(`gather complete\n`);
+      process.stdout.write(`  section:           ${result.sectionId}\n`);
+      process.stdout.write(`  attempted:         ${result.attempted}\n`);
+      process.stdout.write(`  fetched ok:        ${result.fetchedOk}\n`);
+      process.stdout.write(`  fetched failed:    ${result.fetchedFailed}\n`);
+      process.stdout.write(`  extracted ok:      ${result.extractedOk}\n`);
+      process.stdout.write(`  extracted failed:  ${result.extractedFailed}\n`);
+      process.stdout.write(`  cards written:     ${result.cardsWritten}\n`);
+      process.stdout.write(`  receipts appended: ${result.receiptsAppended}\n`);
     } catch (err) {
       reportError(err);
     }
