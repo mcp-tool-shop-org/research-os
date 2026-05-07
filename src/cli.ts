@@ -432,32 +432,77 @@ program
     `Review profile name. Non-default profiles are calibration evidence under sections/<id>/reviews/<profile>/ and do NOT update canonical state until promoted via 'review promote'.`,
     DEFAULT_PROFILE,
   )
+  .option(
+    '--preset <name>',
+    'Reviewer preset name from research.yaml/review_profiles. Fills --general-model, --critic-model, --review-window, --two-pass-llm from the preset; explicit flags still override.',
+  )
   .action(async (section: string, opts) => {
     try {
-      const baseModel = opts.model as string | undefined;
-      const generalModel = (opts.generalModel as string | undefined) ?? baseModel;
-      const criticModel = (opts.criticModel as string | undefined) ?? baseModel;
+      // Resolve preset (if any) from research.yaml/review_profiles. Explicit
+      // CLI flags override preset values; preset only fills the gaps.
+      let preset:
+        | {
+            general_model?: string | null;
+            critic_model?: string | null;
+            review_window?: number | null;
+            mode?: 'general' | 'two_pass';
+          }
+        | undefined;
+      if (opts.preset) {
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
+        const yaml = await import('yaml');
+        const { ResearchYamlSchema } = await import('./intake/schema.js');
+        const yamlPath = path.join(opts.pack as string, 'research.yaml');
+        const research = ResearchYamlSchema.parse(
+          yaml.parse(await fs.readFile(yamlPath, 'utf8')),
+        );
+        const found = research.review_profiles[opts.preset as string];
+        if (!found) {
+          throw new Error(
+            `Preset "${opts.preset}" not in research.yaml/review_profiles. Known: ${Object.keys(research.review_profiles).join(', ') || '(none)'}`,
+          );
+        }
+        preset = found;
+      }
+
+      const baseModel = (opts.model as string | undefined) ?? undefined;
+      const generalModel =
+        (opts.generalModel as string | undefined) ??
+        baseModel ??
+        preset?.general_model ??
+        undefined;
+      const criticModel =
+        (opts.criticModel as string | undefined) ??
+        baseModel ??
+        preset?.critic_model ??
+        undefined;
+      const reviewWindow =
+        (opts.reviewWindow as number | undefined) ?? preset?.review_window ?? undefined;
+      const twoPass =
+        Boolean(opts.twoPassLlm) || (preset?.mode === 'two_pass' ? true : false);
+
       const reviewers = opts.heuristicOnly
         ? [new HeuristicReviewer()]
-        : opts.twoPassLlm
+        : twoPass
           ? [
               new OllamaInternReviewer({
                 mode: 'general',
-                model: generalModel,
-                claimsPerWindow: opts.reviewWindow ?? undefined,
+                model: generalModel ?? undefined,
+                claimsPerWindow: reviewWindow,
               }),
               new OllamaInternReviewer({
                 mode: 'narrow_critic',
-                model: criticModel,
-                claimsPerWindow: opts.reviewWindow ?? undefined,
+                model: criticModel ?? undefined,
+                claimsPerWindow: reviewWindow,
               }),
               new HeuristicReviewer(),
             ]
-          : opts.reviewWindow || opts.llmPaged || baseModel
+          : reviewWindow || opts.llmPaged || baseModel || generalModel
             ? [
                 new OllamaInternReviewer({
-                  model: generalModel,
-                  claimsPerWindow: opts.reviewWindow ?? undefined,
+                  model: generalModel ?? undefined,
+                  claimsPerWindow: reviewWindow,
                 }),
                 new HeuristicReviewer(),
               ]
@@ -467,7 +512,7 @@ program
         packPath: opts.pack,
         reviewers,
         triagedOnly: opts.triagedOnly,
-        multiPass: opts.twoPassLlm,
+        multiPass: twoPass,
         profile: opts.profile as string | undefined,
       });
       process.stdout.write(`review complete\n`);

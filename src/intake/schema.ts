@@ -67,6 +67,39 @@ export const FreshnessRequirementsSchema = z.object({
   max_source_age_months: z.number().int().positive().nullable().default(null),
 });
 
+// A documented reviewer-profile preset. Bundles the model/window/mode that
+// were known-good (or known-bad) on a given rig so future runs don't have
+// to rediscover timeout/context/false-positive issues. Status:
+//   - calibrated_baseline: passed seeded calibration; safe default
+//   - experimental:        not yet calibrated; results untrusted
+//   - deprecated:          shipped, then disqualified by calibration
+export const ReviewProfilePresetSchema = z.object({
+  general_model: z.string().nullable().default(null),
+  critic_model: z.string().nullable().default(null),
+  review_window: z.number().int().positive().nullable().default(null),
+  mode: z.enum(['general', 'two_pass']).default('two_pass'),
+  status: z
+    .enum(['calibrated_baseline', 'experimental', 'deprecated'])
+    .default('experimental'),
+  notes: z.string().nullable().default(null),
+});
+
+export const DEFAULT_REVIEW_PROFILES: Record<string, z.input<typeof ReviewProfilePresetSchema>> = {
+  // The dogfood-validated baseline. Section 03 of research-os-spec is the
+  // calibration fixture: long sources, waiver pressure, 715 candidates,
+  // hermes3:8b-only two-pass with window 10 hits 0% false-flag on the
+  // seeded fixture and the narrow_critic actually fires.
+  'hermes-two-pass': {
+    general_model: 'hermes3:8b',
+    critic_model: 'hermes3:8b',
+    review_window: 10,
+    mode: 'two_pass',
+    status: 'calibrated_baseline',
+    notes:
+      'Calibrated baseline as of v0.1. 0% good-claim FPR on the seeded fixture; bad-claim any-flag recall 9/13 (69%). Smaller window required because hermes3:8b at 4-bit on a 5080 cannot complete 25-claim windows within a 3-minute budget.',
+  },
+};
+
 export const ResearchYamlSchema = z.object({
   research_os_version: z.string(),
   created_at: z.string(),
@@ -80,10 +113,18 @@ export const ResearchYamlSchema = z.object({
   primary_source_waiver: PrimarySourceWaiverSchema.default({}),
   sections: z.array(SectionSchema).default([]),
   gates: GateConfigSchema.default({}),
+  // Reviewer-profile presets baked into the pack so future review runs
+  // (across any section in this pack) inherit the calibrated configuration
+  // without rediscovering rig-specific timeouts and context issues. Override
+  // with `--preset <name>` on `research-os review`.
+  review_profiles: z
+    .record(z.string(), ReviewProfilePresetSchema)
+    .default(() => ({ ...DEFAULT_REVIEW_PROFILES })),
   frozen_at: z.string().nullable().default(null),
 });
 
 export type Section = z.infer<typeof SectionSchema>;
 export type GateConfig = z.infer<typeof GateConfigSchema>;
 export type PrimarySourceWaiver = z.infer<typeof PrimarySourceWaiverSchema>;
+export type ReviewProfilePreset = z.infer<typeof ReviewProfilePresetSchema>;
 export type ResearchYaml = z.infer<typeof ResearchYamlSchema>;

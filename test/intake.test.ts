@@ -143,4 +143,20 @@ describe('init', () => {
     expect(result.packName).toBe('custom-name');
     expect(result.packPath.endsWith('custom-name')).toBe(true);
   });
+
+  it('seeds research.yaml with a calibrated_baseline review profile preset', async () => {
+    const result = await init({
+      topic: 'A topic to verify review_profiles preset',
+      outDir: workDir,
+    });
+    const yamlText = await readFile(join(result.packPath, 'research.yaml'), 'utf8');
+    const parsed = ResearchYamlSchema.parse(yamlParse(yamlText));
+    expect(parsed.review_profiles['hermes-two-pass']).toBeDefined();
+    const preset = parsed.review_profiles['hermes-two-pass']!;
+    expect(preset.status).toBe('calibrated_baseline');
+    expect(preset.mode).toBe('two_pass');
+    expect(preset.review_window).toBe(10);
+    expect(preset.general_model).toBe('hermes3:8b');
+    expect(preset.critic_model).toBe('hermes3:8b');
+  });
 });
