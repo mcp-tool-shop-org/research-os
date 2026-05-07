@@ -180,15 +180,85 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
   }
 
   async detect(claims: Claim[]): Promise<DetectionResult> {
+    // Prefilter: only LLM-classify pairs that look like potential tensions.
+    // For dense sections (50+ claims) full N² is feasible but expensive; for
+    // huge sections it's outright intractable. The prefilter is a token
+    // Jaccard score plus a scope-overlap signal — both cheap and
+    // deterministic. Pairs failing the prefilter contribute nothing to the
+    // final ledger; the model never sees them.
+    const candidatePairs = candidateContradictionPairs(claims);
     const drafts: PairedDraft[] = [];
-    for (let i = 0; i < claims.length; i += 1) {
-      for (let j = i + 1; j < claims.length; j += 1) {
-        const a = claims[i]!;
-        const b = claims[j]!;
-        const draft = await this.classifyPair(a, b);
-        if (draft) drafts.push({ claim_a: a, claim_b: b, draft });
+    for (const [i, j] of candidatePairs) {
+      const a = claims[i]!;
+      const b = claims[j]!;
+      const draft = await this.classifyPair(a, b);
+      if (draft) drafts.push({ claim_a: a, claim_b: b, draft });
+    }
+    return {
+      ok: true,
+      drafts,
+      method:
+        candidatePairs.length === (claims.length * (claims.length - 1)) / 2
+          ? 'ollama_intern_pairwise_classification'
+          : 'ollama_intern_prefiltered_pairwise_classification',
+    };
+  }
+}
+
+// Deterministic prefilter for which claim pairs are worth LLM classification.
+// Returns pair indices [i,j] (i < j). A pair qualifies if EITHER:
+//   - normalised-asserts token Jaccard >= 0.25 (similar topic — potential
+//     tension worth checking), OR
+//   - scopes both non-null AND share >= 1 token of length > 3 (claims about
+//     the same scope are the canonical site of contradiction)
+// A claim with empty asserts is never paired.
+export function candidateContradictionPairs(claims: Claim[]): Array<[number, number]> {
+  const SIM_THRESHOLD = 0.25;
+  const tokenSets: Array<Set<string>> = claims.map((c) =>
+    tokenSet(c.asserts),
+  );
+  const scopeTokens: Array<Set<string>> = claims.map((c) =>
+    c.scope ? tokenSet(c.scope) : new Set<string>(),
+  );
+
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < claims.length; i += 1) {
+    if (tokenSets[i]!.size === 0) continue;
+    for (let j = i + 1; j < claims.length; j += 1) {
+      if (tokenSets[j]!.size === 0) continue;
+      const sim = jaccard(tokenSets[i]!, tokenSets[j]!);
+      if (sim >= SIM_THRESHOLD) {
+        out.push([i, j]);
+        continue;
+      }
+      // Scope-overlap fallback.
+      const aScope = scopeTokens[i]!;
+      const bScope = scopeTokens[j]!;
+      if (aScope.size > 0 && bScope.size > 0) {
+        let shared = 0;
+        for (const t of aScope) if (bScope.has(t)) shared += 1;
+        if (shared >= 1) out.push([i, j]);
       }
     }
-    return { ok: true, drafts, method: 'ollama_intern_pairwise_classification' };
   }
+  return out;
+}
+
+function tokenSet(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const tok of s
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .split(/\s+/)) {
+    if (tok.length > 3) out.add(tok);
+  }
+  return out;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter += 1;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
 }

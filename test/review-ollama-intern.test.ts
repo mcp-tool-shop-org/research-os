@@ -197,3 +197,101 @@ describe('OllamaInternReviewer.review', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe('OllamaInternReviewer paging', () => {
+  it('runs once per window, merges drafts, dedupes by category+claim_ids+summary', async () => {
+    let callCount = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      callCount += 1;
+      const id = callCount === 1 ? 'clm_aaaaaaaaaaaa_ollama_intern_1' : 'clm_aaaaaaaaaaaa_ollama_intern_3';
+      return new Response(
+        JSON.stringify({
+          message: {
+            content: JSON.stringify({
+              findings: [
+                {
+                  category: 'overgeneralized_claim',
+                  severity: 'warn',
+                  summary: 'shared theme finding',
+                  evidence: 'e',
+                  required_action: 'a',
+                  claim_ids: [id],
+                  source_ids: [],
+                  confidence: 'medium',
+                },
+              ],
+            }),
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ) as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const r = new OllamaInternReviewer({
+      host: 'http://test:11434',
+      model: 'hermes3:8b',
+      claimsPerWindow: 2,
+      fetchImpl,
+    });
+    const claims: Claim[] = [
+      { ...claim, claim_id: 'clm_aaaaaaaaaaaa_ollama_intern_1' },
+      { ...claim, claim_id: 'clm_aaaaaaaaaaaa_ollama_intern_2' },
+      { ...claim, claim_id: 'clm_aaaaaaaaaaaa_ollama_intern_3' },
+    ];
+    const input = { ...baseInput, candidateClaims: claims };
+    const result = await r.review(input);
+    if (!result.ok) throw new Error(`failed: ${result.error}`);
+    expect(callCount).toBe(2);
+    // Findings carry IDs from the windows that produced them.
+    expect(result.drafts).toHaveLength(2);
+    expect(result.method).toBe('ollama_intern_adversarial_review_paged');
+  });
+
+  it('rejects findings that cite a claim_id outside the window the model saw', async () => {
+    let callCount = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      callCount += 1;
+      // Both windows produce a finding citing claim_id of WINDOW 1's claim,
+      // but window 2 didn't see it — so window-2's finding should be dropped.
+      return new Response(
+        JSON.stringify({
+          message: {
+            content: JSON.stringify({
+              findings: [
+                {
+                  category: 'overgeneralized_claim',
+                  severity: 'warn',
+                  summary: 'cross-window cheat',
+                  evidence: 'e',
+                  required_action: 'a',
+                  claim_ids: ['clm_aaaaaaaaaaaa_ollama_intern_1'],
+                  source_ids: [],
+                  confidence: 'medium',
+                },
+              ],
+            }),
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ) as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const r = new OllamaInternReviewer({
+      host: 'http://test:11434',
+      model: 'hermes3:8b',
+      claimsPerWindow: 1,
+      fetchImpl,
+    });
+    const claims: Claim[] = [
+      { ...claim, claim_id: 'clm_aaaaaaaaaaaa_ollama_intern_1' },
+      { ...claim, claim_id: 'clm_aaaaaaaaaaaa_ollama_intern_2' },
+    ];
+    const input = { ...baseInput, candidateClaims: claims };
+    const result = await r.review(input);
+    if (!result.ok) throw new Error(`failed: ${result.error}`);
+    // The finding from window 1 is kept (claim 1 was in that window). The
+    // finding from window 2 cited claim 1 (not in window 2) and is dropped.
+    expect(result.drafts).toHaveLength(1);
+    expect(result.drafts[0]?.claim_ids).toEqual(['clm_aaaaaaaaaaaa_ollama_intern_1']);
+  });
+});

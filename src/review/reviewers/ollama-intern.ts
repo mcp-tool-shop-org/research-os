@@ -83,7 +83,24 @@ export interface OllamaReviewerConfig {
   host?: string;
   model?: string;
   timeoutMs?: number;
+  // Number of claims per LLM window. Reviewer-side analogue of the
+  // extractor's paging: keeps the prompt + response within the model's
+  // effective context, and forces per-window claim_id validation so the
+  // model can't cite IDs it didn't actually see.
+  claimsPerWindow?: number;
   fetchImpl?: typeof fetch;
+}
+
+const DEFAULT_CLAIMS_PER_WINDOW = 30;
+
+// Window an array into N-sized chunks.
+export function pageClaimsForReview<T>(items: T[], windowSize: number): T[][] {
+  if (items.length === 0) return [];
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += windowSize) {
+    out.push(items.slice(i, i + windowSize));
+  }
+  return out;
 }
 
 export class OllamaInternReviewer implements Reviewer {
@@ -91,12 +108,17 @@ export class OllamaInternReviewer implements Reviewer {
   private readonly host: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly claimsPerWindow: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(config: OllamaReviewerConfig = {}) {
     this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
     this.model = config.model ?? process.env.OLLAMA_INTERN_MODEL ?? DEFAULT_MODEL;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const envWindow = process.env.OLLAMA_INTERN_REVIEW_WINDOW;
+    this.claimsPerWindow =
+      config.claimsPerWindow ??
+      (envWindow ? parseInt(envWindow, 10) || DEFAULT_CLAIMS_PER_WINDOW : DEFAULT_CLAIMS_PER_WINDOW);
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -116,24 +138,28 @@ export class OllamaInternReviewer implements Reviewer {
     }
   }
 
-  async review(input: ReviewerInput): Promise<ReviewerResult> {
-    if (input.candidateClaims.length === 0) {
-      return { ok: true, drafts: [], method: 'ollama_intern_adversarial_review' };
-    }
-
-    const claimsBlock = input.candidateClaims
-      .map((c) => [
-        `Claim ${c.claim_id}:`,
-        `  asserts: ${c.asserts}`,
-        `  scope: ${c.scope ?? 'null'}`,
-        `  not: ${c.not ?? 'null'}`,
-        `  evidence_excerpt: ${c.evidence_excerpt}`,
-        `  confidence: ${c.confidence}`,
-        `  source_ids: ${c.source_ids.join(', ')}`,
-      ].join('\n'))
+  // Single-window LLM call. Per-window IDs are validated by the caller so a
+  // window-1 finding can't cite a window-2 claim.
+  private async reviewOnePage(
+    windowClaims: ReviewerInput['candidateClaims'],
+    sectionId: string,
+    sectionPurpose: string,
+  ): Promise<{ ok: true; drafts: DraftFinding[] } | { ok: false; error: string }> {
+    const claimsBlock = windowClaims
+      .map((c) =>
+        [
+          `Claim ${c.claim_id}:`,
+          `  asserts: ${c.asserts}`,
+          `  scope: ${c.scope ?? 'null'}`,
+          `  not: ${c.not ?? 'null'}`,
+          `  evidence_excerpt: ${c.evidence_excerpt}`,
+          `  confidence: ${c.confidence}`,
+          `  source_ids: ${c.source_ids.join(', ')}`,
+        ].join('\n'),
+      )
       .join('\n\n');
 
-    const userMsg = `Section: ${input.section.id}\nPurpose: ${input.section.purpose}\n\nCANDIDATE CLAIMS:\n\n${claimsBlock}`;
+    const userMsg = `Section: ${sectionId}\nPurpose: ${sectionPurpose}\n\nCANDIDATE CLAIMS:\n\n${claimsBlock}`;
 
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), this.timeoutMs);
@@ -191,7 +217,73 @@ export class OllamaInternReviewer implements Reviewer {
         confidence: asEnum(r.confidence, VALID_CONFIDENCES, 'low'),
       });
     }
+    return { ok: true, drafts };
+  }
 
-    return { ok: true, drafts, method: 'ollama_intern_adversarial_review' };
+  async review(input: ReviewerInput): Promise<ReviewerResult> {
+    if (input.candidateClaims.length === 0) {
+      return { ok: true, drafts: [], method: 'ollama_intern_adversarial_review' };
+    }
+
+    const windows = pageClaimsForReview(input.candidateClaims, this.claimsPerWindow);
+    const allDrafts: DraftFinding[] = [];
+    const pageErrors: string[] = [];
+    let pagesOk = 0;
+    let rejectedCrossWindow = 0;
+
+    for (const windowClaims of windows) {
+      const validIds = new Set(windowClaims.map((c) => c.claim_id));
+      const page = await this.reviewOnePage(
+        windowClaims,
+        input.section.id,
+        input.section.purpose,
+      );
+      if (!page.ok) {
+        pageErrors.push(page.error);
+        continue;
+      }
+      pagesOk += 1;
+      // Per-window claim_id validation: the model only saw `windowClaims`,
+      // so any cited ID outside that set is a cross-window hallucination.
+      // We trim invalid IDs and drop the finding entirely if no valid IDs
+      // remain.
+      for (const draft of page.drafts) {
+        const kept = draft.claim_ids.filter((id) => validIds.has(id));
+        if (kept.length === 0) {
+          rejectedCrossWindow += 1;
+          continue;
+        }
+        if (kept.length !== draft.claim_ids.length) rejectedCrossWindow += 1;
+        allDrafts.push({ ...draft, claim_ids: kept });
+      }
+    }
+
+    if (pagesOk === 0) {
+      return {
+        ok: false,
+        error:
+          pageErrors.length === 1
+            ? pageErrors[0]!
+            : `all ${windows.length} review pages failed (first: ${pageErrors[0] ?? 'unknown'})`,
+      };
+    }
+
+    // Dedup findings across windows by (category, sorted claim_ids, summary
+    // prefix). Adjacent windows can produce parallel findings about the same
+    // claim cluster.
+    const seen = new Set<string>();
+    const drafts: DraftFinding[] = [];
+    for (const d of allDrafts) {
+      const key = `${d.category}|${[...d.claim_ids].sort().join(',')}|${d.summary.toLowerCase().slice(0, 80)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      drafts.push(d);
+    }
+
+    const method =
+      windows.length > 1
+        ? 'ollama_intern_adversarial_review_paged'
+        : 'ollama_intern_adversarial_review';
+    return { ok: true, drafts, method, rejected_ungrounded: rejectedCrossWindow };
   }
 }

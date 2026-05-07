@@ -8,7 +8,11 @@ import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { triage as runTriage } from './triage/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
-import { HeuristicReviewer, review as runReview } from './review/index.js';
+import {
+  HeuristicReviewer,
+  OllamaInternReviewer,
+  review as runReview,
+} from './review/index.js';
 import {
   build as indexBuild,
   query as indexQuery,
@@ -394,12 +398,32 @@ program
     'Only review claims that triage selected_for_review',
     false,
   )
+  .option(
+    '--llm-paged',
+    'Force the LLM reviewer (paged windows) — alias for the default ladder when ollama is up. Useful as documentation of intent.',
+    false,
+  )
+  .option(
+    '--review-window <n>',
+    'Claims per LLM review window (default 30). Smaller windows fit smaller models.',
+    (v) => parseInt(v, 10),
+  )
   .action(async (section: string, opts) => {
     try {
+      const reviewers = opts.heuristicOnly
+        ? [new HeuristicReviewer()]
+        : opts.reviewWindow || opts.llmPaged
+          ? [
+              new OllamaInternReviewer({
+                claimsPerWindow: opts.reviewWindow ?? undefined,
+              }),
+              new HeuristicReviewer(),
+            ]
+          : undefined;
       const result = await runReview({
         sectionId: section,
         packPath: opts.pack,
-        reviewers: opts.heuristicOnly ? [new HeuristicReviewer()] : undefined,
+        reviewers,
         triagedOnly: opts.triagedOnly,
       });
       process.stdout.write(`review complete\n`);
