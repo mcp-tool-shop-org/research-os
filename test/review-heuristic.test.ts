@@ -269,4 +269,58 @@ describe('HeuristicReviewer', () => {
     if (!result.ok) throw new Error('failed');
     expect(result.drafts.some((f) => f.category === 'hidden_synthesis')).toBe(false);
   });
+
+  it('flags claim_overproduction when one source carries >= 30 candidate claims', async () => {
+    const claims: Claim[] = Array.from({ length: 32 }, (_, i) =>
+      makeClaim({
+        claim_id: `clm_aaaaaaaaaaaa_heuristic_${i + 1}`,
+        asserts: `unique assertion #${i + 1} that is long enough to count.`,
+      }),
+    );
+    const result = await reviewer.review(
+      makeInput({
+        candidateClaims: claims,
+        sources: [makeSource({})],
+        receipts: [makeReceipt({})],
+        rawTextBySourceId: new Map([['src_aaaaaaaaaaaa', 'something concise']]),
+      }),
+    );
+    if (!result.ok) throw new Error('failed');
+    const overproduction = result.drafts.filter((f) => f.category === 'claim_overproduction');
+    expect(overproduction.length).toBeGreaterThanOrEqual(1);
+    // Severity rises to 'block' once a single source dominates strongly.
+    expect(overproduction.some((f) => f.severity === 'block' || f.severity === 'warn')).toBe(true);
+  });
+
+  it('flags claim_overproduction when 3+ claims share normalised asserts', async () => {
+    const claims: Claim[] = [
+      makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', asserts: 'A is B.' }),
+      makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_2', asserts: 'A IS B.' }),
+      makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_3', asserts: 'a is b!' }),
+    ];
+    const result = await reviewer.review(
+      makeInput({
+        candidateClaims: claims,
+        sources: [makeSource({})],
+        receipts: [makeReceipt({})],
+        rawTextBySourceId: new Map([['src_aaaaaaaaaaaa', 'something concise']]),
+      }),
+    );
+    if (!result.ok) throw new Error('failed');
+    expect(result.drafts.some((f) => f.category === 'claim_overproduction')).toBe(true);
+  });
+
+  it('does not flag claim_overproduction on tiny sections (1-2 claims)', async () => {
+    const claims: Claim[] = [makeClaim({})];
+    const result = await reviewer.review(
+      makeInput({
+        candidateClaims: claims,
+        sources: [makeSource({})],
+        receipts: [makeReceipt({})],
+        rawTextBySourceId: new Map([['src_aaaaaaaaaaaa', 'something concise']]),
+      }),
+    );
+    if (!result.ok) throw new Error('failed');
+    expect(result.drafts.some((f) => f.category === 'claim_overproduction')).toBe(false);
+  });
 });
