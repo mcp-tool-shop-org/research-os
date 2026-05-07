@@ -25,7 +25,7 @@ import { handoff as coworkHandoff } from './cowork/index.js';
 import { workspace as synthWorkspace } from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
-import { invalidateExtraction } from './invalidate/index.js';
+import { invalidateExtraction, invalidateReview } from './invalidate/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -770,6 +770,41 @@ invalidate
       for (const s of result.affectedSections) process.stdout.write(`    - ${s}\n`);
       process.stdout.write(`  archived count:    ${result.archivedCount}\n`);
       process.stdout.write(`  archive dir:       ${result.archiveDir}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+invalidate
+  .command('review')
+  .description(
+    'Archive canonical review artifacts for a section into sections/<id>/legacy/<label>/<timestamp>/. Use to invalidate pre-profile review state before promoting a profile as new canonical truth.',
+  )
+  .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
+  .requiredOption('--reason <text>', 'Plain-language reason recorded on the invalidation receipt')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--label <slug>', 'Folder label under sections/<id>/legacy/', 'pre-review-profiles')
+  .option('--notes <text>', 'Optional free-text notes recorded on the receipt')
+  .action(async (section: string, opts) => {
+    try {
+      const result = await invalidateReview({
+        packPath: opts.pack,
+        sectionId: section,
+        reason: opts.reason,
+        label: opts.label,
+        notes: opts.notes,
+      });
+      if (!result.performed) {
+        process.stdout.write(`invalidate review: no-op\n`);
+        process.stdout.write(`  ${result.message}\n`);
+        return;
+      }
+      process.stdout.write(`invalidate review: archived\n`);
+      process.stdout.write(`  receipt id:     ${result.receiptId}\n`);
+      process.stdout.write(`  section:        ${result.sectionId}\n`);
+      process.stdout.write(`  contract label: ${result.contractLabel}\n`);
+      process.stdout.write(`  archived count: ${result.archivedCount}\n`);
+      process.stdout.write(`  archive dir:    ${result.archiveDir}\n`);
     } catch (err) {
       reportError(err);
     }
