@@ -19,6 +19,12 @@ import { ledgerPathFor } from '../sources/excerpts/ledger.js';
 import { SectionGateResultSchema, type SectionGateResult } from '../gates/schema.js';
 
 import {
+  DEFAULT_PROFILE,
+  profileDir,
+  readActiveProfile,
+} from './profiles.js';
+
+import {
   defaultReviewers,
   pickReviewer,
 } from './reviewers/index.js';
@@ -325,6 +331,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     candidateClaims,
     drafts: acceptedDrafts,
     llmFindingsRejected,
+    profile: options.profile ?? DEFAULT_PROFILE,
   });
 }
 
@@ -427,6 +434,7 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     candidateClaims: args.candidateClaims,
     drafts: merged,
     llmFindingsRejected,
+    profile: args.options.profile ?? DEFAULT_PROFILE,
   });
 }
 
@@ -454,6 +462,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     candidateClaims: args.candidateClaims,
     drafts: result.drafts,
     llmFindingsRejected: 0,
+    profile: args.options.profile ?? DEFAULT_PROFILE,
   });
 }
 
@@ -465,6 +474,7 @@ interface FinalizeArgs {
   candidateClaims: Claim[];
   drafts: DraftFinding[];
   llmFindingsRejected: number;
+  profile: string;
 }
 
 async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
@@ -512,7 +522,15 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
   const allAccepted =
     args.candidateClaims.length > 0 &&
     claimReviews.every((r) => r.decision === 'accepted_for_synthesis');
-  const promoted = await maybePromoteToReviewed(args.packPath, args.sectionId, allAccepted);
+  // Only promote section status when this run is on the active profile —
+  // calibration / A/B runs must never touch section state.
+  const activeProfileForPromote = await readActiveProfile(args.packPath, args.sectionId);
+  const promoteEligible =
+    args.profile === activeProfileForPromote ||
+    (activeProfileForPromote === DEFAULT_PROFILE && args.profile === DEFAULT_PROFILE);
+  const promoted = promoteEligible
+    ? await maybePromoteToReviewed(args.packPath, args.sectionId, allAccepted)
+    : false;
 
   const snapshot: ReviewSnapshot = ReviewSnapshotSchema.parse({
     section_id: args.sectionId,
@@ -528,27 +546,48 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     promoted_to_reviewed: promoted,
   });
 
-  const auditsDir = join(args.packPath, 'audits');
-  await mkdir(auditsDir, { recursive: true });
-  await writeFile(
-    join(auditsDir, `${args.sectionId}-review.json`),
-    JSON.stringify(snapshot, null, 2),
-    'utf8',
-  );
-  await writeFile(
-    join(auditsDir, `${args.sectionId}-review.md`),
-    renderReviewMarkdown(snapshot),
-    'utf8',
-  );
-
-  // Append-only ledgers
-  const findingsPath = join(auditsDir, `${args.sectionId}-findings.jsonl`);
+  // ALWAYS write the profile-scoped artifacts: even non-active runs leave a
+  // full record under sections/<id>/reviews/<profile>/ for calibration.
+  const profDir = profileDir(args.packPath, args.sectionId, args.profile);
+  await mkdir(profDir, { recursive: true });
+  await writeFile(join(profDir, 'review.json'), JSON.stringify(snapshot, null, 2), 'utf8');
+  await writeFile(join(profDir, 'review.md'), renderReviewMarkdown(snapshot), 'utf8');
+  const profileFindingsPath = join(profDir, 'findings.jsonl');
   for (const f of dedupedFindings) {
-    await appendFile(findingsPath, JSON.stringify(f) + '\n', 'utf8');
+    await appendFile(profileFindingsPath, JSON.stringify(f) + '\n', 'utf8');
   }
-  const reviewsPath = join(args.packPath, 'sections', args.sectionId, 'claim-reviews.jsonl');
+  const profileReviewsPath = join(profDir, 'claim-reviews.jsonl');
   for (const r of claimReviews) {
-    await appendFile(reviewsPath, JSON.stringify(ClaimReviewSchema.parse(r)) + '\n', 'utf8');
+    await appendFile(profileReviewsPath, JSON.stringify(ClaimReviewSchema.parse(r)) + '\n', 'utf8');
+  }
+
+  // Mirror to canonical paths ONLY when this profile is the active one (or
+  // there is no active profile and we are running the implicit default).
+  // This is what stops A/B experiments from corrupting the section's
+  // effective review state.
+  const activeProfile = await readActiveProfile(args.packPath, args.sectionId);
+  const isActive = args.profile === activeProfile || (activeProfile === DEFAULT_PROFILE && args.profile === DEFAULT_PROFILE);
+  if (isActive) {
+    const auditsDir = join(args.packPath, 'audits');
+    await mkdir(auditsDir, { recursive: true });
+    await writeFile(
+      join(auditsDir, `${args.sectionId}-review.json`),
+      JSON.stringify(snapshot, null, 2),
+      'utf8',
+    );
+    await writeFile(
+      join(auditsDir, `${args.sectionId}-review.md`),
+      renderReviewMarkdown(snapshot),
+      'utf8',
+    );
+    const findingsPath = join(auditsDir, `${args.sectionId}-findings.jsonl`);
+    for (const f of dedupedFindings) {
+      await appendFile(findingsPath, JSON.stringify(f) + '\n', 'utf8');
+    }
+    const reviewsPath = join(args.packPath, 'sections', args.sectionId, 'claim-reviews.jsonl');
+    for (const r of claimReviews) {
+      await appendFile(reviewsPath, JSON.stringify(ClaimReviewSchema.parse(r)) + '\n', 'utf8');
+    }
   }
 
   return {

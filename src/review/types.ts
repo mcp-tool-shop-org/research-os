@@ -85,6 +85,14 @@ export interface RunReviewOptions {
   // picking the first available one. The classic two-pass shape:
   // general LLM reviewer + narrow-critic LLM reviewer + heuristic.
   multiPass?: boolean;
+  // Review profile name. Profile artifacts are always written under
+  // sections/<id>/reviews/<profile>/. Canonical paths
+  // (audits/<id>-review.{json,md}, audits/<id>-findings.jsonl,
+  // sections/<id>/claim-reviews.jsonl) are also written when:
+  //   profile === 'default'  OR  profile === <currently-active-profile>.
+  // This way, A/B reviewer experiments are evidence, not section truth,
+  // until explicitly promoted via `research-os review promote`.
+  profile?: string;
 }
 
 export interface RunReviewSummary {

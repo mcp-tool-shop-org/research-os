@@ -9,8 +9,10 @@ import { triage as runTriage } from './triage/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import {
+  DEFAULT_PROFILE,
   HeuristicReviewer,
   OllamaInternReviewer,
+  promote as runPromote,
   review as runReview,
 } from './review/index.js';
 import {
@@ -415,31 +417,46 @@ program
   )
   .option(
     '--model <name>',
-    'Override OLLAMA_INTERN_MODEL for this run (e.g. qwen3:14b)',
+    'Override OLLAMA_INTERN_MODEL for this run (e.g. qwen3:14b). Applied to BOTH passes when --two-pass-llm.',
+  )
+  .option(
+    '--general-model <name>',
+    'Model for the general LLM reviewer (overrides --model and OLLAMA_INTERN_MODEL).',
+  )
+  .option(
+    '--critic-model <name>',
+    'Model for the narrow_critic LLM reviewer (overrides --model and OLLAMA_INTERN_MODEL).',
+  )
+  .option(
+    '--profile <name>',
+    `Review profile name. Non-default profiles are calibration evidence under sections/<id>/reviews/<profile>/ and do NOT update canonical state until promoted via 'review promote'.`,
+    DEFAULT_PROFILE,
   )
   .action(async (section: string, opts) => {
     try {
-      const modelOverride = opts.model as string | undefined;
+      const baseModel = opts.model as string | undefined;
+      const generalModel = (opts.generalModel as string | undefined) ?? baseModel;
+      const criticModel = (opts.criticModel as string | undefined) ?? baseModel;
       const reviewers = opts.heuristicOnly
         ? [new HeuristicReviewer()]
         : opts.twoPassLlm
           ? [
               new OllamaInternReviewer({
                 mode: 'general',
-                model: modelOverride,
+                model: generalModel,
                 claimsPerWindow: opts.reviewWindow ?? undefined,
               }),
               new OllamaInternReviewer({
                 mode: 'narrow_critic',
-                model: modelOverride,
+                model: criticModel,
                 claimsPerWindow: opts.reviewWindow ?? undefined,
               }),
               new HeuristicReviewer(),
             ]
-          : opts.reviewWindow || opts.llmPaged || modelOverride
+          : opts.reviewWindow || opts.llmPaged || baseModel
             ? [
                 new OllamaInternReviewer({
-                  model: modelOverride,
+                  model: generalModel,
                   claimsPerWindow: opts.reviewWindow ?? undefined,
                 }),
                 new HeuristicReviewer(),
@@ -451,6 +468,7 @@ program
         reviewers,
         triagedOnly: opts.triagedOnly,
         multiPass: opts.twoPassLlm,
+        profile: opts.profile as string | undefined,
       });
       process.stdout.write(`review complete\n`);
       process.stdout.write(`  section:                ${result.sectionId}\n`);
@@ -752,6 +770,40 @@ invalidate
       for (const s of result.affectedSections) process.stdout.write(`    - ${s}\n`);
       process.stdout.write(`  archived count:    ${result.archivedCount}\n`);
       process.stdout.write(`  archive dir:       ${result.archiveDir}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('review-promote')
+  .description(
+    'Promote a review profile to active state: copies the profile artifacts to canonical paths and writes review-active.json. Until promoted, profile runs are calibration evidence, not section truth.',
+  )
+  .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
+  .requiredOption('--profile <name>', 'Profile name to promote')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--bump-section-status',
+    'Also bump section.status from gated → reviewed if every promoted claim is accepted_for_synthesis',
+    false,
+  )
+  .action(async (section: string, opts) => {
+    try {
+      const result = await runPromote({
+        sectionId: section,
+        packPath: opts.pack,
+        profile: opts.profile,
+        promoteSectionStatus: opts.bumpSectionStatus,
+      });
+      process.stdout.write(`review profile promoted\n`);
+      process.stdout.write(`  section:           ${result.sectionId}\n`);
+      process.stdout.write(`  profile:           ${result.profile}\n`);
+      process.stdout.write(`  promoted_at:       ${result.promoted_at}\n`);
+      process.stdout.write(`  promoted_method:   ${result.promoted_method}\n`);
+      process.stdout.write(`  promoted_reviewer: ${result.promoted_reviewer}\n`);
+      process.stdout.write(`  status bumped:     ${result.section_status_bumped}\n`);
+      process.stdout.write(`  canonical files updated: ${result.canonical_files_updated.length}\n`);
     } catch (err) {
       reportError(err);
     }

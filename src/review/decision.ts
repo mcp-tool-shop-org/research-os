@@ -81,7 +81,7 @@ export function deriveClaimReviews(args: {
       continue;
     }
 
-    const decisions: ReviewDecision[] = [];
+    let decisions: ReviewDecision[] = [];
     for (const f of claimFindings) {
       if (f.severity === 'block') {
         decisions.push(BLOCK_TO_DECISION[f.category] ?? 'rejected');
@@ -91,6 +91,22 @@ export function deriveClaimReviews(args: {
       }
     }
     if (decisions.length === 0) decisions.push('accepted_for_synthesis');
+
+    // Conservative merge: a claim flagged ONLY by the narrow critic (and
+    // no general / heuristic reviewer corroborated it) gets soft pressure,
+    // not auto-rejection. The narrow critic's role is to surface risk; the
+    // final reject must be backed by the general pass or a heuristic
+    // structural check. This prevents a false-positive-prone critic from
+    // killing claims unilaterally.
+    const isCritic = (f: ReviewFinding): boolean =>
+      typeof f.review_method === 'string' && f.review_method.endsWith('_narrow_critic');
+    const onlyCritic =
+      claimFindings.length > 0 && claimFindings.every(isCritic);
+    if (onlyCritic) {
+      decisions = decisions.map((d) =>
+        d === 'rejected' ? 'needs_human_review' : d,
+      );
+    }
 
     const decision = pickHighestPriority(decisions);
     const reasonParts = claimFindings

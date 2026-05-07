@@ -5,6 +5,17 @@ export {
   defaultReviewers,
   pickReviewer,
 } from './reviewers/index.js';
+export { promote, type PromoteOptions, type PromoteResult } from './promote.js';
+export {
+  DEFAULT_PROFILE,
+  ReviewActiveSchema,
+  type ReviewActive,
+  readActiveProfile,
+  writeActiveProfile,
+  profileDir,
+  reviewActivePath,
+  isValidProfileName,
+} from './profiles.js';
 export { deriveClaimReviews } from './decision.js';
 export { renderReviewMarkdown } from './markdown.js';
 export {
