@@ -4,6 +4,12 @@ import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
 import { reportSection } from './section_report/index.js';
 import { gather } from './sources/index.js';
+import {
+  discover as runDiscover,
+  approve as discoverApprove,
+  reject as discoverReject,
+  exportUrls as discoverExport,
+} from './discover/index.js';
 import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { triage as runTriage } from './triage/index.js';
 import { map as contradictMap } from './contradictions/index.js';
@@ -176,13 +182,24 @@ program
     return prev;
   })
   .option('--urls-file <path>', 'File of URLs, one per line; blank lines and # comments allowed')
+  .option(
+    '--approved',
+    'Read URLs from sections/<id>/urls.approved.txt (produced by `research-os discover approve` / `discover export-urls`)',
+    false,
+  )
   .action(async (section: string, opts) => {
     try {
+      let urlsFile = opts.urlsFile as string | undefined;
+      if (opts.approved) {
+        const path = await import('node:path');
+        const candidate = path.join(opts.pack as string, 'sections', section, 'urls.approved.txt');
+        urlsFile = urlsFile ?? candidate;
+      }
       const result = await gather({
         sectionId: section,
         packPath: opts.pack,
         urls: opts.url,
-        urlsFile: opts.urlsFile,
+        urlsFile,
       });
       process.stdout.write(`gather complete\n`);
       process.stdout.write(`  section:           ${result.sectionId}\n`);
@@ -193,6 +210,126 @@ program
       process.stdout.write(`  extracted failed:  ${result.extractedFailed}\n`);
       process.stdout.write(`  cards written:     ${result.cardsWritten}\n`);
       process.stdout.write(`  receipts appended: ${result.receiptsAppended}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const discoverCmd = program
+  .command('discover')
+  .description(
+    'Propose source URL candidates for a section. Discovery results are LEADS, not evidence — only fetch + receipt + source card make a URL evidence.',
+  );
+
+discoverCmd
+  .command('run')
+  .description('Run a discover query against a section, append candidates to the ledger, render report')
+  .argument('<section>', 'Section id, e.g. "04-gates-and-waivers"')
+  .requiredOption('--query <text>', 'Free-text query to ask the discover provider')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--target <n>', 'Soft target candidate count', (v) => parseInt(v, 10), 12)
+  .action(async (section: string, opts) => {
+    try {
+      const result = await runDiscover({
+        sectionId: section,
+        packPath: opts.pack,
+        query: opts.query,
+        targetCount: opts.target,
+      });
+      process.stdout.write(`discover complete\n`);
+      process.stdout.write(`  section:                ${section}\n`);
+      process.stdout.write(`  candidates proposed:    ${result.candidatesProposed}\n`);
+      process.stdout.write(`  candidates added:       ${result.candidatesAdded}\n`);
+      process.stdout.write(`  invalid url rejected:   ${result.candidatesRejectedInvalidUrl}\n`);
+      process.stdout.write(`  candidates ledger:      ${result.candidatesPath}\n`);
+      process.stdout.write(`  report:                 ${result.reportPath}\n`);
+      process.stdout.write(`  summary:                ${result.summaryPath}\n`);
+      if (result.warnings.length > 0) {
+        process.stdout.write(`\nwarnings:\n`);
+        for (const w of result.warnings) process.stdout.write(`  - ${w}\n`);
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+discoverCmd
+  .command('approve')
+  .description('Approve discovered candidates so gather --approved will fetch them')
+  .argument('<section>', 'Section id')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--candidate <id>',
+    'Candidate id (repeatable)',
+    (v: string, prev: string[] = []) => {
+      prev.push(v);
+      return prev;
+    },
+  )
+  .option('--top <n>', 'Approve the top N candidates by rank', (v) => parseInt(v, 10))
+  .option('--reason <text>', 'Optional reason recorded on the status update')
+  .action(async (section: string, opts) => {
+    try {
+      const result = await discoverApprove({
+        sectionId: section,
+        packPath: opts.pack,
+        candidateIds: opts.candidate,
+        topN: opts.top,
+        reason: opts.reason,
+      });
+      process.stdout.write(`discover approve\n`);
+      process.stdout.write(`  approved:    ${result.approved}\n`);
+      for (const id of result.approvedIds) process.stdout.write(`    - ${id}\n`);
+      process.stdout.write(`  exported:    ${result.exportPath}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+discoverCmd
+  .command('reject')
+  .description('Reject discovered candidates with a recorded reason')
+  .argument('<section>', 'Section id')
+  .requiredOption(
+    '--candidate <id>',
+    'Candidate id (repeatable)',
+    (v: string, prev: string[] = []) => {
+      prev.push(v);
+      return prev;
+    },
+  )
+  .requiredOption('--reason <text>', 'Reason recorded on the status update')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await discoverReject({
+        sectionId: section,
+        packPath: opts.pack,
+        candidateIds: opts.candidate,
+        reason: opts.reason,
+      });
+      process.stdout.write(`discover reject\n`);
+      process.stdout.write(`  rejected: ${result.rejected}\n`);
+      for (const id of result.rejectedIds) process.stdout.write(`    - ${id}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+discoverCmd
+  .command('export-urls')
+  .description('Re-export sections/<id>/urls.approved.txt from the latest approved candidates')
+  .argument('<section>', 'Section id')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await discoverExport({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      process.stdout.write(`discover export-urls\n`);
+      process.stdout.write(`  approved count: ${result.approvedCount}\n`);
+      process.stdout.write(`  export path:    ${result.exportPath}\n`);
     } catch (err) {
       reportError(err);
     }
