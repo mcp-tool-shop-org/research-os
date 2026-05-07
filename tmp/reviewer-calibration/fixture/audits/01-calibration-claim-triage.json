@@ -1,0 +1,21 @@
+{
+  "summary_id": "tris_1778132470193_01-calibration",
+  "section_id": "01-calibration",
+  "triaged_at": "2026-05-07T05:41:10.193Z",
+  "research_os_version": "0.1.0",
+  "triage_method": "research_os_triage_v1",
+  "candidate_claims": 18,
+  "decisions": {
+    "selected_for_review": 18
+  },
+  "per_source_cap": 30,
+  "duplicate_clusters_collapsed": 0,
+  "selected_count": 18,
+  "selected_per_source": [
+    {
+      "source_id": "src_aaaaaaaaaaaa",
+      "selected": 18,
+      "total": 18
+    }
+  ]
+}

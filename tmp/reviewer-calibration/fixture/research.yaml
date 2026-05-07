@@ -1,0 +1,42 @@
+research_os_version: 0.1.0
+created_at: 2026-05-07T05:41:10.052Z
+topic: Reviewer calibration fixture for paged LLM review
+decision: ""
+audience: self
+desired_output: ""
+max_runtime_minutes: 240
+freshness:
+  required: true
+  max_source_age_months: null
+excluded_sources: []
+primary_source_waiver:
+  status: none
+  compensating_controls: []
+sections:
+  - id: 01-calibration
+    purpose: Reviewer calibration with seeded good and bad claims.
+    max_time_minutes: 45
+    min_sources: 8
+    primary_sources_required: 2
+    contradictions_required: true
+    status: draft
+gates:
+  source_floor:
+    min_sources: 8
+    min_independent_publishers: 4
+    primary_sources_required: 2
+    primary_source_waiver_allowed: true
+  claim_integrity:
+    every_claim_needs_source: true
+    no_orphan_claims: true
+    no_source_cluster_monopoly: true
+  freshness:
+    required_for_current_topics: true
+    stale_source_policy: warn
+  contradiction:
+    required: true
+    unresolved_contradictions_block_synthesis: true
+  section_budget:
+    max_time_minutes: 45
+    extension_requires_evidence: true
+frozen_at: null
