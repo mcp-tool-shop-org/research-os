@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
+import { reportSection } from './section_report/index.js';
 import { gather } from './sources/index.js';
 import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
@@ -98,6 +99,61 @@ sectionCmd
       process.stdout.write(`  id:    ${result.sectionId}\n`);
       process.stdout.write(`  path:  ${result.sectionPath}\n`);
       process.stdout.write(`  files: ${result.filesWritten.length}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+sectionCmd
+  .command('report')
+  .description(
+    'Read-only section roll-up: sources, extraction, contradictions, review, acceptance ratio',
+  )
+  .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const { report, jsonPath, markdownPath } = await reportSection({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      process.stdout.write(`section report: ${report.section_id}\n`);
+      process.stdout.write(`  status:                    ${report.status}\n`);
+      process.stdout.write(`Sources\n`);
+      process.stdout.write(`  fetched:                   ${report.sources.fetched_ok}\n`);
+      process.stdout.write(`  source cards:              ${report.sources.source_cards}\n`);
+      process.stdout.write(`  publishers:                ${report.sources.publishers.length}\n`);
+      process.stdout.write(`  primary-source waiver:     ${report.sources.primary_source_waiver.status}\n`);
+      process.stdout.write(`Extraction\n`);
+      process.stdout.write(`  candidate claims:          ${report.extraction.candidate_claims}\n`);
+      process.stdout.write(`  claims per 1k words:       ${report.extraction.claims_per_1k_words.toFixed(2)}\n`);
+      process.stdout.write(`  excerpt pages processed:   ${report.extraction.excerpt_pages_processed ?? 'n/a'}\n`);
+      process.stdout.write(`  excerpt-id failures:       ${report.extraction.excerpt_id_failures ?? 'n/a'}\n`);
+      process.stdout.write(`  malformed extractor:       ${report.extraction.malformed_extractor_outputs ?? 'n/a'}\n`);
+      process.stdout.write(`  near-duplicate clusters:   ${report.extraction.near_duplicate_clusters}\n`);
+      process.stdout.write(`Contradictions\n`);
+      process.stdout.write(`  pairs compared:            ${report.contradictions.pairs_compared ?? 'n/a'}\n`);
+      process.stdout.write(`  contradiction candidates:  ${report.contradictions.contradiction_candidates}\n`);
+      process.stdout.write(`  overgeneralization risks:  ${report.contradictions.overgeneralization_risks}\n`);
+      process.stdout.write(`Review\n`);
+      if (!report.review.reviewed) {
+        process.stdout.write(`  (not reviewed yet)\n`);
+      } else {
+        process.stdout.write(`  accepted_for_synthesis:    ${report.review.accepted_for_synthesis}\n`);
+        process.stdout.write(`  needs_scope_repair:        ${report.review.needs_scope_repair}\n`);
+        process.stdout.write(`  needs_source_repair:       ${report.review.needs_source_repair}\n`);
+        process.stdout.write(`  rejected:                  ${report.review.rejected}\n`);
+        process.stdout.write(`  needs_human_review:        ${report.review.needs_human_review}\n`);
+      }
+      process.stdout.write(`Acceptance\n`);
+      process.stdout.write(`  ratio:                     ${(report.acceptance.acceptance_ratio * 100).toFixed(1)}% (${report.acceptance.accepted_for_synthesis} / ${report.acceptance.candidate_claims})\n`);
+      process.stdout.write(`  accepted per source:       ${report.acceptance.accepted_per_source.toFixed(2)}\n`);
+      process.stdout.write(`  accepted per 1k words:     ${report.acceptance.accepted_per_1k_words.toFixed(2)}\n`);
+      process.stdout.write(`  top rejection category:    ${report.acceptance.top_rejection_category ?? 'none'}\n`);
+      process.stdout.write(`  claim_overproduction:      ${report.acceptance.claim_overproduction_fired ? 'yes' : 'no'}\n`);
+      process.stdout.write(`  synthesis ready:           ${report.acceptance.synthesis_ready ? 'yes' : 'no'}\n`);
+      process.stdout.write(`  json:                      ${jsonPath}\n`);
+      process.stdout.write(`  markdown:                  ${markdownPath}\n`);
     } catch (err) {
       reportError(err);
     }

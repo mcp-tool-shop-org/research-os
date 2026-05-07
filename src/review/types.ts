@@ -18,7 +18,8 @@ export type FindingCategory =
   | 'hidden_synthesis'
   | 'definition_drift'
   | 'temporal_mismatch'
-  | 'claim_overproduction';
+  | 'claim_overproduction'
+  | 'valid_but_low_value';
 
 export type FindingSeverity = 'info' | 'warn' | 'block';
 

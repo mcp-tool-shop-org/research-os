@@ -24,6 +24,7 @@ Look for:
 - hidden_synthesis: claim asserts a conclusion not present in the cited source
 - temporal_mismatch: claim cites a source from a different time period than its asserts implies
 - claim_overproduction: a cluster of grounded but redundant/atomized claims from one source — collectively synthesis noise. Cite all claim_ids in the cluster on a single finding.
+- valid_but_low_value: this individual claim is grounded but is not synthesis-worthy — restates context, definitional boilerplate, trivia, or low-leverage detail. Cite ONE claim_id per finding.
 
 Return ONE JSON object: {"findings": [...]}.
 
@@ -59,6 +60,7 @@ const VALID_CATEGORIES: FindingCategory[] = [
   'hidden_synthesis',
   'temporal_mismatch',
   'claim_overproduction',
+  'valid_but_low_value',
   // The reviewer prompt uses the LLM-relevant subset; heuristic handles the others.
 ];
 

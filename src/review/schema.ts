@@ -19,6 +19,13 @@ export const FindingCategorySchema = z.enum([
   // these so synthesis-worthiness — not just structural grounding — decides
   // what reaches synthesis.
   'claim_overproduction',
+  // Per-claim synthesis-worthiness call: this individual claim is grounded
+  // and well-formed but does not earn a synthesis slot (low leverage,
+  // restating context, definitional boilerplate, etc.). Distinct from
+  // claim_overproduction (section/source-level pressure signal): a section
+  // can be over-dense without every claim being individually low-value, and
+  // a low-value claim can appear in a perfectly-sized section.
+  'valid_but_low_value',
 ]);
 
 export const FindingSeveritySchema = z.enum(['info', 'warn', 'block']);

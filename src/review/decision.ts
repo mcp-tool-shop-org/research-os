@@ -18,6 +18,9 @@ const BLOCK_TO_DECISION: Record<string, ReviewDecision> = {
   // Block-level overproduction means the cluster is redundant enough that the
   // reviewer demands human-led collapse before synthesis.
   claim_overproduction: 'needs_human_review',
+  // Block-level low-value: explicitly excluded from synthesis. The claim is
+  // grounded, but the reviewer is firm that it doesn't earn a slot.
+  valid_but_low_value: 'rejected',
 };
 
 const WARN_TO_DECISION: Record<string, ReviewDecision> = {
@@ -32,6 +35,9 @@ const WARN_TO_DECISION: Record<string, ReviewDecision> = {
   // Warn-level overproduction routes to human review too — the claim itself
   // may be fine; the reviewer is signalling the cluster is synthesis noise.
   claim_overproduction: 'needs_human_review',
+  // Warn-level low-value: borderline. Send to human review rather than auto
+  // rejecting; the human decides whether to keep on the ledger or exclude.
+  valid_but_low_value: 'needs_human_review',
 };
 
 const DECISION_PRIORITY: ReviewDecision[] = [

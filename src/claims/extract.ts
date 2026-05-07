@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import {
@@ -7,6 +7,7 @@ import {
   PackNotFoundError,
   SectionNotFoundError,
 } from '../errors.js';
+import { RESEARCH_OS_VERSION } from '../index.js';
 import {
   buildExcerptIndex,
   EXCERPT_ID_PATTERN,
@@ -322,6 +323,45 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       summary.claimIds.push(claim.claim_id);
     }
   }
+
+  // Persist a small extraction receipt next to the section's other audit
+  // outputs. The section report reads this for the Extraction panel.
+  const receipt = {
+    receipt_id: `cle_${Date.now()}_${options.sectionId}`,
+    section_id: options.sectionId,
+    extracted_at: new Date().toISOString(),
+    research_os_version: RESEARCH_OS_VERSION,
+    extractor: summary.extractor,
+    extraction_method: summary.extractionMethod,
+    sources_processed: summary.sourcesProcessed,
+    sources_skipped: summary.sourcesSkipped,
+    sources_failed: summary.sourcesFailed,
+    excerpt_ledgers_built: summary.excerptLedgersBuilt,
+    claims_added: summary.claimsAdded,
+    claims_deduped: summary.claimsDeduped,
+    claims_rejected_ungrounded: summary.claimsRejectedUngrounded,
+    claims_rejected_excerpt_id_missing: summary.claimsRejectedExcerptIdMissing,
+    claims_rejected_excerpt_id_malformed: summary.claimsRejectedExcerptIdMalformed,
+    failures: summary.failures.map((f) => ({
+      source_id: f.source_id,
+      reason: f.reason,
+      // Tag transport / parse failures so the report can bucket them.
+      kind: /not valid JSON/i.test(f.reason)
+        ? 'extractor_invalid_json'
+        : /aborted|timeout/i.test(f.reason)
+          ? 'extractor_timeout'
+          : /HTTP \d{3}/i.test(f.reason)
+            ? 'extractor_http_error'
+            : 'extractor_other',
+    })),
+  };
+  const auditsDir = join(packPath, 'audits');
+  await mkdir(auditsDir, { recursive: true });
+  await writeFile(
+    join(auditsDir, `${options.sectionId}-claim-extract.json`),
+    JSON.stringify(receipt, null, 2),
+    'utf8',
+  );
 
   return summary;
 }
