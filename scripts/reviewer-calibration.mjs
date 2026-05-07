@@ -410,7 +410,24 @@ async function reportRecall(packPath, summary) {
     console.log(`  ${seed.label.padEnd(22)} expect=${(expected.join('|') || '(none)').padEnd(40)} → ${summary_str}`);
   }
 
-  console.log('\n=== bucket summary ===');
+  // Compute any-flag recall: how many bad claims received ANY finding,
+  // regardless of whether the LLM picked the expected category. Hermes-class
+  // models often know something is wrong but mislabel — strict-category
+  // recall undercounts; any-flag recall is the upper bound on "the reviewer
+  // saw a problem".
+  let anyFlagBadCaught = 0;
+  let badTotal = 0;
+  for (const seed of SEEDS) {
+    const claim_id = `clm_${SOURCE_ID.replace(/^src_/, '')}_ollama_intern_${SEEDS.indexOf(seed) + 1}`;
+    if (seed.expected_categories.length === 0) continue;
+    badTotal += 1;
+    const fnds = findingsByClaim.get(claim_id) ?? [];
+    if (fnds.length > 0) anyFlagBadCaught += 1;
+  }
+  const goodFalseFlag = (buckets.good ?? { falseFlag: 0 }).falseFlag;
+  const goodTotal = (buckets.good ?? { total: 0 }).total;
+
+  console.log('\n=== bucket summary (strict category match) ===');
   console.log('| Category               | Total | Caught | FalseFlag | Recall |');
   console.log('|------------------------|-------|--------|-----------|--------|');
   for (const [cat, b] of Object.entries(buckets)) {
@@ -422,6 +439,12 @@ async function reportRecall(packPath, summary) {
       `| ${cat.padEnd(22)} | ${String(b.total).padEnd(5)} | ${String(b.caught).padEnd(6)} | ${String(b.falseFlag).padEnd(9)} | ${recall} |`,
     );
   }
+  console.log('\n=== headline calibration ===');
+  console.log(`good-claim false-flag rate:    ${goodFalseFlag}/${goodTotal} (${goodTotal > 0 ? ((goodFalseFlag / goodTotal) * 100).toFixed(0) : 0}%)`);
+  console.log(`bad-claim any-flag recall:     ${anyFlagBadCaught}/${badTotal} (${badTotal > 0 ? ((anyFlagBadCaught / badTotal) * 100).toFixed(0) : 0}%)`);
+  let strictBadCaught = 0;
+  for (const [cat, b] of Object.entries(buckets)) if (cat !== 'good') strictBadCaught += b.caught;
+  console.log(`bad-claim strict-cat recall:   ${strictBadCaught}/${badTotal} (${badTotal > 0 ? ((strictBadCaught / badTotal) * 100).toFixed(0) : 0}%)`);
 }
 
 (async () => {
