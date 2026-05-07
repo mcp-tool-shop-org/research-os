@@ -8,9 +8,26 @@ Local-first research control plane for gated source packs, claim truth, contradi
 
 It is not a report generator. It is the operating environment for grounded research.
 
-## The load-bearing law
+## The load-bearing laws
 
-> **No synthesis before source truth.**
+> **1. No synthesis before source truth.**
+>
+> **2. Fetch is evidence; extraction is interpretation.**
+>
+> **3. Models may interpret source spans; they may not author evidence spans.**
+
+Law #3 means: when a claim cites source text, the LLM never authors that text. research-os builds a deterministic excerpt ledger from each source (paragraph + sentence chunking, stable IDs like `ex_<source_id_hex>_001`), the LLM picks excerpt IDs from that ledger, and research-os copies the literal text into the claim's `evidence_excerpt`. This eliminates the entire "paraphrase-as-quote" failure class — the model can't author quotes it can't actually source.
+
+The umbrella term "hallucination" is replaced by six precise rejection categories — three at extraction time (mechanical) and three at review time (interpretive):
+
+| When | Category | Meaning |
+|------|----------|---------|
+| extract | `excerpt_id_missing` | LLM picked an excerpt ID that isn't in the ledger |
+| extract | `excerpt_id_malformed` | LLM returned a string that isn't a valid excerpt ID |
+| extract | `extractor_invalid_json` | LLM didn't return parseable JSON |
+| review | `unsupported_claim` | Claim isn't justified by its chosen excerpt(s) |
+| review | `scope_missing` | Claim may be true but its scope is absent |
+| review | `scope_widening` | Claim was promoted beyond the source's scope |
 
 The lifecycle:
 

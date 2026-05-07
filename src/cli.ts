@@ -151,19 +151,28 @@ claimCmd
         packPath: opts.pack,
       });
       process.stdout.write(`claim extraction complete\n`);
-      process.stdout.write(`  section:           ${result.sectionId}\n`);
-      process.stdout.write(`  extractor:         ${result.extractor}\n`);
-      process.stdout.write(`  method:            ${result.extractionMethod}\n`);
-      process.stdout.write(`  sources processed: ${result.sourcesProcessed}\n`);
-      process.stdout.write(`  sources skipped:   ${result.sourcesSkipped}\n`);
-      process.stdout.write(`  sources failed:    ${result.sourcesFailed}\n`);
-      process.stdout.write(`  claims added:      ${result.claimsAdded}\n`);
-      process.stdout.write(`  claims deduped:    ${result.claimsDeduped}\n`);
-      process.stdout.write(`  claims rejected (ungrounded): ${result.claimsRejectedUngrounded}\n`);
+      process.stdout.write(`  section:                            ${result.sectionId}\n`);
+      process.stdout.write(`  extractor:                          ${result.extractor}\n`);
+      process.stdout.write(`  method:                             ${result.extractionMethod}\n`);
+      process.stdout.write(`  sources processed:                  ${result.sourcesProcessed}\n`);
+      process.stdout.write(`  sources skipped:                    ${result.sourcesSkipped}\n`);
+      process.stdout.write(`  sources failed:                     ${result.sourcesFailed}\n`);
+      process.stdout.write(`  excerpt ledgers built:              ${result.excerptLedgersBuilt}\n`);
+      process.stdout.write(`  claims added:                       ${result.claimsAdded}\n`);
+      process.stdout.write(`  claims deduped:                     ${result.claimsDeduped}\n`);
+      process.stdout.write(`  claims rejected (total ungrounded): ${result.claimsRejectedUngrounded}\n`);
+      // Span-first taxonomy: precise rejection categories. Others
+      // (unsupported_claim / scope_missing / scope_widening / cross_source_contam)
+      // are reviewer concerns and surface in the review step, not here.
+      process.stdout.write(`    excerpt_id_missing:               ${result.claimsRejectedExcerptIdMissing}\n`);
+      process.stdout.write(`    excerpt_id_malformed:             ${result.claimsRejectedExcerptIdMalformed}\n`);
       if (result.failures.length > 0) {
         process.stdout.write(`\nfailures:\n`);
         for (const f of result.failures) {
-          process.stdout.write(`  ${f.source_id}: ${f.reason}\n`);
+          // Annotate JSON-parse failures so they're visibly distinct from
+          // network/transport errors.
+          const tag = /not valid JSON/i.test(f.reason) ? '[extractor_invalid_json] ' : '';
+          process.stdout.write(`  ${f.source_id}: ${tag}${f.reason}\n`);
         }
       }
     } catch (err) {
