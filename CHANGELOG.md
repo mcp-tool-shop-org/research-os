@@ -53,3 +53,11 @@ All notable changes to `research-os` are documented here.
 - Snapshot artifacts (regenerated each run): `audits/<section>-review.json` (structured) and `audits/<section>-review.md` (human-readable)
 - Section status promoted from `gated` → `reviewed` only when **every** candidate claim has decision=`accepted_for_synthesis`
 - Load-bearing law added: **adversarial review judges research integrity; it does not synthesize, rewrite source truth, or erase extraction history**
+- `research-os index build [section]` / `research-os index export-repo-knowledge` / `research-os index sync-repo-knowledge` / `research-os query <term>` — Link 8 of the workflow chain
+- Pack-local SQLite index at `.research-os/index.sqlite` (auto-gitignored). Schema: `sections`, `sources`, `claims`, `contradictions`, `review_findings`, `claim_reviews`, `gate_results`, `fetch_receipts`, `artifacts`, plus FTS5 virtual table `facts_fts` for human-queryable text. Every indexed row carries `artifact_path` so search results point back to canonical files; the SQLite row is a pointer + acceleration layer, not the evidence
+- Re-build is deterministic and idempotent — re-indexing a section deletes its rows then re-inserts from current artifact state. Canonical artifacts (`claims.jsonl`, `contradictions.jsonl`, `claim-reviews.jsonl`, `findings.jsonl`, `gate.json`, source-cards, fetch-log) are never mutated by index build or query
+- Snippet-based query results group by record type; FTS5 prefix queries supported (`prefix='2 3 4'`)
+- `export-repo-knowledge` writes `evidence/repo-knowledge/research-os-facts.jsonl` with one fact per row (`fact_type`, `id`, `section_id`, `text`, `artifact_path`, `metadata`, `pack_origin`, `exported_at`). The export is portable; no runtime dependency on `@mcptoolshop/repo-knowledge`
+- `sync-repo-knowledge` is optional and dynamic — when `@mcptoolshop/repo-knowledge` is locally installed and exposes `ingestFacts`, the index syncs in; when absent, the command exits cleanly with a clear "skipped, use export instead" message. **No hard runtime dependency on repo-knowledge**
+- `IndexNotBuiltError` when querying or exporting before a build has run
+- Load-bearing law added: **indexing makes research truth queryable; it does not create new truth, rewrite truth, or become the source of record**

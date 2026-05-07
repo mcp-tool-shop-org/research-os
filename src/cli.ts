@@ -7,6 +7,12 @@ import { extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import { review as runReview } from './review/index.js';
+import {
+  build as indexBuild,
+  query as indexQuery,
+  exportRepoKnowledge,
+  syncRepoKnowledge,
+} from './indexer/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -251,6 +257,109 @@ program
       process.stdout.write(`\ndecisions:\n`);
       for (const [d, n] of Object.entries(result.decisions)) {
         process.stdout.write(`  ${d}: ${n}\n`);
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const indexCmd = program
+  .command('index')
+  .description('Build, query, and export the pack-local research-truth index');
+
+indexCmd
+  .command('build')
+  .description('Build the in-pack SQLite index from canonical artifacts')
+  .argument('[section]', 'Optional section id; omit to index every section')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--all', 'Index every section in the pack (default behavior)')
+  .action(async (section: string | undefined, opts) => {
+    try {
+      const result = await indexBuild({
+        sectionId: section,
+        packPath: opts.pack,
+        all: opts.all,
+      });
+      process.stdout.write(`index build complete\n`);
+      process.stdout.write(`  db:                ${result.dbPath}\n`);
+      process.stdout.write(`  sections indexed:  ${result.sectionsIndexed}\n`);
+      process.stdout.write(`  sources:           ${result.sources}\n`);
+      process.stdout.write(`  claims:            ${result.claims}\n`);
+      process.stdout.write(`  contradictions:    ${result.contradictions}\n`);
+      process.stdout.write(`  review findings:   ${result.reviewFindings}\n`);
+      process.stdout.write(`  claim reviews:     ${result.claimReviews}\n`);
+      process.stdout.write(`  gate results:      ${result.gateResults}\n`);
+      process.stdout.write(`  fetch receipts:    ${result.fetchReceipts}\n`);
+      process.stdout.write(`  artifacts tracked: ${result.artifacts}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+indexCmd
+  .command('export-repo-knowledge')
+  .description('Write a repo-knowledge-compatible facts JSONL from the index')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--out <path>', 'Output path; defaults to evidence/repo-knowledge/research-os-facts.jsonl')
+  .action(async (opts) => {
+    try {
+      const result = await exportRepoKnowledge({
+        packPath: opts.pack,
+        outPath: opts.out,
+      });
+      process.stdout.write(`export complete\n`);
+      process.stdout.write(`  out:        ${result.outPath}\n`);
+      process.stdout.write(`  facts:      ${result.factCount}\n`);
+      for (const [t, n] of Object.entries(result.byType)) {
+        process.stdout.write(`  ${t}: ${n}\n`);
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+indexCmd
+  .command('sync-repo-knowledge')
+  .description('Sync the index into a locally-installed @mcptoolshop/repo-knowledge (optional, skips cleanly when absent)')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await syncRepoKnowledge({ packPath: opts.pack });
+      process.stdout.write(`sync attempted: ${result.attempted}\n`);
+      process.stdout.write(`  ok:           ${result.ok}\n`);
+      process.stdout.write(`  facts synced: ${result.factsSynced}\n`);
+      process.stdout.write(`  reason:       ${result.reason}\n`);
+      if (result.attempted && !result.ok) process.exitCode = 2;
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('query')
+  .description('Query the pack-local research-truth index')
+  .argument('<term>', 'Search term (FTS5 syntax accepted)')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--limit <n>', 'Max hits to return', (v) => parseInt(v, 10), 25)
+  .option('--type <type>', 'Restrict to one record type (claim, source, contradiction, review_finding, gate_result, fetch_receipt, claim_review, section)')
+  .action((term: string, opts) => {
+    try {
+      const result = indexQuery({
+        term,
+        packPath: opts.pack,
+        limit: opts.limit,
+        recordType: opts.type,
+      });
+      process.stdout.write(`query: ${JSON.stringify(result.term)}\n`);
+      process.stdout.write(`hits:  ${result.totalHits}\n\n`);
+      for (const [type, hits] of Object.entries(result.groupedByType)) {
+        process.stdout.write(`== ${type} (${hits.length}) ==\n`);
+        for (const h of hits) {
+          process.stdout.write(`  [${h.section_id ?? '-'}] ${h.record_id}\n`);
+          process.stdout.write(`    artifact: ${h.artifact_path}\n`);
+          process.stdout.write(`    snippet:  ${h.snippet.replace(/\s+/g, ' ').slice(0, 240)}\n`);
+        }
+        process.stdout.write('\n');
       }
     } catch (err) {
       reportError(err);
