@@ -73,3 +73,23 @@ export class NoSourcesGatheredError extends ResearchOSError {
     this.name = 'NoSourcesGatheredError';
   }
 }
+
+export class HandoffNotFoundError extends ResearchOSError {
+  constructor() {
+    super(
+      `No handoff on file at handoffs/cowork-handoff.json. Run 'research-os cowork handoff' first.`,
+      'HANDOFF_NOT_FOUND',
+    );
+    this.name = 'HandoffNotFoundError';
+  }
+}
+
+export class SynthesisNotReadyError extends ResearchOSError {
+  constructor(public readonly mode: string) {
+    super(
+      `Synthesis workspace refused: pack is in ${mode} mode. Run 'research-os cowork handoff' for repair instructions.`,
+      'SYNTHESIS_NOT_READY',
+    );
+    this.name = 'SynthesisNotReadyError';
+  }
+}

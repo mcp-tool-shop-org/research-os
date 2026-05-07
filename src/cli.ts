@@ -14,6 +14,7 @@ import {
   syncRepoKnowledge,
 } from './indexer/index.js';
 import { handoff as coworkHandoff } from './cowork/index.js';
+import { workspace as synthWorkspace } from './synth/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -395,6 +396,36 @@ coworkCmd
         }
       }
       if (!result.synthesisAllowed) process.exitCode = 0; // not an error — informational
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const synthCmd = program
+  .command('synth')
+  .description('Synthesis workspace: organize accepted research truth for Cowork');
+
+synthCmd
+  .command('workspace')
+  .description('Create the synthesis workspace; refuses unless cowork handoff mode is synthesis_ready')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await synthWorkspace({ packPath: opts.pack });
+      if (result.refused) {
+        process.stdout.write(`synthesis workspace: REFUSED\n`);
+        process.stdout.write(`  mode:       ${result.mode}\n`);
+        process.stdout.write(`  reason:     ${result.refusalReason}\n`);
+        process.exitCode = 2;
+        return;
+      }
+      process.stdout.write(`synthesis workspace ready\n`);
+      process.stdout.write(`  mode:                         ${result.mode}\n`);
+      process.stdout.write(`  accepted claims:              ${result.acceptedClaims}\n`);
+      process.stdout.write(`  claim clusters:               ${result.claimClusters}\n`);
+      process.stdout.write(`  scope overlaps:               ${result.scopeOverlaps}\n`);
+      process.stdout.write(`  cross-section contradictions: ${result.crossSectionContradictions}\n`);
+      for (const f of result.filesWritten) process.stdout.write(`  wrote: ${f}\n`);
     } catch (err) {
       reportError(err);
     }

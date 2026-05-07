@@ -7,6 +7,7 @@ export * from './gates/index.js';
 export * from './review/index.js';
 export * from './indexer/index.js';
 export * from './cowork/index.js';
+export * from './synth/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,
@@ -18,6 +19,8 @@ export {
   SectionNotFoundError,
   NoUrlsProvidedError,
   NoSourcesGatheredError,
+  HandoffNotFoundError,
+  SynthesisNotReadyError,
 } from './errors.js';
 
 export const RESEARCH_OS_VERSION = '0.1.0';
