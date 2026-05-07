@@ -6,6 +6,7 @@ import { gather } from './sources/index.js';
 import { extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
+import { review as runReview } from './review/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -221,6 +222,36 @@ program
         }
       }
       if (!result.synthesis_eligible) process.exitCode = 2;
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('review')
+  .description('Run the adversarial reviewer pass; emits findings + claim review decisions')
+  .argument('<section>', 'Section id, e.g. "01-landscape"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await runReview({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      process.stdout.write(`review complete\n`);
+      process.stdout.write(`  section:                ${result.sectionId}\n`);
+      process.stdout.write(`  reviewer:               ${result.reviewer}\n`);
+      process.stdout.write(`  method:                 ${result.reviewMethod}\n`);
+      process.stdout.write(`  candidate claims:       ${result.candidateClaims}\n`);
+      process.stdout.write(`  findings added:         ${result.findingsAdded}\n`);
+      process.stdout.write(`  findings deduped:       ${result.findingsDeduped}\n`);
+      process.stdout.write(`  llm findings rejected:  ${result.llmFindingsRejected}\n`);
+      process.stdout.write(`  blocking findings:      ${result.blockingFindings}\n`);
+      process.stdout.write(`  promoted to reviewed:   ${result.promotedToReviewed}\n`);
+      process.stdout.write(`\ndecisions:\n`);
+      for (const [d, n] of Object.entries(result.decisions)) {
+        process.stdout.write(`  ${d}: ${n}\n`);
+      }
     } catch (err) {
       reportError(err);
     }

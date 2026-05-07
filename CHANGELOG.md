@@ -43,3 +43,13 @@ All notable changes to `research-os` are documented here.
 - Outputs: `audits/<section>-gate.json` (structured), `audits/<section>-gate.md` (human-readable)
 - `research.yaml.sections[]` status promoted to `gated` only when synthesis_eligible; never downgraded
 - Load-bearing law added: **gates decide whether a section is eligible for synthesis; they do not synthesize, rewrite claims, resolve contradictions, or hide failure**
+- `research-os review <section>` — Link 7 of the workflow chain
+- Thirteen finding categories: `unsupported_claim`, `ungrounded_excerpt`, `stale_claim`, `overgeneralized_claim`, `scope_widening`, `missing_not_constraint`, `source_quality_problem`, `source_cluster_monopoly`, `unmapped_contradiction`, `recommendation_exceeds_evidence`, `hidden_synthesis`, `definition_drift`, `temporal_mismatch`
+- Severity model: `info` / `warn` / `block`
+- Six review decisions: `accepted_for_synthesis`, `rejected`, `needs_scope_repair`, `needs_source_repair`, `needs_contradiction_mapping`, `needs_human_review`
+- `HeuristicReviewer`: missing-field detection, evidence-grounding re-verification against raw text, scope-null risk, unresolved-contradiction involvement, source-cluster monopoly per-claim, source-quality mismatch (high confidence + forum/unknown source type), stale-claim per pack freshness policy, hidden-synthesis flag when brief.md exceeds stub state
+- `OllamaInternReviewer`: pair-pass over candidate claims for `overgeneralized_claim`, `scope_widening`, `definition_drift`, `recommendation_exceeds_evidence`, `hidden_synthesis`, `temporal_mismatch`. **Critical guard**: any LLM finding citing a claim_id or source_id not in the input is rejected as ungrounded reviewer output (counted in `llmFindingsRejected`). Falls back to heuristic when unavailable
+- Append-only ledgers: `audits/<section>-findings.jsonl` and `sections/<id>/claim-reviews.jsonl`. **`claims.jsonl` is never mutated** — extraction truth and review truth are separate
+- Snapshot artifacts (regenerated each run): `audits/<section>-review.json` (structured) and `audits/<section>-review.md` (human-readable)
+- Section status promoted from `gated` → `reviewed` only when **every** candidate claim has decision=`accepted_for_synthesis`
+- Load-bearing law added: **adversarial review judges research integrity; it does not synthesize, rewrite source truth, or erase extraction history**
