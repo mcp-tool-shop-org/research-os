@@ -15,6 +15,10 @@ It is not a report generator. It is the operating environment for grounded resea
 > **2. Fetch is evidence; extraction is interpretation.**
 >
 > **3. Models may interpret source spans; they may not author evidence spans.**
+>
+> **4. Extraction may overproduce; synthesis may not inherit abundance.**
+
+Law #4 means: between extraction and review there is a formal triage pass (`research-os claim triage`) that deduplicates, caps per-source contribution, and parks low-leverage candidates. Triage does NOT mutate `claims.jsonl` — parked claims remain on the canonical ledger as research truth, simply excluded from the next review pass via an append-only triage ledger. The reviewer keeps its job (interpretive judgement); triage absorbs the garbage-compaction load that paged extraction can produce.
 
 Law #3 means: when a claim cites source text, the LLM never authors that text. research-os builds a deterministic excerpt ledger from each source (paragraph + sentence chunking, stable IDs like `ex_<source_id_hex>_001`), the LLM picks excerpt IDs from that ledger, and research-os copies the literal text into the claim's `evidence_excerpt`. This eliminates the entire "paraphrase-as-quote" failure class — the model can't author quotes it can't actually source.
 
