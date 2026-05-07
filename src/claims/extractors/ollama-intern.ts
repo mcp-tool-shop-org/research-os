@@ -1,5 +1,6 @@
 import { renderLedgerForPrompt } from '../../sources/excerpts/ledger.js';
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
+import type { Excerpt } from '../../sources/excerpts/schema.js';
 import type {
   ClaimExtractionInput,
   ClaimExtractionResult,
@@ -11,7 +12,11 @@ import type {
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
 const DEFAULT_TIMEOUT_MS = 240_000;
-const MAX_LEDGER_CHARS = 12_000;
+// Per-window character budget. Keeps the rendered ledger small enough that a
+// 12B-class model can return JSON within DEFAULT_TIMEOUT_MS even on a modest
+// rig. Larger ledgers are paged into multiple windows; claims are merged and
+// deduped after.
+const DEFAULT_WINDOW_CHARS = 5_000;
 
 // Span-first extraction prompt. The model is shown a deterministic excerpt
 // ledger and asked to choose excerpt IDs — it must NOT author or paraphrase
@@ -49,6 +54,8 @@ export interface OllamaClaimConfig {
   host?: string;
   model?: string;
   timeoutMs?: number;
+  // Per-window ledger character budget. Defaults to DEFAULT_WINDOW_CHARS.
+  windowChars?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -79,17 +86,48 @@ function asIdArray(v: unknown): string[] {
   return out;
 }
 
+// Split an excerpt list into windows each under windowChars, never breaking
+// inside an excerpt. Deterministic — same input → same windows.
+export function pageExcerpts(excerpts: Excerpt[], windowChars: number): Excerpt[][] {
+  const windows: Excerpt[][] = [];
+  let cursor: Excerpt[] = [];
+  let cursorChars = 0;
+  for (const ex of excerpts) {
+    // Approximate the rendered cost: id + location_hint + ': ' + text + '\n'
+    const approxLine =
+      ex.excerpt_id.length +
+      (ex.location_hint ? ex.location_hint.length + 3 : 0) +
+      2 +
+      ex.text.length +
+      1;
+    if (cursor.length > 0 && cursorChars + approxLine > windowChars) {
+      windows.push(cursor);
+      cursor = [];
+      cursorChars = 0;
+    }
+    cursor.push(ex);
+    cursorChars += approxLine;
+  }
+  if (cursor.length > 0) windows.push(cursor);
+  return windows;
+}
+
 export class OllamaInternClaimExtractor implements ClaimExtractorAdapter {
   readonly name = 'ollama-intern' as const;
   private readonly host: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly windowChars: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(config: OllamaClaimConfig = {}) {
     this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
     this.model = config.model ?? process.env.OLLAMA_INTERN_MODEL ?? DEFAULT_MODEL;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const envWindow = process.env.OLLAMA_INTERN_WINDOW_CHARS;
+    this.windowChars =
+      config.windowChars ??
+      (envWindow ? parseInt(envWindow, 10) || DEFAULT_WINDOW_CHARS : DEFAULT_WINDOW_CHARS);
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -109,32 +147,14 @@ export class OllamaInternClaimExtractor implements ClaimExtractorAdapter {
     }
   }
 
-  async extract(input: ClaimExtractionInput): Promise<ClaimExtractionResult> {
-    if (input.excerpts.length === 0) {
-      return { ok: false, error: 'No excerpts available; ledger is empty for this source' };
-    }
-
-    const card = input.sourceCard;
-    let ledgerText = renderLedgerForPrompt(input.excerpts);
-    if (ledgerText.length > MAX_LEDGER_CHARS) {
-      // Truncate by full lines to keep IDs intact.
-      const lines = ledgerText.split('\n');
-      let acc = '';
-      const kept: string[] = [];
-      for (const line of lines) {
-        if (acc.length + line.length + 1 > MAX_LEDGER_CHARS) break;
-        kept.push(line);
-        acc += line.length + 1;
-      }
-      ledgerText = kept.join('\n');
-    }
-
-    const userMsg = `URL: ${card.url}
-Source title: ${card.title}
-Publisher: ${card.publisher ?? 'unknown'}
-Source-card asserts: ${card.asserts}
-Source-card scope: ${card.scope ?? 'null'}
-Source-card not: ${card.not ?? 'null'}
+  // One LLM call against a single ledger window. Returns drafts or an error.
+  // Errors here become page-level failures; the orchestrating extract() method
+  // tolerates page failures and merges drafts from successful pages.
+  private async extractOnePage(
+    cardSummary: string,
+    ledgerText: string,
+  ): Promise<{ ok: true; drafts: DraftClaim[] } | { ok: false; error: string }> {
+    const userMsg = `${cardSummary}
 
 EXCERPT LEDGER BEGIN
 ${ledgerText}
@@ -194,11 +214,64 @@ EXCERPT LEDGER END`;
         confidence: asConfidence(r.confidence),
       });
     }
+    return { ok: true, drafts };
+  }
+
+  async extract(input: ClaimExtractionInput): Promise<ClaimExtractionResult> {
+    if (input.excerpts.length === 0) {
+      return { ok: false, error: 'No excerpts available; ledger is empty for this source' };
+    }
+
+    const card = input.sourceCard;
+    const cardSummary = `URL: ${card.url}
+Source title: ${card.title}
+Publisher: ${card.publisher ?? 'unknown'}
+Source-card asserts: ${card.asserts}
+Source-card scope: ${card.scope ?? 'null'}
+Source-card not: ${card.not ?? 'null'}`;
+
+    const windows = pageExcerpts(input.excerpts, this.windowChars);
+    const allDrafts: DraftClaim[] = [];
+    const pageErrors: string[] = [];
+    let pagesOk = 0;
+    for (const window of windows) {
+      const ledgerText = renderLedgerForPrompt(window);
+      const page = await this.extractOnePage(cardSummary, ledgerText);
+      if (!page.ok) {
+        pageErrors.push(page.error);
+        continue;
+      }
+      pagesOk += 1;
+      allDrafts.push(...page.drafts);
+    }
+
+    // If every page failed, surface the most common error so the caller sees
+    // the right diagnostic (HTTP 500 vs JSON parse vs timeout).
+    if (pagesOk === 0) {
+      const summary =
+        pageErrors.length === 1
+          ? pageErrors[0]!
+          : `all ${windows.length} ledger pages failed (first error: ${pageErrors[0] ?? 'unknown'})`;
+      return { ok: false, error: summary };
+    }
+
+    // Dedup by normalised asserts — when the same theme appears in adjacent
+    // windows the model often emits parallel claims.
+    const seen = new Set<string>();
+    const drafts: DraftClaim[] = [];
+    for (const d of allDrafts) {
+      const key = d.asserts.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      drafts.push(d);
+    }
 
     if (drafts.length === 0) {
       return { ok: false, error: 'Ollama returned no usable claims (all missing evidence_excerpt_ids)' };
     }
 
-    return { ok: true, claims: drafts, method: 'ollama_intern_propositional' };
+    const method =
+      windows.length > 1 ? 'ollama_intern_propositional_paged' : 'ollama_intern_propositional';
+    return { ok: true, claims: drafts, method };
   }
 }

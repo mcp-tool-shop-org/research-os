@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { OllamaInternClaimExtractor } from '../src/claims/extractors/ollama-intern.js';
+import {
+  OllamaInternClaimExtractor,
+  pageExcerpts,
+} from '../src/claims/extractors/ollama-intern.js';
 import type { Excerpt } from '../src/sources/excerpts/schema.js';
 import type { SourceCard } from '../src/sources/schema.js';
 
@@ -284,5 +287,152 @@ describe('OllamaInternClaimExtractor.extract (span-first)', () => {
     if (!result.ok) throw new Error('should succeed');
     expect(result.claims[0]?.scope).toBeNull();
     expect(result.claims[0]?.not).toBeNull();
+  });
+});
+
+describe('pageExcerpts', () => {
+  it('keeps a small ledger as a single window', () => {
+    const ledger = [ex(1, 'short text'), ex(2, 'short text')];
+    expect(pageExcerpts(ledger, 1000)).toHaveLength(1);
+  });
+
+  it('splits a large ledger into deterministic windows', () => {
+    const long = 'A'.repeat(400);
+    const ledger = [ex(1, long), ex(2, long), ex(3, long), ex(4, long)];
+    const windows = pageExcerpts(ledger, 500);
+    expect(windows.length).toBeGreaterThanOrEqual(2);
+    // Same input yields same windows.
+    expect(pageExcerpts(ledger, 500)).toEqual(windows);
+    // Every excerpt appears in exactly one window.
+    const flat = windows.flat().map((e) => e.excerpt_id).sort();
+    expect(flat).toEqual(['ex_abcdef012345_001', 'ex_abcdef012345_002', 'ex_abcdef012345_003', 'ex_abcdef012345_004']);
+  });
+
+  it('never splits inside an excerpt — a single oversized excerpt becomes its own window', () => {
+    const big = ex(1, 'X'.repeat(2000));
+    const small = ex(2, 'tiny');
+    const windows = pageExcerpts([big, small], 500);
+    expect(windows[0]).toEqual([big]);
+    expect(windows[1]).toEqual([small]);
+  });
+});
+
+describe('OllamaInternClaimExtractor.extract paging', () => {
+  it('runs once per window, merges drafts, and dedupes by normalised asserts', async () => {
+    // Two windows each producing one unique claim plus one duplicate "asserts".
+    let callCount = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      callCount += 1;
+      const isFirstCall = callCount === 1;
+      const payload = {
+        message: {
+          content: JSON.stringify({
+            claims: [
+              {
+                asserts: 'a shared theme repeated across windows',
+                evidence_excerpt_ids: [`ex_abcdef012345_${String(callCount).padStart(3, '0')}`],
+              },
+              {
+                asserts: isFirstCall ? 'first-window-only claim' : 'second-window-only claim',
+                evidence_excerpt_ids: [`ex_abcdef012345_${String(callCount).padStart(3, '0')}`],
+              },
+            ],
+          }),
+        },
+      };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }) as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const extractor = new OllamaInternClaimExtractor({
+      host: TEST_HOST,
+      model: TEST_MODEL,
+      windowChars: 200, // tiny budget forces multiple pages
+      fetchImpl,
+    });
+
+    const big = 'X'.repeat(180);
+    const ledger = [ex(1, big), ex(2, big), ex(3, big)];
+    const result = await extractor.extract({
+      sourceCard: baseCard,
+      sourceHash: null,
+      excerpts: ledger,
+    });
+    if (!result.ok) throw new Error(`should succeed: ${result.error}`);
+    expect(callCount).toBeGreaterThanOrEqual(2);
+    // The duplicate "shared theme" claim is deduped by normalised asserts.
+    const sharedCount = result.claims.filter((c) =>
+      c.asserts.toLowerCase().includes('shared theme'),
+    ).length;
+    expect(sharedCount).toBe(1);
+    // The unique per-window claims are both present.
+    expect(result.claims.some((c) => c.asserts === 'first-window-only claim')).toBe(true);
+    expect(result.claims.some((c) => c.asserts === 'second-window-only claim')).toBe(true);
+    // method tag reflects paging.
+    expect(result.method).toBe('ollama_intern_propositional_paged');
+  });
+
+  it('tolerates partial-page failures — returns drafts from the pages that did succeed', async () => {
+    let callCount = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Response('boom', { status: 500 }) as unknown as Response;
+      }
+      return new Response(
+        JSON.stringify({
+          message: {
+            content: JSON.stringify({
+              claims: [
+                {
+                  asserts: 'survived the partial failure',
+                  evidence_excerpt_ids: ['ex_abcdef012345_002'],
+                },
+              ],
+            }),
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ) as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const extractor = new OllamaInternClaimExtractor({
+      host: TEST_HOST,
+      model: TEST_MODEL,
+      windowChars: 200,
+      fetchImpl,
+    });
+    const big = 'X'.repeat(180);
+    const ledger = [ex(1, big), ex(2, big)];
+    const result = await extractor.extract({
+      sourceCard: baseCard,
+      sourceHash: null,
+      excerpts: ledger,
+    });
+    if (!result.ok) throw new Error(`should succeed: ${result.error}`);
+    expect(result.claims).toHaveLength(1);
+    expect(result.claims[0]?.asserts).toBe('survived the partial failure');
+  });
+
+  it('returns ok:false when every page fails', async () => {
+    const fetchImpl: typeof fetch = (async () => {
+      return new Response('boom', { status: 500 }) as unknown as Response;
+    }) as unknown as typeof fetch;
+    const extractor = new OllamaInternClaimExtractor({
+      host: TEST_HOST,
+      model: TEST_MODEL,
+      windowChars: 200,
+      fetchImpl,
+    });
+    const big = 'X'.repeat(180);
+    const ledger = [ex(1, big), ex(2, big)];
+    const result = await extractor.extract({
+      sourceCard: baseCard,
+      sourceHash: null,
+      excerpts: ledger,
+    });
+    expect(result.ok).toBe(false);
   });
 });
