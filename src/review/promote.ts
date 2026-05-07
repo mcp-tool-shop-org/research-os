@@ -11,6 +11,7 @@ import {
   profileDir,
   reviewActivePath,
   writeActiveProfile,
+  type PromotionCalibrationSummary,
 } from './profiles.js';
 import { ReviewSnapshotSchema } from './schema.js';
 import { renderReviewMarkdown } from './markdown.js';
@@ -19,6 +20,13 @@ export interface PromoteOptions {
   sectionId: string;
   packPath?: string;
   profile: string;
+  // Free-text rationale recorded on review-active.json. Strongly encouraged
+  // — explains WHY this profile became section truth, not just which one.
+  promotionReason?: string;
+  // Optional calibration evidence captured at promotion time. The profile/
+  // promote layer is provenance-first: future gate/audit/freeze can show
+  // not just "this is active" but "this was trusted because <numbers>".
+  calibrationSummary?: PromotionCalibrationSummary | null;
   // When true, also bump section status from gated → reviewed if every claim
   // in the promoted profile is accepted_for_synthesis.
   promoteSectionStatus?: boolean;
@@ -96,13 +104,20 @@ export async function promote(options: PromoteOptions): Promise<PromoteResult> {
     }
   }
 
-  // Mark this profile as active.
+  // Mark this profile as active. Carry promotion provenance so downstream
+  // consumers can explain why the reviewer is trusted, not just point at
+  // which one ran.
   const stamp = (options.now ?? (() => new Date()))();
   await writeActiveProfile(packPath, options.sectionId, {
     active_profile: options.profile,
     promoted_at: stamp.toISOString(),
     promoted_method: snapshot.review_method,
     promoted_reviewer: snapshot.reviewer,
+    promotion_reason:
+      options.promotionReason && options.promotionReason.trim().length >= 8
+        ? options.promotionReason.trim()
+        : `promoted from sections/${options.sectionId}/reviews/${options.profile}/`,
+    calibration_summary: options.calibrationSummary ?? null,
   });
 
   let sectionStatusBumped = false;

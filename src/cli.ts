@@ -819,16 +819,44 @@ program
   .requiredOption('--profile <name>', 'Profile name to promote')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
   .option(
+    '--reason <text>',
+    'Free-text rationale recorded on review-active.json — why this profile is being trusted',
+  )
+  .option('--calibration-fixture <name>', 'Calibration fixture name')
+  .option('--good-fp <text>', 'good-claim false-positive rate string (e.g. "0/5 (0%)")')
+  .option('--any-flag-recall <text>', 'bad-claim any-flag recall string (e.g. "9/13 (69%)")')
+  .option('--strict-cat-recall <text>', 'strict-category recall string')
+  .option('--unsupported-recall <text>', 'unsupported_claim category recall string')
+  .option('--calibration-notes <text>', 'free-text calibration notes')
+  .option(
     '--bump-section-status',
     'Also bump section.status from gated → reviewed if every promoted claim is accepted_for_synthesis',
     false,
   )
   .action(async (section: string, opts) => {
     try {
+      const calibration =
+        opts.calibrationFixture ||
+        opts.goodFp ||
+        opts.anyFlagRecall ||
+        opts.strictCatRecall ||
+        opts.unsupportedRecall ||
+        opts.calibrationNotes
+          ? {
+              fixture: opts.calibrationFixture ?? null,
+              good_false_positive_rate: opts.goodFp ?? null,
+              bad_any_flag_recall: opts.anyFlagRecall ?? null,
+              strict_category_recall: opts.strictCatRecall ?? null,
+              unsupported_claim_recall: opts.unsupportedRecall ?? null,
+              notes: opts.calibrationNotes ?? null,
+            }
+          : null;
       const result = await runPromote({
         sectionId: section,
         packPath: opts.pack,
         profile: opts.profile,
+        promotionReason: opts.reason,
+        calibrationSummary: calibration,
         promoteSectionStatus: opts.bumpSectionStatus,
       });
       process.stdout.write(`review profile promoted\n`);

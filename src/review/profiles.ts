@@ -15,13 +15,33 @@ import { z } from 'zod';
 
 export const DEFAULT_PROFILE = 'default';
 
+// A reviewer-calibration snapshot the promoter recorded at the moment they
+// chose to trust this profile. Optional but strongly encouraged — gate/
+// audit/freeze can use this to explain (not just assert) why the active
+// review state is the active review state.
+export const PromotionCalibrationSummarySchema = z.object({
+  fixture: z.string().nullable().default(null),
+  good_false_positive_rate: z.string().nullable().default(null),
+  bad_any_flag_recall: z.string().nullable().default(null),
+  strict_category_recall: z.string().nullable().default(null),
+  unsupported_claim_recall: z.string().nullable().default(null),
+  notes: z.string().nullable().default(null),
+});
+
 export const ReviewActiveSchema = z.object({
   active_profile: z.string().min(1),
   promoted_at: z.string(),
   promoted_method: z.string(),
   promoted_reviewer: z.string(),
+  // Free-text reason the profile was promoted. Recorded once at promotion
+  // time; not derived from artifacts. Required.
+  promotion_reason: z.string().min(8).default('promoted via review-promote without an explicit reason'),
+  // Optional calibration evidence captured at promotion time so downstream
+  // consumers can see WHY the reviewer was trusted.
+  calibration_summary: PromotionCalibrationSummarySchema.nullable().default(null),
 });
 
+export type PromotionCalibrationSummary = z.infer<typeof PromotionCalibrationSummarySchema>;
 export type ReviewActive = z.infer<typeof ReviewActiveSchema>;
 
 export function reviewActivePath(packPath: string, sectionId: string): string {
