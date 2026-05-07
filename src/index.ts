@@ -6,6 +6,7 @@ export * from './contradictions/index.js';
 export * from './gates/index.js';
 export * from './review/index.js';
 export * from './indexer/index.js';
+export * from './cowork/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,

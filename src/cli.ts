@@ -13,6 +13,7 @@ import {
   exportRepoKnowledge,
   syncRepoKnowledge,
 } from './indexer/index.js';
+import { handoff as coworkHandoff } from './cowork/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -361,6 +362,39 @@ program
         }
         process.stdout.write('\n');
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const coworkCmd = program
+  .command('cowork')
+  .description('Cowork handoff: render the runtime contract from research truth');
+
+coworkCmd
+  .command('handoff')
+  .description('Generate handoffs/cowork-handoff.json + handoffs/cowork-master.md from current pack state')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await coworkHandoff({ packPath: opts.pack });
+      process.stdout.write(`cowork handoff rendered\n`);
+      process.stdout.write(`  pack id:            ${result.packId}\n`);
+      process.stdout.write(`  pack topic:         ${result.packTopic}\n`);
+      process.stdout.write(`  mode:               ${result.mode}\n`);
+      process.stdout.write(`  synthesis allowed:  ${result.synthesisAllowed}\n`);
+      process.stdout.write(`  accepted claims:    ${result.acceptedCount}\n`);
+      process.stdout.write(`  repair claims:      ${result.repairCount}\n`);
+      process.stdout.write(`  rejected claims:    ${result.blockedCount}\n`);
+      process.stdout.write(`  json:               ${result.jsonPath}\n`);
+      process.stdout.write(`  markdown:           ${result.markdownPath}\n`);
+      if (result.warnings.length > 0) {
+        process.stdout.write(`\nwarnings:\n`);
+        for (const w of result.warnings) {
+          process.stdout.write(`  - ${w}\n`);
+        }
+      }
+      if (!result.synthesisAllowed) process.exitCode = 0; // not an error — informational
     } catch (err) {
       reportError(err);
     }
