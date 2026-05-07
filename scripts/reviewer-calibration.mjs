@@ -29,7 +29,10 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUT = resolve(__dirname, '..', 'tmp', 'reviewer-calibration');
-const outDir = process.argv[2] ?? DEFAULT_OUT;
+// args: [outDir?] [mode?]  mode in {single, two-pass}; default single
+const args = process.argv.slice(2);
+const outDir = args[0] && !args[0].startsWith('--') ? args[0] : DEFAULT_OUT;
+const mode = args.includes('--two-pass') ? 'two-pass' : 'single';
 
 // Seeded claim authoring set. expected_categories[] is the ground truth.
 // "good" claims have expected_categories = [].
@@ -329,18 +332,27 @@ async function buildFixturePack() {
   return packPath;
 }
 
-async function runCalibration(packPath) {
-  const reviewer = new OllamaInternReviewer({ claimsPerWindow: 10 });
-  const available = await reviewer.available();
-  if (!available) {
+async function runCalibration(packPath, mode) {
+  const general = new OllamaInternReviewer({ claimsPerWindow: 10, mode: 'general' });
+  const narrow = new OllamaInternReviewer({ claimsPerWindow: 10, mode: 'narrow_critic' });
+  if (!(await general.available())) {
     console.error('LLM reviewer unavailable. Aborting.');
     process.exit(2);
   }
-
+  if (mode === 'two-pass') {
+    const summary = await runReview({
+      sectionId: '01-calibration',
+      packPath,
+      reviewers: [general, narrow],
+      triagedOnly: true,
+      multiPass: true,
+    });
+    return summary;
+  }
   const summary = await runReview({
     sectionId: '01-calibration',
     packPath,
-    reviewers: [reviewer],
+    reviewers: [general],
     triagedOnly: true,
   });
   return summary;
@@ -414,9 +426,10 @@ async function reportRecall(packPath, summary) {
 
 (async () => {
   console.log(`Building fixture at: ${outDir}`);
+  console.log(`Mode: ${mode}`);
   const packPath = await buildFixturePack();
-  console.log(`Fixture built. Running paged LLM review...`);
-  const summary = await runCalibration(packPath);
+  console.log(`Fixture built. Running paged LLM review (${mode})...`);
+  const summary = await runCalibration(packPath, mode);
   await reportRecall(packPath, summary);
 })().catch((err) => {
   console.error(err);

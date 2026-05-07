@@ -80,6 +80,11 @@ export interface RunReviewOptions {
   // are reviewed. Parked claims remain on the canonical ledger; review
   // simply skips them.
   triagedOnly?: boolean;
+  // When true, runs every available reviewer in `reviewers` (or in the
+  // default ladder) sequentially and merges their findings instead of
+  // picking the first available one. The classic two-pass shape:
+  // general LLM reviewer + narrow-critic LLM reviewer + heuristic.
+  multiPass?: boolean;
 }
 
 export interface RunReviewSummary {

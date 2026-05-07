@@ -243,6 +243,29 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
   const briefText = await readBriefText(packPath, options.sectionId);
 
   const reviewers = options.reviewers ?? defaultReviewers();
+
+  // Multi-pass: run every available reviewer and merge findings. The classic
+  // shape is general LLM + narrow-critic LLM + heuristic — each catches a
+  // different failure mode, and the merger is append-only with dedup.
+  if (options.multiPass) {
+    return runMultiPassReview({
+      packPath,
+      options,
+      reviewers,
+      research,
+      section,
+      claims,
+      candidateClaims,
+      sources,
+      receipts,
+      contradictions,
+      gateResult,
+      rawTextBySourceId,
+      excerptsBySourceId,
+      briefText,
+    });
+  }
+
   const reviewer = await pickReviewer(reviewers);
 
   const result = await reviewer.review({
@@ -320,6 +343,91 @@ interface ReviewWithSpecificReviewerArgs {
   rawTextBySourceId: Map<string, string>;
   excerptsBySourceId: Map<string, Map<string, Excerpt>>;
   briefText: string | null;
+}
+
+interface MultiPassArgs extends Omit<ReviewWithSpecificReviewerArgs, 'reviewer'> {
+  reviewers: ReadonlyArray<
+    ReturnType<typeof pickReviewer> extends Promise<infer T> ? T : never
+  >;
+}
+
+// Run every available reviewer in sequence, merging findings into one
+// append-only ledger. Dedup by (claim_ids sorted, category, summary prefix).
+// The merged "method" tag concatenates each reviewer's reported method so
+// downstream consumers can see exactly which passes contributed.
+async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary> {
+  const knownClaimIds = new Set(args.claims.map((c) => c.claim_id));
+  const knownSourceIds = new Set(args.sources.map((s) => s.source_id));
+
+  const allDrafts: DraftFinding[] = [];
+  const methods: string[] = [];
+  const failedReviewers: string[] = [];
+  let llmFindingsRejected = 0;
+  let pickedReviewerName: ReviewerName = 'heuristic';
+
+  for (const reviewer of args.reviewers) {
+    if (!(await reviewer.available())) continue;
+    const result = await reviewer.review({
+      research: args.research,
+      section: args.section,
+      candidateClaims: args.candidateClaims,
+      sources: args.sources,
+      receipts: args.receipts,
+      contradictions: args.contradictions,
+      excerptsBySourceId: args.excerptsBySourceId,
+      gateResult: args.gateResult,
+      rawTextBySourceId: args.rawTextBySourceId,
+      briefText: args.briefText,
+    });
+    if (!result.ok) {
+      failedReviewers.push(`${reviewer.name}:${result.error}`);
+      continue;
+    }
+    methods.push(result.method);
+    if (result.rejected_ungrounded) llmFindingsRejected += result.rejected_ungrounded;
+    // The reviewer "name" recorded on the section is the one that contributed
+    // the most findings — used for the snapshot's reviewer field. Default to
+    // heuristic; let any LLM pass override.
+    if (reviewer.name === 'ollama-intern') pickedReviewerName = 'ollama-intern';
+    for (const d of result.drafts) {
+      if (
+        reviewer.name === 'ollama-intern' &&
+        !isValidReference(d, knownClaimIds, knownSourceIds)
+      ) {
+        llmFindingsRejected += 1;
+        continue;
+      }
+      allDrafts.push(d);
+    }
+  }
+
+  if (allDrafts.length === 0 && failedReviewers.length === args.reviewers.length) {
+    throw new Error(
+      `Multi-pass review: every reviewer failed. ${failedReviewers.join(' | ')}`,
+    );
+  }
+
+  // Dedup findings by (sorted claim_ids, category, summary prefix). Two
+  // reviewers can flag the same problem; the section ledger should record it
+  // once, not twice.
+  const seen = new Set<string>();
+  const merged: DraftFinding[] = [];
+  for (const d of allDrafts) {
+    const key = `${d.category}|${[...d.claim_ids].sort().join(',')}|${d.summary.toLowerCase().slice(0, 80)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(d);
+  }
+
+  return finalizeReview({
+    packPath: args.packPath,
+    sectionId: args.options.sectionId,
+    reviewer: pickedReviewerName,
+    reviewMethod: methods.length > 0 ? `multi_pass(${methods.join(' + ')})` : 'multi_pass(empty)',
+    candidateClaims: args.candidateClaims,
+    drafts: merged,
+    llmFindingsRejected,
+  });
 }
 
 async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs): Promise<RunReviewSummary> {

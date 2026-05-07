@@ -408,23 +408,41 @@ program
     'Claims per LLM review window (default 30). Smaller windows fit smaller models.',
     (v) => parseInt(v, 10),
   )
+  .option(
+    '--two-pass-llm',
+    'Two-pass LLM review: general + narrow_critic + heuristic. Findings merged.',
+    false,
+  )
   .action(async (section: string, opts) => {
     try {
       const reviewers = opts.heuristicOnly
         ? [new HeuristicReviewer()]
-        : opts.reviewWindow || opts.llmPaged
+        : opts.twoPassLlm
           ? [
               new OllamaInternReviewer({
+                mode: 'general',
+                claimsPerWindow: opts.reviewWindow ?? undefined,
+              }),
+              new OllamaInternReviewer({
+                mode: 'narrow_critic',
                 claimsPerWindow: opts.reviewWindow ?? undefined,
               }),
               new HeuristicReviewer(),
             ]
-          : undefined;
+          : opts.reviewWindow || opts.llmPaged
+            ? [
+                new OllamaInternReviewer({
+                  claimsPerWindow: opts.reviewWindow ?? undefined,
+                }),
+                new HeuristicReviewer(),
+              ]
+            : undefined;
       const result = await runReview({
         sectionId: section,
         packPath: opts.pack,
         reviewers,
         triagedOnly: opts.triagedOnly,
+        multiPass: opts.twoPassLlm,
       });
       process.stdout.write(`review complete\n`);
       process.stdout.write(`  section:                ${result.sectionId}\n`);

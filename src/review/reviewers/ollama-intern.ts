@@ -12,7 +12,7 @@ const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
 const DEFAULT_TIMEOUT_MS = 180_000;
 
-const SYSTEM_PROMPT = `You are an adversarial reviewer for a gated research pack.
+const GENERAL_SYSTEM_PROMPT = `You are an adversarial reviewer for a gated research pack.
 
 You are given a list of candidate claims with their asserts/scope/not/evidence_excerpt and source IDs. Find INTEGRITY problems. You are NOT here to synthesize; you are here to attack.
 
@@ -46,6 +46,41 @@ Hard rules:
 - Do not synthesize or rewrite claims.
 - Do not assess "correctness" of the world; assess integrity of the claim against its source.
 - If you find no problems, return {"findings": []}. A clean review is a valid result.`;
+
+// Narrow critic prompt — runs as a SECOND PASS targeting four categories
+// with high precision the general reviewer tends to under-flag (especially
+// unsupported_claim, where calibration showed 0/3 recall on hermes3:8b).
+// This reviewer is deliberately aggressive: err on flagging.
+const NARROW_CRITIC_SYSTEM_PROMPT = `You are a NARROW CRITIC for a research pack. Your only job is to attack four specific failure modes — be unforgiving.
+
+ONLY look for these four categories (ignore everything else):
+- unsupported_claim: the asserts is not directly supported by the evidence_excerpt. If the evidence does not contain the specific concepts/numbers/terms in the asserts, that is unsupported_claim — even if the claim sounds plausible.
+- scope_widening: the asserts uses universal quantifiers (all, every, always, never, must, dominant) but the scope is narrow. Single-source generalisations are scope_widening by default.
+- missing_not_constraint: the asserts is substantive AND has no \`not\` boundary, AND the topic plausibly admits universalisation. Flag warn-level.
+- temporal_mismatch: the asserts implies a current/recent state but the scope mentions an old date or stale context.
+
+For each finding return:
+{
+  "category": one of the four categories above EXACTLY,
+  "severity": "warn" | "block",
+  "summary": ONE sentence,
+  "evidence": short quote from asserts/scope/evidence_excerpt that signals the failure,
+  "required_action": ONE sentence,
+  "claim_ids": [exactly one claim_id from the input],
+  "source_ids": [source_ids of that claim],
+  "confidence": "low" | "medium" | "high"
+}
+
+Hard rules:
+- Be unforgiving. If the evidence_excerpt does not directly support the asserts word-for-word, flag it as unsupported_claim.
+- If the asserts has "all", "every", "always", "never", "dominant", or "must" and the scope is narrow, flag scope_widening.
+- DO NOT flag any other category. The general reviewer handles those.
+- Cite ONLY claim_ids that appear in the input. Findings with invented IDs are rejected.
+- Return {"findings": []} if and only if every claim is genuinely clean across these four categories.
+
+Return ONE JSON object: {"findings": [...]}.`;
+
+export type ReviewerMode = 'general' | 'narrow_critic';
 
 interface ChatResponse {
   message?: { content?: string };
@@ -88,6 +123,11 @@ export interface OllamaReviewerConfig {
   // effective context, and forces per-window claim_id validation so the
   // model can't cite IDs it didn't actually see.
   claimsPerWindow?: number;
+  // 'general' (default) uses the broad multi-category prompt. 'narrow_critic'
+  // uses the aggressive 4-category prompt designed for the second-pass
+  // hardening run that targets unsupported_claim / scope_widening /
+  // missing_not_constraint / temporal_mismatch.
+  mode?: ReviewerMode;
   fetchImpl?: typeof fetch;
 }
 
@@ -105,6 +145,7 @@ export function pageClaimsForReview<T>(items: T[], windowSize: number): T[][] {
 
 export class OllamaInternReviewer implements Reviewer {
   readonly name = 'ollama-intern' as const;
+  readonly mode: ReviewerMode;
   private readonly host: string;
   private readonly model: string;
   private readonly timeoutMs: number;
@@ -119,6 +160,7 @@ export class OllamaInternReviewer implements Reviewer {
     this.claimsPerWindow =
       config.claimsPerWindow ??
       (envWindow ? parseInt(envWindow, 10) || DEFAULT_CLAIMS_PER_WINDOW : DEFAULT_CLAIMS_PER_WINDOW);
+    this.mode = config.mode ?? 'general';
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -179,7 +221,13 @@ export class OllamaInternReviewer implements Reviewer {
           // model. Explicitly request 8K so paged windows fit cleanly.
           options: { num_ctx: 8192 },
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'system',
+              content:
+                this.mode === 'narrow_critic'
+                  ? NARROW_CRITIC_SYSTEM_PROMPT
+                  : GENERAL_SYSTEM_PROMPT,
+            },
             { role: 'user', content: userMsg },
           ],
         }),
@@ -285,10 +333,11 @@ export class OllamaInternReviewer implements Reviewer {
       drafts.push(d);
     }
 
+    const modeTag = this.mode === 'narrow_critic' ? '_narrow_critic' : '';
     const method =
       windows.length > 1
-        ? 'ollama_intern_adversarial_review_paged'
-        : 'ollama_intern_adversarial_review';
+        ? `ollama_intern_adversarial_review_paged${modeTag}`
+        : `ollama_intern_adversarial_review${modeTag}`;
     return { ok: true, drafts, method, rejected_ungrounded: rejectedCrossWindow };
   }
 }
