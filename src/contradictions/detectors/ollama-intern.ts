@@ -137,6 +137,10 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
           model: this.model,
           stream: false,
           format: 'json',
+          // Override Ollama's default 4096 context for the same reason as
+          // the claim extractor — pairwise prompts with full claim+scope+
+          // not+evidence_excerpt can exceed 4K on dense fields.
+          options: { num_ctx: 8192 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userMsg },

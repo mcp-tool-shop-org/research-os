@@ -172,6 +172,11 @@ EXCERPT LEDGER END`;
           model: this.model,
           stream: false,
           format: 'json',
+          // Override Ollama's default 4096 context — the rendered ledger
+          // window is sized in chars, but the prompt + system message can
+          // easily exceed 4K tokens for hermes3:8b without this option,
+          // and the silent server-side truncation eats excerpt IDs.
+          options: { num_ctx: 8192 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userMsg },

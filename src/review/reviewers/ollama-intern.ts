@@ -173,6 +173,11 @@ export class OllamaInternReviewer implements Reviewer {
           model: this.model,
           stream: false,
           format: 'json',
+          // Ollama defaults num_ctx to 4096 regardless of the model's
+          // native window; review prompts with 20+ claims exceed that and
+          // get silently truncated, which drops claim_ids and confuses the
+          // model. Explicitly request 8K so paged windows fit cleanly.
+          options: { num_ctx: 8192 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userMsg },
