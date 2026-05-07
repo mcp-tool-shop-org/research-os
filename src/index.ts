@@ -3,6 +3,7 @@ export * from './sections/index.js';
 export * from './sources/index.js';
 export * from './claims/index.js';
 export * from './contradictions/index.js';
+export * from './gates/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,

@@ -5,6 +5,7 @@ import { add as sectionAdd } from './sections/index.js';
 import { gather } from './sources/index.js';
 import { extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
+import { gate as runGate } from './gates/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -184,6 +185,42 @@ contradictCmd
       if (result.detectorError) {
         process.stdout.write(`\ndetector error: ${result.detectorError}\n`);
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('gate')
+  .description('Run the section gate engine and emit a structured verdict')
+  .argument('<section>', 'Section id, e.g. "01-landscape"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await runGate({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      process.stdout.write(`gate verdict: ${result.verdict.toUpperCase()}\n`);
+      process.stdout.write(`  section:             ${result.section_id}\n`);
+      process.stdout.write(`  synthesis eligible:  ${result.synthesis_eligible}\n`);
+      process.stdout.write(`  failures:            ${result.failures.length}\n`);
+      process.stdout.write(`  warnings:            ${result.warnings.length}\n`);
+      process.stdout.write(`  waivers applied:     ${result.waivers_applied.length}\n`);
+      process.stdout.write(`  blocking reasons:    ${result.blocking_reasons.length}\n`);
+      if (result.blocking_reasons.length > 0) {
+        process.stdout.write(`\nblocking:\n`);
+        for (const r of result.blocking_reasons) {
+          process.stdout.write(`  - ${r}\n`);
+        }
+      }
+      if (result.next_actions.length > 0) {
+        process.stdout.write(`\nnext actions:\n`);
+        for (const a of result.next_actions) {
+          process.stdout.write(`  - ${a}\n`);
+        }
+      }
+      if (!result.synthesis_eligible) process.exitCode = 2;
     } catch (err) {
       reportError(err);
     }
