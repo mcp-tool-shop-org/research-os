@@ -413,25 +413,33 @@ program
     'Two-pass LLM review: general + narrow_critic + heuristic. Findings merged.',
     false,
   )
+  .option(
+    '--model <name>',
+    'Override OLLAMA_INTERN_MODEL for this run (e.g. qwen3:14b)',
+  )
   .action(async (section: string, opts) => {
     try {
+      const modelOverride = opts.model as string | undefined;
       const reviewers = opts.heuristicOnly
         ? [new HeuristicReviewer()]
         : opts.twoPassLlm
           ? [
               new OllamaInternReviewer({
                 mode: 'general',
+                model: modelOverride,
                 claimsPerWindow: opts.reviewWindow ?? undefined,
               }),
               new OllamaInternReviewer({
                 mode: 'narrow_critic',
+                model: modelOverride,
                 claimsPerWindow: opts.reviewWindow ?? undefined,
               }),
               new HeuristicReviewer(),
             ]
-          : opts.reviewWindow || opts.llmPaged
+          : opts.reviewWindow || opts.llmPaged || modelOverride
             ? [
                 new OllamaInternReviewer({
+                  model: modelOverride,
                   claimsPerWindow: opts.reviewWindow ?? undefined,
                 }),
                 new HeuristicReviewer(),

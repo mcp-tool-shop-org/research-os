@@ -29,10 +29,12 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUT = resolve(__dirname, '..', 'tmp', 'reviewer-calibration');
-// args: [outDir?] [mode?]  mode in {single, two-pass}; default single
+// args: [outDir?] [--two-pass] [--model <name>]
 const args = process.argv.slice(2);
 const outDir = args[0] && !args[0].startsWith('--') ? args[0] : DEFAULT_OUT;
 const mode = args.includes('--two-pass') ? 'two-pass' : 'single';
+const modelIdx = args.indexOf('--model');
+const modelOverride = modelIdx >= 0 ? args[modelIdx + 1] : undefined;
 
 // Seeded claim authoring set. expected_categories[] is the ground truth.
 // "good" claims have expected_categories = [].
@@ -332,9 +334,17 @@ async function buildFixturePack() {
   return packPath;
 }
 
-async function runCalibration(packPath, mode) {
-  const general = new OllamaInternReviewer({ claimsPerWindow: 10, mode: 'general' });
-  const narrow = new OllamaInternReviewer({ claimsPerWindow: 10, mode: 'narrow_critic' });
+async function runCalibration(packPath, mode, modelOverride) {
+  const general = new OllamaInternReviewer({
+    claimsPerWindow: 10,
+    mode: 'general',
+    model: modelOverride,
+  });
+  const narrow = new OllamaInternReviewer({
+    claimsPerWindow: 10,
+    mode: 'narrow_critic',
+    model: modelOverride,
+  });
   if (!(await general.available())) {
     console.error('LLM reviewer unavailable. Aborting.');
     process.exit(2);
@@ -450,9 +460,10 @@ async function reportRecall(packPath, summary) {
 (async () => {
   console.log(`Building fixture at: ${outDir}`);
   console.log(`Mode: ${mode}`);
+  if (modelOverride) console.log(`Model override: ${modelOverride}`);
   const packPath = await buildFixturePack();
   console.log(`Fixture built. Running paged LLM review (${mode})...`);
-  const summary = await runCalibration(packPath, mode);
+  const summary = await runCalibration(packPath, mode, modelOverride);
   await reportRecall(packPath, summary);
 })().catch((err) => {
   console.error(err);
