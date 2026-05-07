@@ -5,6 +5,7 @@ import { add as sectionAdd } from './sections/index.js';
 import { reportSection } from './section_report/index.js';
 import { gather } from './sources/index.js';
 import { auditDensity, extract as claimExtract } from './claims/index.js';
+import { triage as runTriage } from './triage/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import { HeuristicReviewer, review as runReview } from './review/index.js';
@@ -237,6 +238,41 @@ claimCmd
   });
 
 claimCmd
+  .command('triage')
+  .description(
+    'Shape candidate claims before review: dedupe, cap per-source contribution, park weak-scope/low-value claims. Read-only on claims.jsonl.',
+  )
+  .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--per-source-cap <n>', 'Max claims per source forwarded to review', (v) => parseInt(v, 10), 10)
+  .option('--min-assert-chars <n>', 'Asserts shorter than this become parked_low_value', (v) => parseInt(v, 10), 30)
+  .action(async (section: string, opts) => {
+    try {
+      const result = await runTriage({
+        sectionId: section,
+        packPath: opts.pack,
+        perSourceCap: opts.perSourceCap,
+        minAssertChars: opts.minAssertChars,
+      });
+      process.stdout.write(`claim triage complete\n`);
+      process.stdout.write(`  section:               ${section}\n`);
+      process.stdout.write(`  candidate claims:      ${result.candidateClaims}\n`);
+      process.stdout.write(`  selected_for_review:   ${result.selectedCount}\n`);
+      process.stdout.write(`  parked (total):        ${result.parkedCount}\n`);
+      process.stdout.write(`  needs_repair (total):  ${result.needsRepairCount}\n`);
+      process.stdout.write(`\ndecisions:\n`);
+      for (const [d, n] of Object.entries(result.decisions)) {
+        process.stdout.write(`  ${d}: ${n}\n`);
+      }
+      process.stdout.write(`\n  triage jsonl:    ${result.triageJsonlPath}\n`);
+      process.stdout.write(`  triage markdown: ${result.triageMarkdownPath}\n`);
+      process.stdout.write(`  summary json:    ${result.summaryJsonPath}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+claimCmd
   .command('audit-density')
   .description(
     'Read-only diagnostic of a section claim ledger before review: claims/source, claims per 1k words, near-duplicate clusters, weak/generic scope',
@@ -279,11 +315,17 @@ contradictCmd
   .description('Detect contradiction candidates among a section\'s candidate claims')
   .argument('<section>', 'Section id, e.g. "01-landscape"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--triaged-only',
+    'Only consider claims that triage selected_for_review; reduces N² pair classification on dense sections',
+    false,
+  )
   .action(async (section: string, opts) => {
     try {
       const result = await contradictMap({
         sectionId: section,
         packPath: opts.pack,
+        triagedOnly: opts.triagedOnly,
       });
       process.stdout.write(`contradiction map complete\n`);
       process.stdout.write(`  section:                 ${result.sectionId}\n`);
@@ -347,12 +389,18 @@ program
     'Skip the LLM reviewer; run only the deterministic HeuristicReviewer',
     false,
   )
+  .option(
+    '--triaged-only',
+    'Only review claims that triage selected_for_review',
+    false,
+  )
   .action(async (section: string, opts) => {
     try {
       const result = await runReview({
         sectionId: section,
         packPath: opts.pack,
         reviewers: opts.heuristicOnly ? [new HeuristicReviewer()] : undefined,
+        triagedOnly: opts.triagedOnly,
       });
       process.stdout.write(`review complete\n`);
       process.stdout.write(`  section:                ${result.sectionId}\n`);

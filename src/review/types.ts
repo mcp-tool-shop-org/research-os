@@ -70,6 +70,10 @@ export interface RunReviewOptions {
   sectionId: string;
   packPath?: string;
   reviewers?: Reviewer[];
+  // When true, only claims with a triage decision of selected_for_review
+  // are reviewed. Parked claims remain on the canonical ledger; review
+  // simply skips them.
+  triagedOnly?: boolean;
 }
 
 export interface RunReviewSummary {

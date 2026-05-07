@@ -197,7 +197,12 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
   if (!section) throw new SectionNotFoundError(options.sectionId);
 
   const claims = await readJsonl<Claim>(packPath, `sections/${options.sectionId}/claims.jsonl`, (r) => ClaimSchema.parse(r));
-  const candidateClaims = claims.filter((c) => c.review_state === 'candidate');
+  let candidateClaims = claims.filter((c) => c.review_state === 'candidate');
+  if (options.triagedOnly) {
+    const { readTriagedClaimIds } = await import('../triage/run.js');
+    const allowed = await readTriagedClaimIds(packPath, options.sectionId);
+    candidateClaims = candidateClaims.filter((c) => allowed.has(c.claim_id));
+  }
   const sources = await readSourceCards(packPath);
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));

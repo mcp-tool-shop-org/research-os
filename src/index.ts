@@ -12,6 +12,7 @@ export * from './audit/index.js';
 export * from './freeze/index.js';
 export * from './invalidate/index.js';
 export * from './section_report/index.js';
+export * from './triage/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,

@@ -54,6 +54,10 @@ export interface MapOptions {
   sectionId: string;
   packPath?: string;
   detectors?: ContradictionDetector[];
+  // When true, only claims with a triage decision of selected_for_review
+  // are passed to the detector. Reduces N² pair classification on dense
+  // sections from intractable to manageable.
+  triagedOnly?: boolean;
 }
 
 export interface MapSummary {

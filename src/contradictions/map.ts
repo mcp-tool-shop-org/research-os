@@ -102,7 +102,12 @@ export async function map(options: MapOptions): Promise<MapSummary> {
   const sectionDir = join(packPath, 'sections', options.sectionId);
   if (!existsSync(sectionDir)) throw new SectionNotFoundError(options.sectionId);
 
-  const candidateClaims = await readCandidateClaims(packPath, options.sectionId);
+  let candidateClaims = await readCandidateClaims(packPath, options.sectionId);
+  if (options.triagedOnly) {
+    const { readTriagedClaimIds } = await import('../triage/run.js');
+    const allowed = await readTriagedClaimIds(packPath, options.sectionId);
+    candidateClaims = candidateClaims.filter((c) => allowed.has(c.claim_id));
+  }
   const adapters = options.detectors ?? defaultContradictionDetectors();
   const detector = await pickContradictionDetector(adapters);
 
