@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { OllamaInternClaimExtractor } from '../src/claims/extractors/ollama-intern.js';
+import type { Excerpt } from '../src/sources/excerpts/schema.js';
 import type { SourceCard } from '../src/sources/schema.js';
 
 const TEST_HOST = 'http://test-ollama:11434';
@@ -25,6 +26,25 @@ const baseCard: SourceCard = {
   extracted_by: 'heuristic',
   extracted_at: '2026-05-06T22:00:00.000Z',
 };
+
+function ex(idx: number, text: string): Excerpt {
+  return {
+    excerpt_id: `ex_abcdef012345_${String(idx).padStart(3, '0')}`,
+    source_id: 'src_abcdef012345',
+    source_hash: null,
+    text,
+    location_hint: `paragraph ${idx}`,
+    char_start: 0,
+    char_end: text.length,
+    origin: 'raw_text',
+    created_at: '2026-05-06T22:00:00.000Z',
+  };
+}
+
+const sampleExcerpts: Excerpt[] = [
+  ex(1, 'For role-os rollout specifically: any code fix discovered post-publish ships in a patch.'),
+  ex(2, 'Every commit that adds or modifies a function ships with at least one test.'),
+];
 
 function makeFetch(map: Map<string, () => Response>): typeof fetch {
   return (async (input: RequestInfo | URL) => {
@@ -99,8 +119,8 @@ describe('OllamaInternClaimExtractor.available', () => {
   });
 });
 
-describe('OllamaInternClaimExtractor.extract', () => {
-  it('parses a well-formed claims array with scope/not preserved', async () => {
+describe('OllamaInternClaimExtractor.extract (span-first)', () => {
+  it('parses a well-formed claims array carrying excerpt IDs and scope/not', async () => {
     const ollamaPayload = {
       message: {
         content: JSON.stringify({
@@ -109,15 +129,15 @@ describe('OllamaInternClaimExtractor.extract', () => {
               asserts: 'patch publish before next repo',
               scope: 'role-os rollout lockdown fixes',
               not: 'universal publish policy',
-              evidence_excerpt: 'For role-os rollout specifically: any code fix...',
-              evidence_location: 'paragraph 4',
+              evidence_excerpt_ids: ['ex_abcdef012345_001'],
+              evidence_location: 'paragraph 1',
               confidence: 'high',
             },
             {
               asserts: 'tests ship with code',
               scope: 'all repos',
               not: 'documentation-only changes',
-              evidence_excerpt: 'Every commit that adds or modifies a function...',
+              evidence_excerpt_ids: ['ex_abcdef012345_002'],
               evidence_location: null,
               confidence: 'medium',
             },
@@ -139,7 +159,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
     const result = await ex.extract({
       sourceCard: baseCard,
       sourceHash: 'a'.repeat(64),
-      rawText: 'For role-os rollout specifically: any code fix discovered...',
+      excerpts: sampleExcerpts,
     });
     if (!result.ok) throw new Error(`failed: ${result.error}`);
     expect(result.method).toBe('ollama_intern_propositional');
@@ -147,27 +167,28 @@ describe('OllamaInternClaimExtractor.extract', () => {
     expect(result.claims[0]?.scope).toBe('role-os rollout lockdown fixes');
     expect(result.claims[0]?.not).toBe('universal publish policy');
     expect(result.claims[0]?.confidence).toBe('high');
+    expect(result.claims[0]?.evidence_excerpt_ids).toEqual(['ex_abcdef012345_001']);
   });
 
-  it('returns ok:false when raw text is missing', async () => {
+  it('returns ok:false when ledger is empty (no spans to choose from)', async () => {
     const map = new Map<string, () => Response>();
     const ex = makeExtractor(map);
     const result = await ex.extract({
       sourceCard: baseCard,
       sourceHash: null,
-      rawText: null,
+      excerpts: [],
     });
     expect(result.ok).toBe(false);
   });
 
-  it('skips claims with missing asserts or evidence_excerpt', async () => {
+  it('skips claims with missing asserts or empty evidence_excerpt_ids', async () => {
     const payload = {
       message: {
         content: JSON.stringify({
           claims: [
-            { asserts: 'kept', evidence_excerpt: 'real text' },
-            { asserts: '', evidence_excerpt: 'skipped' },
-            { asserts: 'skipped', evidence_excerpt: '' },
+            { asserts: 'kept', evidence_excerpt_ids: ['ex_abcdef012345_001'] },
+            { asserts: '', evidence_excerpt_ids: ['ex_abcdef012345_001'] },
+            { asserts: 'no ids', evidence_excerpt_ids: [] },
           ],
         }),
       },
@@ -185,7 +206,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
     const result = await makeExtractor(map).extract({
       sourceCard: baseCard,
       sourceHash: null,
-      rawText: 'present',
+      excerpts: sampleExcerpts,
     });
     if (!result.ok) throw new Error('should succeed');
     expect(result.claims).toHaveLength(1);
@@ -206,7 +227,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
     const result = await makeExtractor(map).extract({
       sourceCard: baseCard,
       sourceHash: null,
-      rawText: 'present',
+      excerpts: sampleExcerpts,
     });
     expect(result.ok).toBe(false);
   });
@@ -225,7 +246,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
     const result = await makeExtractor(map).extract({
       sourceCard: baseCard,
       sourceHash: null,
-      rawText: 'present',
+      excerpts: sampleExcerpts,
     });
     expect(result.ok).toBe(false);
   });
@@ -239,7 +260,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
               asserts: 'something',
               scope: 'null',
               not: 'null',
-              evidence_excerpt: 'present',
+              evidence_excerpt_ids: ['ex_abcdef012345_001'],
             },
           ],
         }),
@@ -258,7 +279,7 @@ describe('OllamaInternClaimExtractor.extract', () => {
     const result = await makeExtractor(map).extract({
       sourceCard: baseCard,
       sourceHash: null,
-      rawText: 'present',
+      excerpts: sampleExcerpts,
     });
     if (!result.ok) throw new Error('should succeed');
     expect(result.claims[0]?.scope).toBeNull();

@@ -1,3 +1,4 @@
+import { renderLedgerForPrompt } from '../../sources/excerpts/ledger.js';
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
 import type {
   ClaimExtractionInput,
@@ -10,43 +11,39 @@ import type {
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
 const DEFAULT_TIMEOUT_MS = 240_000;
-const MAX_INPUT_CHARS = 12_000;
+const MAX_LEDGER_CHARS = 12_000;
 
-function stripHtmlForLlm(text: string): string {
-  if (!/<html[\s>]|<body[\s>]|<\/p>|<\/div>/i.test(text)) return text;
-  return text
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
+// Span-first extraction prompt. The model is shown a deterministic excerpt
+// ledger and asked to choose excerpt IDs — it must NOT author or paraphrase
+// evidence text. research-os copies the literal text from the ledger into the
+// claim's evidence_excerpt field.
 const SYSTEM_PROMPT = `You are extracting atomic propositional claims from a source for a gated research pack. Return ONE JSON object: {"claims": [ ... ]}.
 
 Each claim is an atomic, source-grounded proposition that:
 - Asserts ONE thing
 - Could later be cited, challenged, scoped, contradicted, or promoted into synthesis
-- Is grounded in a LITERAL excerpt from the source's raw text
+- Is grounded in one or more LITERAL excerpt spans you select from the supplied ledger
 
 A claim is NOT a sentence, a paragraph summary, or a generic topic restatement.
+
+You will be given a ledger of source spans, each with a stable ID like "ex_abcdef012345_001". Pick the IDs that ground each claim. DO NOT author or paraphrase evidence text. The system fills the literal text from the ledger after you respond.
 
 Return 3 to 7 claims per source. For each claim:
 {
   "asserts": "ONE sentence stating the proposition in your own words",
   "scope": "ONE sentence naming the contextual scope of the assertion (situation, system, domain). null ONLY if the source's wording is genuinely universal.",
   "not": "ONE sentence stating what this claim is explicitly NOT about, to prevent overgeneralization. null if no such limit can be inferred.",
-  "evidence_excerpt": "LITERAL text from the raw source that grounds the claim. Quote — do not paraphrase. Trim to <= 300 chars.",
+  "evidence_excerpt_ids": ["ex_..._001", "ex_..._002"],   // 1 or more IDs FROM THE LEDGER. Required.
   "evidence_location": "short locator like 'paragraph 3' / 'heading: Foo' / null",
   "confidence": "low" | "medium" | "high"
 }
 
 Hard rules:
-- Do not fabricate.
-- Do not widen scope beyond what the source says.
+- Do not fabricate. Every excerpt ID must come from the supplied ledger verbatim.
+- Do not author or paraphrase evidence text — only cite excerpt IDs.
+- Do not widen scope beyond what the chosen spans actually say.
 - Do not synthesize across multiple claims into one — emit them separately.
-- If the source genuinely makes fewer than 3 distinct propositional claims, return whatever it actually makes.
-- evidence_excerpt must appear verbatim in the raw text.`;
+- If the source genuinely makes fewer than 3 distinct propositional claims, return whatever it actually makes.`;
 
 export interface OllamaClaimConfig {
   host?: string;
@@ -71,6 +68,15 @@ function asStringOrNull(v: unknown): string | null {
   if (trimmed.length === 0) return null;
   if (trimmed.toLowerCase() === 'null') return null;
   return trimmed;
+}
+
+function asIdArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    if (typeof x === 'string' && x.trim().length > 0) out.push(x.trim());
+  }
+  return out;
 }
 
 export class OllamaInternClaimExtractor implements ClaimExtractorAdapter {
@@ -104,13 +110,25 @@ export class OllamaInternClaimExtractor implements ClaimExtractorAdapter {
   }
 
   async extract(input: ClaimExtractionInput): Promise<ClaimExtractionResult> {
-    if (!input.rawText) {
-      return { ok: false, error: 'No raw text available for claim extraction' };
+    if (input.excerpts.length === 0) {
+      return { ok: false, error: 'No excerpts available; ledger is empty for this source' };
     }
 
     const card = input.sourceCard;
-    const cleaned = stripHtmlForLlm(input.rawText);
-    const truncated = cleaned.slice(0, MAX_INPUT_CHARS);
+    let ledgerText = renderLedgerForPrompt(input.excerpts);
+    if (ledgerText.length > MAX_LEDGER_CHARS) {
+      // Truncate by full lines to keep IDs intact.
+      const lines = ledgerText.split('\n');
+      let acc = '';
+      const kept: string[] = [];
+      for (const line of lines) {
+        if (acc.length + line.length + 1 > MAX_LEDGER_CHARS) break;
+        kept.push(line);
+        acc += line.length + 1;
+      }
+      ledgerText = kept.join('\n');
+    }
+
     const userMsg = `URL: ${card.url}
 Source title: ${card.title}
 Publisher: ${card.publisher ?? 'unknown'}
@@ -118,9 +136,9 @@ Source-card asserts: ${card.asserts}
 Source-card scope: ${card.scope ?? 'null'}
 Source-card not: ${card.not ?? 'null'}
 
-RAW TEXT BEGIN
-${truncated}
-RAW TEXT END`;
+EXCERPT LEDGER BEGIN
+${ledgerText}
+EXCERPT LEDGER END`;
 
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), this.timeoutMs);
@@ -165,20 +183,20 @@ RAW TEXT END`;
       if (!raw || typeof raw !== 'object') continue;
       const r = raw as Record<string, unknown>;
       const asserts = asStringOrNull(r.asserts);
-      const evidence = asStringOrNull(r.evidence_excerpt);
-      if (!asserts || !evidence) continue;
+      const ids = asIdArray(r.evidence_excerpt_ids);
+      if (!asserts || ids.length === 0) continue;
       drafts.push({
         asserts,
         scope: asStringOrNull(r.scope),
         not: asStringOrNull(r.not),
-        evidence_excerpt: evidence.slice(0, 300),
+        evidence_excerpt_ids: ids,
         evidence_location: asStringOrNull(r.evidence_location),
         confidence: asConfidence(r.confidence),
       });
     }
 
     if (drafts.length === 0) {
-      return { ok: false, error: 'Ollama returned no usable claims' };
+      return { ok: false, error: 'Ollama returned no usable claims (all missing evidence_excerpt_ids)' };
     }
 
     return { ok: true, claims: drafts, method: 'ollama_intern_propositional' };

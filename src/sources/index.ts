@@ -33,3 +33,19 @@ export type {
   SourceType,
   Relevance,
 } from './types.js';
+export {
+  EXCERPT_ID_PATTERN,
+  ExcerptSchema,
+  ExcerptOriginSchema,
+  chunkRawText,
+  chunkKeyPoints,
+  loadOrBuildLedger,
+  ledgerPathFor,
+  renderLedgerForPrompt,
+  buildExcerptIndex,
+  type Excerpt,
+  type ExcerptOrigin,
+  type ExcerptDraft,
+  type LoadOrBuildArgs,
+  type LoadOrBuildResult,
+} from './excerpts/index.js';

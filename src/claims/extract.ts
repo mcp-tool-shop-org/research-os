@@ -8,6 +8,12 @@ import {
   SectionNotFoundError,
 } from '../errors.js';
 import {
+  buildExcerptIndex,
+  EXCERPT_ID_PATTERN,
+  loadOrBuildLedger,
+  type Excerpt,
+} from '../sources/excerpts/index.js';
+import {
   FetchReceiptSchema,
   SourceCardSchema,
   type FetchReceipt,
@@ -23,11 +29,16 @@ import type {
 } from './types.js';
 
 const MIN_EXCERPT_LEN_FOR_GROUNDING = 8;
+const EVIDENCE_EXCERPT_JOIN = ' … ';
+const EVIDENCE_EXCERPT_MAX_CHARS = 1200;
 
 function normalize(text: string): string {
   return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase().trim();
 }
 
+// Legacy text-substring grounding check, retained for callers that still need it
+// (e.g. reviewer post-checks). Span-first extraction does NOT use this — claims
+// are grounded by excerpt-id resolution against the ledger instead.
 export function evidenceGrounded(excerpt: string, rawText: string | null): boolean {
   if (!rawText) return false;
   const e = normalize(excerpt);
@@ -113,8 +124,50 @@ async function readExistingClaimIds(
   return set;
 }
 
+interface ResolveResult {
+  ok: boolean;
+  evidenceText: string;
+  resolvedIds: string[];
+  failureMode: 'excerpt_id_missing' | 'excerpt_id_malformed' | null;
+}
+
+function resolveExcerpts(
+  rawIds: string[],
+  index: Map<string, Excerpt>,
+): ResolveResult {
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
+    return { ok: false, evidenceText: '', resolvedIds: [], failureMode: 'excerpt_id_missing' };
+  }
+  const resolvedIds: string[] = [];
+  const texts: string[] = [];
+  for (const idRaw of rawIds) {
+    const id = String(idRaw).trim();
+    if (!EXCERPT_ID_PATTERN.test(id)) {
+      return { ok: false, evidenceText: '', resolvedIds: [], failureMode: 'excerpt_id_malformed' };
+    }
+    const ex = index.get(id);
+    if (!ex) {
+      return { ok: false, evidenceText: '', resolvedIds: [], failureMode: 'excerpt_id_missing' };
+    }
+    if (!resolvedIds.includes(id)) {
+      resolvedIds.push(id);
+      texts.push(ex.text);
+    }
+  }
+  let combined = texts.join(EVIDENCE_EXCERPT_JOIN);
+  if (combined.length > EVIDENCE_EXCERPT_MAX_CHARS) {
+    combined = combined.slice(0, EVIDENCE_EXCERPT_MAX_CHARS - 2).trimEnd() + ' …';
+  }
+  if (combined.length === 0) {
+    return { ok: false, evidenceText: '', resolvedIds: [], failureMode: 'excerpt_id_missing' };
+  }
+  return { ok: true, evidenceText: combined, resolvedIds, failureMode: null };
+}
+
 function buildClaim(args: {
   draft: DraftClaim;
+  evidenceText: string;
+  resolvedExcerptIds: string[];
   index: number;
   sectionId: string;
   sourceId: string;
@@ -122,7 +175,17 @@ function buildClaim(args: {
   extractor: ClaimExtractor;
   extractionMethod: string;
 }): Claim {
-  const { draft, index, sectionId, sourceId, sourceHash, extractor, extractionMethod } = args;
+  const {
+    draft,
+    evidenceText,
+    resolvedExcerptIds,
+    index,
+    sectionId,
+    sourceId,
+    sourceHash,
+    extractor,
+    extractionMethod,
+  } = args;
   const idPart = EXTRACTOR_ID_PART[extractor];
   const claimId = `clm_${sourceId.replace(/^src_/, '')}_${idPart}_${index + 1}`;
   return ClaimSchema.parse({
@@ -133,7 +196,8 @@ function buildClaim(args: {
     asserts: draft.asserts,
     scope: draft.scope,
     not: draft.not,
-    evidence_excerpt: draft.evidence_excerpt,
+    evidence_excerpt_ids: resolvedExcerptIds,
+    evidence_excerpt: evidenceText,
     evidence_location: draft.evidence_location,
     confidence: draft.confidence,
     extractor,
@@ -165,9 +229,14 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     sourcesProcessed: 0,
     sourcesSkipped: 0,
     sourcesFailed: 0,
+    excerptLedgersBuilt: 0,
     claimsAdded: 0,
     claimsDeduped: 0,
     claimsRejectedUngrounded: 0,
+    claimsRejectedExcerptIdMissing: 0,
+    claimsRejectedExcerptIdMalformed: 0,
+    claimsRejectedScopeMissing: 0,
+    claimsRejectedExtractorParaphrase: 0,
     claimIds: [],
     failures: [],
   };
@@ -187,10 +256,24 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       }
     }
 
-    const result = await extractor.extract({
+    const ledger = await loadOrBuildLedger({
+      packPath,
       sourceCard: card,
       sourceHash: receipt?.sha256 ?? null,
       rawText,
+    });
+    if (ledger.built) summary.excerptLedgersBuilt += 1;
+
+    if (ledger.excerpts.length === 0) {
+      // No spans available — extractor cannot produce span-first claims.
+      summary.sourcesSkipped += 1;
+      continue;
+    }
+
+    const result = await extractor.extract({
+      sourceCard: card,
+      sourceHash: receipt?.sha256 ?? null,
+      excerpts: ledger.excerpts,
     });
 
     if (!result.ok) {
@@ -202,15 +285,25 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     summary.sourcesProcessed += 1;
     summary.extractionMethod = result.method;
 
+    const excerptIndex = buildExcerptIndex(ledger.excerpts);
+
     let writtenIndex = 0;
     for (let i = 0; i < result.claims.length; i += 1) {
       const draft = result.claims[i]!;
-      if (!evidenceGrounded(draft.evidence_excerpt, rawText)) {
+      const resolved = resolveExcerpts(draft.evidence_excerpt_ids, excerptIndex);
+      if (!resolved.ok) {
         summary.claimsRejectedUngrounded += 1;
+        if (resolved.failureMode === 'excerpt_id_missing') {
+          summary.claimsRejectedExcerptIdMissing += 1;
+        } else if (resolved.failureMode === 'excerpt_id_malformed') {
+          summary.claimsRejectedExcerptIdMalformed += 1;
+        }
         continue;
       }
       const claim = buildClaim({
         draft,
+        evidenceText: resolved.evidenceText,
+        resolvedExcerptIds: resolved.resolvedIds,
         index: writtenIndex,
         sectionId: options.sectionId,
         sourceId,

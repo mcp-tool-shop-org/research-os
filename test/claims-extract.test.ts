@@ -106,12 +106,12 @@ afterEach(async () => {
   await rm(workDir, { recursive: true, force: true });
 });
 
-describe('claim extract (heuristic-only path)', () => {
-  it('emits one candidate claim per source-card key_point with shallow tags', async () => {
+describe('claim extract (heuristic-only path, span-first)', () => {
+  it('emits one candidate claim per key_point, each citing a real ledger excerpt id', async () => {
     await fixturePackWithSource([
-      'First key point',
-      'Second key point',
-      'Third key point',
+      'First substantive key point.',
+      'Second substantive key point.',
+      'Third substantive key point.',
     ]);
     const summary = await extract({
       sectionId: '01-landscape',
@@ -122,6 +122,7 @@ describe('claim extract (heuristic-only path)', () => {
     expect(summary.extractionMethod).toBe('heuristic_key_point');
     expect(summary.sourcesProcessed).toBe(1);
     expect(summary.claimsAdded).toBe(3);
+    expect(summary.excerptLedgersBuilt).toBe(1);
 
     const claimsText = await readFile(
       join(packPath, 'sections', '01-landscape', 'claims.jsonl'),
@@ -139,11 +140,41 @@ describe('claim extract (heuristic-only path)', () => {
       expect(claim.source_ids).toEqual([sourceId]);
       expect(claim.source_hashes).toEqual([sha256]);
       expect(claim.confidence).toBe('low');
+      expect(claim.evidence_excerpt_ids.length).toBeGreaterThanOrEqual(1);
+      for (const id of claim.evidence_excerpt_ids) {
+        expect(id).toMatch(/^ex_[a-f0-9]{12}_\d{3}$/);
+      }
+      // evidence_excerpt is filled by research-os from the ledger, not the extractor.
+      expect(claim.evidence_excerpt.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('writes the excerpt ledger to evidence/excerpts/<source_id>.jsonl', async () => {
+    await fixturePackWithSource(['One substantive point that is long enough.']);
+    await extract({
+      sectionId: '01-landscape',
+      packPath,
+      extractors: [new HeuristicClaimExtractor()],
+    });
+    const ledgerText = await readFile(
+      join(packPath, 'evidence', 'excerpts', `${sourceId}.jsonl`),
+      'utf8',
+    );
+    const lines = ledgerText.trim().split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      const e = JSON.parse(line);
+      expect(e.excerpt_id).toMatch(/^ex_abcdef012345_\d{3}$/);
+      expect(typeof e.text).toBe('string');
+      expect(['raw_text', 'key_point']).toContain(e.origin);
     }
   });
 
   it('is idempotent — re-running with same extractor dedupes by claim_id', async () => {
-    await fixturePackWithSource(['One key point that is long enough', 'Two distinct second point that is long enough']);
+    await fixturePackWithSource([
+      'One key point that is long enough.',
+      'Two distinct second point that is long enough.',
+    ]);
     const first = await extract({
       sectionId: '01-landscape',
       packPath,
@@ -158,6 +189,8 @@ describe('claim extract (heuristic-only path)', () => {
     });
     expect(second.claimsAdded).toBe(0);
     expect(second.claimsDeduped).toBe(2);
+    // Second run loads the existing ledger rather than rebuilding it.
+    expect(second.excerptLedgersBuilt).toBe(0);
   });
 
   it('rejects when section has no gathered sources', async () => {
@@ -207,7 +240,10 @@ describe('claim extract (heuristic-only path)', () => {
   });
 
   it('does not promote review_state — every emitted claim is candidate', async () => {
-    await fixturePackWithSource(['key point one is long enough', 'key point two is also long enough']);
+    await fixturePackWithSource([
+      'key point one is long enough',
+      'key point two is also long enough',
+    ]);
     await extract({
       sectionId: '01-landscape',
       packPath,
@@ -222,9 +258,9 @@ describe('claim extract (heuristic-only path)', () => {
     }
   });
 
-  it('rejects claims whose evidence_excerpt is not in the raw text (anti-hallucination)', async () => {
+  it('rejects claims whose excerpt IDs do not resolve in the ledger (ungrounded_excerpt)', async () => {
     await fixturePackWithSource(['real key point that exists in the source']);
-    const hallucinator = {
+    const liar = {
       name: 'ollama-intern' as const,
       async available() {
         return true;
@@ -235,10 +271,12 @@ describe('claim extract (heuristic-only path)', () => {
           method: 'ollama_intern_propositional',
           claims: [
             {
+              // References an ID that is NOT in the ledger (this is what mistral-nemo's
+              // paraphrase-as-quote behaviour collapses to under span-first).
               asserts: 'made-up assertion',
               scope: 'made up scope',
               not: null,
-              evidence_excerpt: 'This text is fabricated and never appeared in the source whatsoever',
+              evidence_excerpt_ids: ['ex_abcdef012345_999'],
               evidence_location: null,
               confidence: 'high' as const,
             },
@@ -246,7 +284,7 @@ describe('claim extract (heuristic-only path)', () => {
               asserts: 'a grounded claim',
               scope: null,
               not: null,
-              evidence_excerpt: 'real key point that exists',
+              evidence_excerpt_ids: ['ex_abcdef012345_001'],
               evidence_location: null,
               confidence: 'medium' as const,
             },
@@ -257,10 +295,45 @@ describe('claim extract (heuristic-only path)', () => {
     const summary = await extract({
       sectionId: '01-landscape',
       packPath,
-      extractors: [hallucinator],
+      extractors: [liar],
     });
     expect(summary.claimsAdded).toBe(1);
     expect(summary.claimsRejectedUngrounded).toBe(1);
+    expect(summary.claimsRejectedExcerptIdMissing).toBe(1);
+  });
+
+  it('rejects claims whose excerpt IDs are malformed (excerpt_id_malformed)', async () => {
+    await fixturePackWithSource(['a real key point present in the source']);
+    const malformer = {
+      name: 'ollama-intern' as const,
+      async available() {
+        return true;
+      },
+      async extract() {
+        return {
+          ok: true as const,
+          method: 'ollama_intern_propositional',
+          claims: [
+            {
+              asserts: 'shape-violating claim',
+              scope: null,
+              not: null,
+              evidence_excerpt_ids: ['not_an_excerpt_id'],
+              evidence_location: null,
+              confidence: 'low' as const,
+            },
+          ],
+        };
+      },
+    };
+    const summary = await extract({
+      sectionId: '01-landscape',
+      packPath,
+      extractors: [malformer],
+    });
+    expect(summary.claimsAdded).toBe(0);
+    expect(summary.claimsRejectedUngrounded).toBe(1);
+    expect(summary.claimsRejectedExcerptIdMalformed).toBe(1);
   });
 
   it('falls back from ollama-intern to heuristic when ollama is unavailable', async () => {
