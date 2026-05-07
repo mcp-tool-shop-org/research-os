@@ -16,6 +16,7 @@ import {
 import { handoff as coworkHandoff } from './cowork/index.js';
 import { workspace as synthWorkspace } from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
+import { freeze as runFreeze } from './freeze/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -458,6 +459,49 @@ program
         for (const w of result.warnings) process.stdout.write(`  - ${w}\n`);
       }
       if (!result.synthesisAllowed) process.exitCode = 2;
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('freeze')
+  .description('Final integrity lock; refuses unless every condition is met')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await runFreeze({ packPath: opts.pack });
+      if (result.verdict === 'refused') {
+        process.stdout.write(`freeze: REFUSED\n`);
+        process.stdout.write(`  reasons:           ${result.reasonsCount}\n`);
+        if (result.refusalPayload) {
+          for (const r of result.refusalPayload.blocking_reasons) {
+            process.stdout.write(`  - ${r}\n`);
+          }
+          if (result.refusalPayload.next_actions.length > 0) {
+            process.stdout.write(`\nnext actions:\n`);
+            for (const a of result.refusalPayload.next_actions) process.stdout.write(`  - ${a}\n`);
+          }
+        }
+        process.stdout.write(`  refusal json:      ${result.jsonPath}\n`);
+        process.stdout.write(`  refusal markdown:  ${result.markdownPath}\n`);
+        process.exitCode = 2;
+        return;
+      }
+      process.stdout.write(`freeze: FROZEN\n`);
+      if (result.receiptPayload) {
+        process.stdout.write(`  pack id:                       ${result.receiptPayload.pack_id}\n`);
+        process.stdout.write(`  frozen at:                     ${result.receiptPayload.frozen_at}\n`);
+        process.stdout.write(`  accepted claims:               ${result.receiptPayload.accepted_claim_ids.length}\n`);
+        process.stdout.write(`  cited claims:                  ${result.citedClaimCount}\n`);
+        process.stdout.write(`  uncited accepted (info):       ${result.uncitedAcceptedClaimCount}\n`);
+        process.stdout.write(`  unresolved contradictions:     ${result.receiptPayload.unresolved_contradictions.length}\n`);
+        process.stdout.write(`  waivers disclosed:             ${result.receiptPayload.waivers_disclosed.length}\n`);
+        process.stdout.write(`  canonical artifacts hashed:    ${result.receiptPayload.canonical_artifact_hashes.length}\n`);
+        process.stdout.write(`  synthesis files hashed:        ${result.receiptPayload.synthesis_hashes.length}\n`);
+      }
+      process.stdout.write(`  receipt json:                  ${result.jsonPath}\n`);
+      process.stdout.write(`  receipt markdown:              ${result.markdownPath}\n`);
     } catch (err) {
       reportError(err);
     }

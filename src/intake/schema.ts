@@ -80,6 +80,7 @@ export const ResearchYamlSchema = z.object({
   primary_source_waiver: PrimarySourceWaiverSchema.default({}),
   sections: z.array(SectionSchema).default([]),
   gates: GateConfigSchema.default({}),
+  frozen_at: z.string().nullable().default(null),
 });
 
 export type Section = z.infer<typeof SectionSchema>;

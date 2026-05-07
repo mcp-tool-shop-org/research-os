@@ -64,6 +64,7 @@ export function buildResearchYaml(options: InitOptions): ResearchYaml {
     excluded_sources: [],
     primary_source_waiver: { status: 'none', compensating_controls: [] },
     sections: [],
+    frozen_at: null,
     gates: {
       source_floor: {
         min_sources: 8,
