@@ -11,6 +11,10 @@ import type {
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
 const DEFAULT_TIMEOUT_MS = 180_000;
+// Narrow-critic mode runs an aggressive prompt that often triggers extended
+// reasoning (qwen3 thinking, hermes longer chain-of-thought). 10-minute
+// budget per page so the critic can finish on small/mid GPUs.
+const NARROW_CRITIC_TIMEOUT_MS = 600_000;
 
 const GENERAL_SYSTEM_PROMPT = `You are an adversarial reviewer for a gated research pack.
 
@@ -155,12 +159,14 @@ export class OllamaInternReviewer implements Reviewer {
   constructor(config: OllamaReviewerConfig = {}) {
     this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
     this.model = config.model ?? process.env.OLLAMA_INTERN_MODEL ?? DEFAULT_MODEL;
-    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.mode = config.mode ?? 'general';
+    this.timeoutMs =
+      config.timeoutMs ??
+      (this.mode === 'narrow_critic' ? NARROW_CRITIC_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
     const envWindow = process.env.OLLAMA_INTERN_REVIEW_WINDOW;
     this.claimsPerWindow =
       config.claimsPerWindow ??
       (envWindow ? parseInt(envWindow, 10) || DEFAULT_CLAIMS_PER_WINDOW : DEFAULT_CLAIMS_PER_WINDOW);
-    this.mode = config.mode ?? 'general';
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
   }
 
