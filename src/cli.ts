@@ -7,7 +7,7 @@ import { gather } from './sources/index.js';
 import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
-import { review as runReview } from './review/index.js';
+import { HeuristicReviewer, review as runReview } from './review/index.js';
 import {
   build as indexBuild,
   query as indexQuery,
@@ -342,11 +342,17 @@ program
   .description('Run the adversarial reviewer pass; emits findings + claim review decisions')
   .argument('<section>', 'Section id, e.g. "01-landscape"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--heuristic-only',
+    'Skip the LLM reviewer; run only the deterministic HeuristicReviewer',
+    false,
+  )
   .action(async (section: string, opts) => {
     try {
       const result = await runReview({
         sectionId: section,
         packPath: opts.pack,
+        reviewers: opts.heuristicOnly ? [new HeuristicReviewer()] : undefined,
       });
       process.stdout.write(`review complete\n`);
       process.stdout.write(`  section:                ${result.sectionId}\n`);
