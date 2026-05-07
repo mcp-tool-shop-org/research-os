@@ -10,6 +10,7 @@ export * from './cowork/index.js';
 export * from './synth/index.js';
 export * from './audit/index.js';
 export * from './freeze/index.js';
+export * from './invalidate/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,

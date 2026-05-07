@@ -17,6 +17,7 @@ import { handoff as coworkHandoff } from './cowork/index.js';
 import { workspace as synthWorkspace } from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
+import { invalidateExtraction } from './invalidate/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -502,6 +503,52 @@ program
       }
       process.stdout.write(`  receipt json:                  ${result.jsonPath}\n`);
       process.stdout.write(`  receipt markdown:              ${result.markdownPath}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const invalidate = program
+  .command('invalidate')
+  .description('Invalidate (archive with a receipt) artifacts produced under a superseded contract');
+
+invalidate
+  .command('extraction')
+  .description(
+    'Archive claims/reviews/contradictions/audits/handoffs/synthesis written under the legacy authored-evidence-excerpt contract; replaced by span-first-extraction',
+  )
+  .requiredOption('--reason <text>', 'Plain-language reason recorded on the invalidation receipt')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--label <slug>', 'Folder label under audits/legacy/', 'pre-span-extraction')
+  .option('--new-contract <name>', 'Name recorded for the replacement contract', 'span-first-extraction')
+  .option(
+    '--superseded-contract <name>',
+    'Name recorded for the contract being retired',
+    'authored-evidence-excerpt',
+  )
+  .option('--notes <text>', 'Optional free-text notes to include on the receipt')
+  .action(async (opts) => {
+    try {
+      const result = await invalidateExtraction({
+        packPath: opts.pack,
+        reason: opts.reason,
+        label: opts.label,
+        newContract: opts.newContract,
+        supersededContract: opts.supersededContract,
+        notes: opts.notes,
+      });
+      if (!result.performed) {
+        process.stdout.write(`invalidate extraction: no-op\n`);
+        process.stdout.write(`  ${result.message}\n`);
+        return;
+      }
+      process.stdout.write(`invalidate extraction: archived\n`);
+      process.stdout.write(`  receipt id:        ${result.receiptId}\n`);
+      process.stdout.write(`  contract label:    ${result.contractLabel}\n`);
+      process.stdout.write(`  affected sections: ${result.affectedSections.length}\n`);
+      for (const s of result.affectedSections) process.stdout.write(`    - ${s}\n`);
+      process.stdout.write(`  archived count:    ${result.archivedCount}\n`);
+      process.stdout.write(`  archive dir:       ${result.archiveDir}\n`);
     } catch (err) {
       reportError(err);
     }
