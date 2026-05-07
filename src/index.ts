@@ -2,6 +2,7 @@ export * from './intake/index.js';
 export * from './sections/index.js';
 export * from './sources/index.js';
 export * from './claims/index.js';
+export * from './contradictions/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,
