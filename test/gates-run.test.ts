@@ -43,6 +43,11 @@ interface FixtureSpec {
     status?: 'unresolved' | 'reconciled' | 'preserved_deliberately' | 'rejected';
     claim_ids?: string[];
   }>;
+  claimReviews?: Array<{
+    claim_id: string;
+    decision?: 'accepted_for_synthesis' | 'rejected' | 'needs_scope_repair' | 'needs_source_repair' | 'needs_contradiction_mapping' | 'needs_human_review';
+    created_at?: string;
+  }>;
   patchResearch?: (yaml: ReturnType<typeof ResearchYamlSchema.parse>) => void;
 }
 
@@ -169,6 +174,23 @@ async function makeFixture(spec: FixtureSpec) {
     );
   }
 
+  for (const r of spec.claimReviews ?? []) {
+    const review = {
+      claim_id: r.claim_id,
+      decision: r.decision ?? 'accepted_for_synthesis',
+      reason: 'fixture',
+      finding_ids: [],
+      reviewer: 'heuristic',
+      review_method: 'heuristic_key_point',
+      created_at: r.created_at ?? '2026-05-06T22:00:00.000Z',
+    };
+    await appendFile(
+      join(packPath, 'sections', '01-test', 'claim-reviews.jsonl'),
+      JSON.stringify(review) + '\n',
+      'utf8',
+    );
+  }
+
   if (spec.patchResearch) {
     const path = join(packPath, 'research.yaml');
     const research = ResearchYamlSchema.parse(yamlParse(await readFile(path, 'utf8')));
@@ -196,6 +218,12 @@ describe('gate (end-to-end)', () => {
       claims: [
         { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
         { claim_id: 'clm_000000000000_heuristic_2', source_ids: ['src_000000000001'], not: 'broad scope' },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000000_heuristic_2', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
       ],
       patchResearch: (r) => {
         r.gates.source_floor.min_sources = 4;
@@ -356,6 +384,12 @@ describe('gate (end-to-end)', () => {
       claims: [
         { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
         { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000002_heuristic_1', decision: 'accepted_for_synthesis' },
       ],
       contradictions: [
         {
@@ -384,7 +418,16 @@ describe('gate (end-to-end)', () => {
         publisher: `pub-${i}`,
         source_type: i === 0 ? 'primary' : 'secondary',
       })),
-      claims: [{ claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] }],
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000002_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
       patchResearch: (r) => {
         r.gates.source_floor.min_sources = 4;
         r.gates.source_floor.min_independent_publishers = 2;
@@ -445,6 +488,291 @@ describe('gate (end-to-end)', () => {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // accepted_claim_floor — negative cases
+  // All must produce synthesis_eligible=false with the floor violation message.
+  // Waivers cannot bypass these failures.
+  // -------------------------------------------------------------------------
+
+  it('floor: 0 accepted claims, no waiver → synthesis_eligible=false', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: i === 0 ? 'primary' : 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 1;
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(false);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('fail');
+    expect(floorCheck?.detail).toContain('Waivers cannot bypass evidence existence');
+  });
+
+  it('floor: 0 accepted claims, primary-source waiver active → synthesis_eligible=false', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 2;
+        r.primary_source_waiver = {
+          status: 'granted',
+          reason: 'No primary sources available for this topic.',
+          compensating_controls: ['Adversarial review required.'],
+        };
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(false);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('fail');
+    expect(floorCheck?.detail).toContain('Waivers cannot bypass evidence existence');
+  });
+
+  it('floor: 1 accepted claim, primary-source waiver active → synthesis_eligible=false', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 2;
+        r.primary_source_waiver = {
+          status: 'granted',
+          reason: 'No primary sources available for this topic.',
+          compensating_controls: ['Adversarial review required.'],
+        };
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(false);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('fail');
+    expect(floorCheck?.detail).toContain('1 accepted claims from 1 sources');
+    expect(floorCheck?.detail).toContain('Waivers cannot bypass evidence existence');
+  });
+
+  it('floor: 2 accepted claims, primary-source waiver active → synthesis_eligible=false', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 2;
+        r.primary_source_waiver = {
+          status: 'granted',
+          reason: 'No primary sources available for this topic.',
+          compensating_controls: ['Adversarial review required.'],
+        };
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(false);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('fail');
+    expect(floorCheck?.detail).toContain('2 accepted claims from 2 sources');
+    expect(floorCheck?.detail).toContain('Waivers cannot bypass evidence existence');
+  });
+
+  it('floor: 3 accepted claims from single source, primary-source waiver active → synthesis_eligible=false', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000000_heuristic_2', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000000_heuristic_3', source_ids: ['src_000000000000'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000000_heuristic_2', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000000_heuristic_3', decision: 'accepted_for_synthesis' },
+      ],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 2;
+        r.primary_source_waiver = {
+          status: 'granted',
+          reason: 'No primary sources available for this topic.',
+          compensating_controls: ['Adversarial review required.'],
+        };
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(false);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('fail');
+    expect(floorCheck?.detail).toContain('3 accepted claims from 1 sources');
+    expect(floorCheck?.detail).toContain('Waivers cannot bypass evidence existence');
+  });
+
+  // -------------------------------------------------------------------------
+  // accepted_claim_floor — positive cases
+  // All must produce synthesis_eligible=true with the floor passing.
+  // -------------------------------------------------------------------------
+
+  it('floor: 3 accepted claims from 2 sources, no waiver → synthesis_eligible=true', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: i === 0 ? 'primary' : 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000000_heuristic_2', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000000_heuristic_2', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 1;
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(true);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('pass');
+  });
+
+  it('floor: 3 accepted claims from 2 sources, primary-source waiver active → synthesis_eligible=true', async () => {
+    await makeFixture({
+      sources: Array.from({ length: 4 }, (_, i) => ({
+        source_id: `src_${String(i).padStart(12, '0').replace(/[^a-f0-9]/g, '0')}`,
+        publisher: `pub-${i}`,
+        source_type: 'secondary',
+      })),
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000000_heuristic_2', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000000_heuristic_2', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 4;
+        r.gates.source_floor.min_independent_publishers = 2;
+        r.gates.source_floor.primary_sources_required = 2;
+        r.primary_source_waiver = {
+          status: 'granted',
+          reason: 'No primary sources available for this topic.',
+          compensating_controls: ['Adversarial review required.'],
+        };
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(true);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('pass');
+  });
+
+  it('floor: 21 accepted claims from 7 sources (Section 06 shape) → synthesis_eligible=true', async () => {
+    const sources = Array.from({ length: 7 }, (_, i) => ({
+      source_id: `src_${i.toString(16).padStart(12, '0')}`,
+      publisher: `pub-${i % 5}`,
+      source_type: i === 0 ? ('primary' as const) : ('secondary' as const),
+    }));
+    const claims = sources.flatMap((s) =>
+      [1, 2, 3].map((n) => ({
+        claim_id: `clm_${s.source_id.replace('src_', '')}_heuristic_${n}`,
+        source_ids: [s.source_id],
+      })),
+    );
+    const claimReviews = claims.map((c) => ({
+      claim_id: c.claim_id,
+      decision: 'accepted_for_synthesis' as const,
+    }));
+    await makeFixture({
+      sources,
+      claims,
+      claimReviews,
+      patchResearch: (r) => {
+        r.gates.source_floor.min_sources = 7;
+        r.gates.source_floor.min_independent_publishers = 4;
+        r.gates.source_floor.primary_sources_required = 1;
+        r.freshness.required = false;
+        r.gates.freshness.required_for_current_topics = false;
+      },
+    });
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.synthesis_eligible).toBe(true);
+    const floorCheck = result.gate_results.find((r) => r.check === 'min_accepted_claims_and_sources');
+    expect(floorCheck?.status).toBe('pass');
+    expect(floorCheck?.detail).toContain('21 accepted claims from 7 distinct sources');
+  });
+
   it('a clean section with no contradictions remains synthesis-eligible if other gates pass', async () => {
     await makeFixture({
       sources: Array.from({ length: 4 }, (_, i) => ({
@@ -452,7 +780,16 @@ describe('gate (end-to-end)', () => {
         publisher: `pub-${i}`,
         source_type: i === 0 ? 'primary' : 'secondary',
       })),
-      claims: [{ claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] }],
+      claims: [
+        { claim_id: 'clm_000000000000_heuristic_1', source_ids: ['src_000000000000'] },
+        { claim_id: 'clm_000000000001_heuristic_1', source_ids: ['src_000000000001'] },
+        { claim_id: 'clm_000000000002_heuristic_1', source_ids: ['src_000000000002'] },
+      ],
+      claimReviews: [
+        { claim_id: 'clm_000000000000_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000001_heuristic_1', decision: 'accepted_for_synthesis' },
+        { claim_id: 'clm_000000000002_heuristic_1', decision: 'accepted_for_synthesis' },
+      ],
       contradictions: [],
       patchResearch: (r) => {
         r.gates.source_floor.min_sources = 4;

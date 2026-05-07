@@ -1,5 +1,6 @@
 import type { ResearchYaml, Section } from '../intake/schema.js';
 import type { Claim } from '../claims/schema.js';
+import type { ClaimReview } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 
@@ -10,7 +11,8 @@ export type GateFamily =
   | 'freshness'
   | 'contradiction'
   | 'section_budget'
-  | 'waivers';
+  | 'waivers'
+  | 'accepted_claim_floor';
 
 export type GateCheckStatus =
   | 'pass'
@@ -112,6 +114,7 @@ export interface GateInput {
   sources: SourceCard[];
   receipts: FetchReceipt[];
   contradictions: Contradiction[];
+  claimReviews: ClaimReview[];
 }
 
 export interface RunGateOptions {

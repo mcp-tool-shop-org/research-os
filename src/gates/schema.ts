@@ -8,6 +8,7 @@ export const GateFamilySchema = z.enum([
   'contradiction',
   'section_budget',
   'waivers',
+  'accepted_claim_floor',
 ]);
 
 export const GateCheckStatusSchema = z.enum([

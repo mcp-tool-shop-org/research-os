@@ -5,3 +5,4 @@ export { checkFreshness } from './freshness.js';
 export { checkContradiction } from './contradiction.js';
 export { checkSectionBudget } from './section-budget.js';
 export { applyWaivers } from './waivers.js';
+export { checkAcceptedClaimFloor } from './accepted-claim-floor.js';

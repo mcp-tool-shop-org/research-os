@@ -8,6 +8,7 @@ import { ResearchYamlSchema, type ResearchYaml, type Section } from '../intake/s
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
 import { FetchReceiptSchema, SourceCardSchema, type FetchReceipt, type SourceCard } from '../sources/schema.js';
+import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
 
 import {
   checkClaimIntegrity,
@@ -17,6 +18,7 @@ import {
   checkSectionBudget,
   checkSourceFloor,
   applyWaivers,
+  checkAcceptedClaimFloor,
 } from './checks/index.js';
 import { renderGateMarkdown } from './markdown.js';
 import { SectionGateResultSchema } from './schema.js';
@@ -213,6 +215,9 @@ function buildNextActions(results: GateCheckResult[]): string[] {
         case 'waivers':
           actions.push('Fix the waiver entry in research.yaml.primary_source_waiver (reason + compensating_controls + pack policy must allow it).');
           break;
+        case 'accepted_claim_floor':
+          actions.push('Gather more sources, extract claims, and promote at least 3 claims from at least 2 distinct sources to accepted_for_synthesis via review. Waivers cannot bypass this floor.');
+          break;
         default:
           break;
       }
@@ -265,6 +270,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
   const sources = await readSourceCards(packPath);
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
+  const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r));
 
   const input: GateInput = {
     research,
@@ -274,6 +280,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
     sources,
     receipts,
     contradictions,
+    claimReviews,
   };
 
   const rawResults: GateCheckResult[] = [
@@ -283,6 +290,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
     ...checkFreshness(input),
     ...checkContradiction(input),
     ...checkSectionBudget(input),
+    ...checkAcceptedClaimFloor(input),
   ];
 
   const { updatedResults, waivers_applied, waiver_validation_failures } = applyWaivers(input, rawResults);
