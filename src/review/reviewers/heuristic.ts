@@ -1,4 +1,5 @@
 import type { Claim } from '../../claims/schema.js';
+import type { Excerpt } from '../../sources/excerpts/schema.js';
 import type {
   DraftFinding,
   Reviewer,
@@ -9,10 +10,17 @@ import type {
 const STUB_BRIEF_MARKER = 'This section has not been gathered yet';
 const MIN_BRIEF_LENGTH_FOR_HIDDEN_SYNTHESIS = 600;
 
+// Same join-separator extract.ts uses when concatenating multi-id excerpts
+// into evidence_excerpt. Stays in sync deliberately.
+const EVIDENCE_EXCERPT_JOIN = ' … ';
+
 function normalize(text: string): string {
   return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase().trim();
 }
 
+// Legacy raw-text substring check, kept for claims that pre-date span-first
+// (evidence_excerpt_ids: []). New claims are validated via the deterministic
+// excerpt ledger in evidenceGroundedViaLedger below.
 function evidenceGroundedInRaw(claim: Claim, rawTextBySourceId: Map<string, string>): boolean {
   const excerpt = normalize(claim.evidence_excerpt);
   if (excerpt.length < 8) return false;
@@ -22,6 +30,71 @@ function evidenceGroundedInRaw(claim: Claim, rawTextBySourceId: Map<string, stri
     if (normalize(raw).includes(excerpt)) return true;
   }
   return false;
+}
+
+type GroundingMode = 'span_first_ok' | 'span_first_fail' | 'legacy';
+
+interface GroundingResult {
+  mode: GroundingMode;
+  reason: string;
+}
+
+// Span-first grounding check. The reviewer should NOT re-normalise raw text
+// and substring-search for a copied excerpt — that path produced false
+// positives (claim evidence text differs trivially from raw text after
+// HTML/whitespace normalisation). Instead, validate structurally:
+//   1. Every cited evidence_excerpt_id resolves in the source's ledger.
+//   2. The claim's evidence_excerpt equals the deterministic join of the
+//      ledger texts (or a deterministic truncation prefix of that join).
+// Returns 'legacy' if the claim has no evidence_excerpt_ids — those predate
+// span-first and use the raw-text fallback.
+function evidenceGroundedViaLedger(
+  claim: Claim,
+  excerptsBySourceId: Map<string, Map<string, Excerpt>>,
+): GroundingResult {
+  if (!claim.evidence_excerpt_ids || claim.evidence_excerpt_ids.length === 0) {
+    return { mode: 'legacy', reason: 'pre-span-first claim (no evidence_excerpt_ids)' };
+  }
+  for (const sid of claim.source_ids) {
+    const ledger = excerptsBySourceId.get(sid);
+    if (!ledger) continue;
+    const allFound = claim.evidence_excerpt_ids.every((id) => ledger.has(id));
+    if (!allFound) {
+      return {
+        mode: 'span_first_fail',
+        reason: `One or more evidence_excerpt_ids do not resolve in the ledger for ${sid}`,
+      };
+    }
+    // Deterministic re-derivation of the expected evidence_excerpt.
+    const seen = new Set<string>();
+    const texts: string[] = [];
+    for (const id of claim.evidence_excerpt_ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      texts.push(ledger.get(id)!.text);
+    }
+    const expected = texts.join(EVIDENCE_EXCERPT_JOIN);
+    const actual = claim.evidence_excerpt;
+    if (actual === expected) {
+      return { mode: 'span_first_ok', reason: 'evidence_excerpt matches the ledger join exactly' };
+    }
+    // Tolerate the truncation suffix extract.ts adds when the joined text
+    // exceeds the per-claim cap.
+    if (actual.endsWith(' …') && expected.startsWith(actual.slice(0, -2).trimEnd())) {
+      return {
+        mode: 'span_first_ok',
+        reason: 'evidence_excerpt is a deterministic truncation of the ledger join',
+      };
+    }
+    return {
+      mode: 'span_first_fail',
+      reason: `evidence_excerpt does not match the deterministic ledger join for ${sid}`,
+    };
+  }
+  return {
+    mode: 'span_first_fail',
+    reason: 'no ledger available for any cited source',
+  };
 }
 
 export class HeuristicReviewer implements Reviewer {
@@ -56,21 +129,38 @@ export class HeuristicReviewer implements Reviewer {
         });
       }
 
-      // ungrounded_excerpt — excerpt does not appear in any cited source's raw text
-      if (
-        validCites.length > 0 &&
-        !evidenceGroundedInRaw(claim, input.rawTextBySourceId)
-      ) {
-        drafts.push({
-          category: 'ungrounded_excerpt',
-          severity: 'block',
-          summary: `Claim ${claim.claim_id} has an evidence_excerpt that does not appear in any cited source's raw text.`,
-          evidence: `Excerpt (truncated): ${claim.evidence_excerpt.slice(0, 200)}`,
-          required_action: 'Re-extract the claim from the cited source, or remove it.',
-          claim_ids: [claim.claim_id],
-          source_ids: claim.source_ids,
-          confidence: 'high',
-        });
+      // ungrounded_excerpt — span-first grounding check.
+      //   - Span-first claims (evidence_excerpt_ids non-empty) are validated
+      //     structurally: every cited ID must resolve in the ledger AND the
+      //     claim's evidence_excerpt must equal the deterministic ledger join.
+      //   - Legacy claims (no excerpt IDs) fall back to the raw-text
+      //     substring check that was the original v0.1 anti-hallucination
+      //     guard. That path will be removed once all packs migrate.
+      if (validCites.length > 0) {
+        const grounding = evidenceGroundedViaLedger(claim, input.excerptsBySourceId);
+        let ungrounded = false;
+        let detail = '';
+        if (grounding.mode === 'span_first_fail') {
+          ungrounded = true;
+          detail = grounding.reason;
+        } else if (grounding.mode === 'legacy') {
+          if (!evidenceGroundedInRaw(claim, input.rawTextBySourceId)) {
+            ungrounded = true;
+            detail = 'Legacy claim: evidence_excerpt is not a substring of any cited source raw text';
+          }
+        }
+        if (ungrounded) {
+          drafts.push({
+            category: 'ungrounded_excerpt',
+            severity: 'block',
+            summary: `Claim ${claim.claim_id} fails the structural evidence check (${detail}).`,
+            evidence: `Excerpt (truncated): ${claim.evidence_excerpt.slice(0, 200)}`,
+            required_action: 'Re-extract the claim from the cited source, or remove it.',
+            claim_ids: [claim.claim_id],
+            source_ids: claim.source_ids,
+            confidence: 'high',
+          });
+        }
       }
 
       // overgeneralized_claim / scope_widening — scope null with substantive asserts

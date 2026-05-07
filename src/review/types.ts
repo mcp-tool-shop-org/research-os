@@ -1,5 +1,6 @@
 import type { Claim } from '../claims/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
+import type { Excerpt } from '../sources/excerpts/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 import type { ResearchYaml, Section } from '../intake/schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
@@ -57,6 +58,11 @@ export interface ReviewerInput {
   contradictions: Contradiction[];
   gateResult: SectionGateResult | null;
   rawTextBySourceId: Map<string, string>;
+  // Span-first ledgers, keyed by source_id. Each value is excerpt_id → Excerpt.
+  // Reviewers use this to validate evidence_excerpt_ids structurally rather
+  // than re-normalising raw text and substring-searching for a copied excerpt
+  // (the original anti-hallucination check, now obsolete under span-first).
+  excerptsBySourceId: Map<string, Map<string, Excerpt>>;
   briefText: string | null;
 }
 

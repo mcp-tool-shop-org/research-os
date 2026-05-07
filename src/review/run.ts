@@ -14,6 +14,8 @@ import {
   type FetchReceipt,
   type SourceCard,
 } from '../sources/schema.js';
+import { ExcerptSchema, type Excerpt } from '../sources/excerpts/schema.js';
+import { ledgerPathFor } from '../sources/excerpts/ledger.js';
 import { SectionGateResultSchema, type SectionGateResult } from '../gates/schema.js';
 
 import {
@@ -101,6 +103,35 @@ async function readRawTextBySource(
     map.set(r.source_id, await readFile(path, 'utf8'));
   }
   return map;
+}
+
+// Load span-first excerpt ledgers for every source cited by the section's
+// claims. Reviewers use this for structural grounding checks instead of
+// re-normalising raw text.
+async function readExcerptsBySource(
+  packPath: string,
+  claims: Claim[],
+): Promise<Map<string, Map<string, Excerpt>>> {
+  const out = new Map<string, Map<string, Excerpt>>();
+  const sourceIds = new Set<string>();
+  for (const c of claims) for (const sid of c.source_ids) sourceIds.add(sid);
+  for (const sid of sourceIds) {
+    const path = ledgerPathFor(packPath, sid);
+    if (!existsSync(path)) continue;
+    const text = await readFile(path, 'utf8');
+    const index = new Map<string, Excerpt>();
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const e = ExcerptSchema.parse(JSON.parse(line));
+        index.set(e.excerpt_id, e);
+      } catch {
+        /* skip malformed line */
+      }
+    }
+    if (index.size > 0) out.set(sid, index);
+  }
+  return out;
 }
 
 function makeFindingId(args: {
@@ -208,6 +239,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
   const gateResult = await readGateResult(packPath, options.sectionId);
   const rawTextBySourceId = await readRawTextBySource(packPath, receipts);
+  const excerptsBySourceId = await readExcerptsBySource(packPath, claims);
   const briefText = await readBriefText(packPath, options.sectionId);
 
   const reviewers = options.reviewers ?? defaultReviewers();
@@ -220,6 +252,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     sources,
     receipts,
     contradictions,
+    excerptsBySourceId,
     gateResult,
     rawTextBySourceId,
     briefText,
@@ -244,6 +277,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
       contradictions,
       gateResult,
       rawTextBySourceId,
+      excerptsBySourceId,
       briefText,
     });
   }
@@ -284,6 +318,7 @@ interface ReviewWithSpecificReviewerArgs {
   contradictions: Contradiction[];
   gateResult: SectionGateResult | null;
   rawTextBySourceId: Map<string, string>;
+  excerptsBySourceId: Map<string, Map<string, Excerpt>>;
   briefText: string | null;
 }
 
@@ -297,6 +332,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     contradictions: args.contradictions,
     gateResult: args.gateResult,
     rawTextBySourceId: args.rawTextBySourceId,
+    excerptsBySourceId: args.excerptsBySourceId,
     briefText: args.briefText,
   });
   if (!result.ok) {
