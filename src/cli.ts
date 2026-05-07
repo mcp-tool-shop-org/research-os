@@ -15,6 +15,7 @@ import {
 } from './indexer/index.js';
 import { handoff as coworkHandoff } from './cowork/index.js';
 import { workspace as synthWorkspace } from './synth/index.js';
+import { audit as runAudit } from './audit/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -426,6 +427,37 @@ synthCmd
       process.stdout.write(`  scope overlaps:               ${result.scopeOverlaps}\n`);
       process.stdout.write(`  cross-section contradictions: ${result.crossSectionContradictions}\n`);
       for (const f of result.filesWritten) process.stdout.write(`  wrote: ${f}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+program
+  .command('audit')
+  .description('Aggregate pack-level audit rollups across all sections')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await runAudit({ packPath: opts.pack });
+      process.stdout.write(`pack audit complete\n`);
+      process.stdout.write(`  verdict:                  ${result.verdict}\n`);
+      process.stdout.write(`  synthesis allowed:        ${result.synthesisAllowed}\n`);
+      process.stdout.write(`  orphan claims:            ${result.orphans}\n`);
+      process.stdout.write(`  stale sources:            ${result.staleSources}\n`);
+      process.stdout.write(`  weak sources:             ${result.weakSources}\n`);
+      process.stdout.write(`  unresolved contradictions:${result.unresolvedContradictions}\n`);
+      process.stdout.write(`  scope-widening risks:     ${result.scopeWideningRisks}\n`);
+      process.stdout.write(`  source-diversity gaps:    ${result.sourceDiversityGaps}\n`);
+      process.stdout.write(`  files written:            ${result.filesWritten.length}\n`);
+      if (result.blockingReasons.length > 0) {
+        process.stdout.write(`\nblocking reasons:\n`);
+        for (const b of result.blockingReasons) process.stdout.write(`  - ${b}\n`);
+      }
+      if (result.warnings.length > 0) {
+        process.stdout.write(`\nwarnings:\n`);
+        for (const w of result.warnings) process.stdout.write(`  - ${w}\n`);
+      }
+      if (!result.synthesisAllowed) process.exitCode = 2;
     } catch (err) {
       reportError(err);
     }

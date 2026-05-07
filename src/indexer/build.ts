@@ -390,6 +390,44 @@ async function indexSection(args: {
   }
 }
 
+const ROLLUP_FILES: Array<{ filename: string; recordType: 'pack_audit' | 'audit_rollup'; recordId: string }> = [
+  { filename: 'pack-audit.json', recordType: 'pack_audit', recordId: 'pack_audit' },
+  { filename: 'orphan-claims.json', recordType: 'audit_rollup', recordId: 'orphan-claims' },
+  { filename: 'stale-sources.json', recordType: 'audit_rollup', recordId: 'stale-sources' },
+  { filename: 'weak-sources.json', recordType: 'audit_rollup', recordId: 'weak-sources' },
+  { filename: 'unresolved-contradictions.json', recordType: 'audit_rollup', recordId: 'unresolved-contradictions' },
+  { filename: 'scope-widening-risks.json', recordType: 'audit_rollup', recordId: 'scope-widening-risks' },
+  { filename: 'source-diversity-gaps.json', recordType: 'audit_rollup', recordId: 'source-diversity-gaps' },
+  { filename: 'synthesis-readiness.json', recordType: 'audit_rollup', recordId: 'synthesis-readiness' },
+];
+
+async function indexPackAuditRollups(
+  db: Database.Database,
+  packPath: string,
+  now: string,
+): Promise<void> {
+  const insertFts = db.prepare(
+    `INSERT INTO facts_fts(record_type, record_id, section_id, artifact_path, text)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  // Clear any prior rollup entries first (each record_id is unique per type)
+  for (const f of ROLLUP_FILES) {
+    db.prepare(`DELETE FROM facts_fts WHERE record_type = ? AND record_id = ?`).run(f.recordType, f.recordId);
+  }
+  for (const f of ROLLUP_FILES) {
+    const abs = join(packPath, 'audits', f.filename);
+    if (!existsSync(abs)) continue;
+    const text = await readFile(abs, 'utf8');
+    insertFts.run(
+      f.recordType,
+      f.recordId,
+      null,
+      `audits/${f.filename}`,
+      text.slice(0, 24_000),
+    );
+  }
+}
+
 export async function build(options: IndexBuildOptions): Promise<IndexBuildSummary> {
   const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
   if (!existsSync(join(packPath, 'research.yaml'))) throw new PackNotFoundError(packPath);
@@ -426,6 +464,7 @@ export async function build(options: IndexBuildOptions): Promise<IndexBuildSumma
       await indexSection({ db, packPath, research, sectionId: sid, now, counts });
       counts.sectionsIndexed += 1;
     }
+    await indexPackAuditRollups(db, packPath, now);
   } finally {
     db.close();
   }

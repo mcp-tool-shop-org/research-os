@@ -6,7 +6,9 @@ export type RecordType =
   | 'review_finding'
   | 'claim_review'
   | 'gate_result'
-  | 'fetch_receipt';
+  | 'fetch_receipt'
+  | 'pack_audit'
+  | 'audit_rollup';
 
 export interface IndexBuildOptions {
   sectionId?: string;

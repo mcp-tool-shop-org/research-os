@@ -8,6 +8,7 @@ export * from './review/index.js';
 export * from './indexer/index.js';
 export * from './cowork/index.js';
 export * from './synth/index.js';
+export * from './audit/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,
