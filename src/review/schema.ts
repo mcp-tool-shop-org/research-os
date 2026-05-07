@@ -14,6 +14,11 @@ export const FindingCategorySchema = z.enum([
   'hidden_synthesis',
   'definition_drift',
   'temporal_mismatch',
+  // Span-first + paged extraction can yield dense, atomized claim sets that
+  // are individually grounded but collectively redundant. The reviewer flags
+  // these so synthesis-worthiness — not just structural grounding — decides
+  // what reaches synthesis.
+  'claim_overproduction',
 ]);
 
 export const FindingSeveritySchema = z.enum(['info', 'warn', 'block']);

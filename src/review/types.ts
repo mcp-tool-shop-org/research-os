@@ -17,7 +17,8 @@ export type FindingCategory =
   | 'recommendation_exceeds_evidence'
   | 'hidden_synthesis'
   | 'definition_drift'
-  | 'temporal_mismatch';
+  | 'temporal_mismatch'
+  | 'claim_overproduction';
 
 export type FindingSeverity = 'info' | 'warn' | 'block';
 

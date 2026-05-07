@@ -15,6 +15,9 @@ const BLOCK_TO_DECISION: Record<string, ReviewDecision> = {
   source_quality_problem: 'needs_source_repair',
   source_cluster_monopoly: 'needs_source_repair',
   stale_claim: 'needs_source_repair',
+  // Block-level overproduction means the cluster is redundant enough that the
+  // reviewer demands human-led collapse before synthesis.
+  claim_overproduction: 'needs_human_review',
 };
 
 const WARN_TO_DECISION: Record<string, ReviewDecision> = {
@@ -26,6 +29,9 @@ const WARN_TO_DECISION: Record<string, ReviewDecision> = {
   unmapped_contradiction: 'needs_contradiction_mapping',
   hidden_synthesis: 'needs_human_review',
   recommendation_exceeds_evidence: 'needs_human_review',
+  // Warn-level overproduction routes to human review too — the claim itself
+  // may be fine; the reviewer is signalling the cluster is synthesis noise.
+  claim_overproduction: 'needs_human_review',
 };
 
 const DECISION_PRIORITY: ReviewDecision[] = [

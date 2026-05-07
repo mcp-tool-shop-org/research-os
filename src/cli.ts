@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
 import { gather } from './sources/index.js';
-import { extract as claimExtract } from './claims/index.js';
+import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { map as contradictMap } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import { review as runReview } from './review/index.js';
@@ -175,6 +175,40 @@ claimCmd
           process.stdout.write(`  ${f.source_id}: ${tag}${f.reason}\n`);
         }
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+claimCmd
+  .command('audit-density')
+  .description(
+    'Read-only diagnostic of a section claim ledger before review: claims/source, claims per 1k words, near-duplicate clusters, weak/generic scope',
+  )
+  .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await auditDensity({
+        sectionId: section,
+        packPath: opts.pack,
+      });
+      const a = result.audit;
+      process.stdout.write(`claim density audit complete\n`);
+      process.stdout.write(`  section:                ${a.section_id}\n`);
+      process.stdout.write(`  candidate claims:       ${a.candidate_claim_count}\n`);
+      process.stdout.write(`  sources:                ${a.source_count}\n`);
+      process.stdout.write(`  source word total:      ${a.total_source_word_count.toLocaleString()}\n`);
+      process.stdout.write(`  claims per 1k words:    ${a.claims_per_1k_words.toFixed(2)}\n`);
+      process.stdout.write(`  weak-scope claims:      ${a.weak_scope_count}\n`);
+      process.stdout.write(`  generic-scope claims:   ${a.generic_scope_count}\n`);
+      process.stdout.write(`  near-duplicate clusters:${a.near_duplicate_clusters.length}\n`);
+      process.stdout.write(`  flags:                  ${a.flags.length}\n`);
+      for (const f of a.flags) {
+        process.stdout.write(`    [${f.severity}] ${f.type}: ${f.message}\n`);
+      }
+      process.stdout.write(`  json:                   ${result.jsonPath}\n`);
+      process.stdout.write(`  markdown:               ${result.markdownPath}\n`);
     } catch (err) {
       reportError(err);
     }

@@ -210,6 +210,75 @@ export class HeuristicReviewer implements Reviewer {
       }
     }
 
+    // claim_overproduction — span-first + paged extraction can yield dense
+    // claim sets where one source dominates the section, or a cluster of
+    // claims share near-identical asserts. We surface BOTH signals so the
+    // reviewer can collapse before synthesis treats every grounded span as
+    // equally decision-useful. This is structural — interpretive judgement
+    // (which claims to keep) belongs to the LLM reviewer or the human.
+    if (input.candidateClaims.length > 0) {
+      const claimsBySrc = new Map<string, Claim[]>();
+      for (const c of input.candidateClaims) {
+        for (const sid of c.source_ids) {
+          const arr = claimsBySrc.get(sid) ?? [];
+          arr.push(c);
+          claimsBySrc.set(sid, arr);
+        }
+      }
+      const total = input.candidateClaims.length;
+      // Density flag: any source contributing >= 30 claims, OR (when the
+      // section has substantive volume — >= 10 total claims and >= 8 from
+      // this source) >= 40% of the section's candidate claims.
+      // Tiny sections (1-2 claims) never qualify — there's nothing to flag.
+      const MIN_TOTAL_FOR_RATIO = 10;
+      const MIN_PER_SOURCE_FOR_RATIO = 8;
+      for (const [sid, claims] of claimsBySrc.entries()) {
+        const ratio = claims.length / Math.max(1, total);
+        const ratioFlag =
+          total >= MIN_TOTAL_FOR_RATIO &&
+          claims.length >= MIN_PER_SOURCE_FOR_RATIO &&
+          ratio >= 0.4;
+        if (claims.length >= 30 || ratioFlag) {
+          const severity = claims.length >= 50 || (ratioFlag && ratio >= 0.6) ? 'block' : 'warn';
+          drafts.push({
+            category: 'claim_overproduction',
+            severity,
+            summary: `Source ${sid} contributes ${claims.length} of ${total} candidate claim(s) (${(ratio * 100).toFixed(0)}% of the section). Even if every claim is grounded, the cluster is likely synthesis noise.`,
+            evidence: `Top source: ${sid}; claims=${claims.length}; share=${(ratio * 100).toFixed(0)}%.`,
+            required_action:
+              'Collapse near-duplicate claims into a smaller set of decision-useful propositions before synthesis.',
+            claim_ids: claims.map((c) => c.claim_id),
+            source_ids: [sid],
+            confidence: 'high',
+          });
+        }
+      }
+      // Near-duplicate clustering — group claims by normalised asserts. Any
+      // cluster with >= 3 members raises a single finding spanning the cluster.
+      const clusters = new Map<string, Claim[]>();
+      for (const c of input.candidateClaims) {
+        const key = c.asserts.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const arr = clusters.get(key) ?? [];
+        arr.push(c);
+        clusters.set(key, arr);
+      }
+      for (const [, members] of clusters.entries()) {
+        if (members.length >= 3) {
+          drafts.push({
+            category: 'claim_overproduction',
+            severity: 'warn',
+            summary: `${members.length} claims in this section share a normalised assertion. Likely extractor over-atomization.`,
+            evidence: `Sample assert: "${members[0]!.asserts.slice(0, 140)}"`,
+            required_action:
+              'Keep one representative claim and reject the duplicates, or merge them into a single claim with combined excerpt IDs.',
+            claim_ids: members.map((c) => c.claim_id),
+            source_ids: Array.from(new Set(members.flatMap((c) => c.source_ids))),
+            confidence: 'medium',
+          });
+        }
+      }
+    }
+
     // hidden_synthesis — section brief.md has been edited beyond stub state
     if (input.briefText !== null) {
       const isStub = input.briefText.includes(STUB_BRIEF_MARKER);

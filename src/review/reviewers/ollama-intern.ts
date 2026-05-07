@@ -23,12 +23,13 @@ Look for:
 - recommendation_exceeds_evidence: claim implies an action the source does not support
 - hidden_synthesis: claim asserts a conclusion not present in the cited source
 - temporal_mismatch: claim cites a source from a different time period than its asserts implies
+- claim_overproduction: a cluster of grounded but redundant/atomized claims from one source — collectively synthesis noise. Cite all claim_ids in the cluster on a single finding.
 
 Return ONE JSON object: {"findings": [...]}.
 
 For each finding:
 {
-  "category": one of the seven LLM-relevant categories above (use exact strings),
+  "category": one of the LLM-relevant categories above (use exact strings),
   "severity": "info" | "warn" | "block",
   "summary": ONE sentence,
   "evidence": short string referencing the conflicting parts,
@@ -57,6 +58,7 @@ const VALID_CATEGORIES: FindingCategory[] = [
   'recommendation_exceeds_evidence',
   'hidden_synthesis',
   'temporal_mismatch',
+  'claim_overproduction',
   // The reviewer prompt uses the LLM-relevant subset; heuristic handles the others.
 ];
 

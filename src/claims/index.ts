@@ -1,5 +1,18 @@
 export { extract, evidenceGrounded } from './extract.js';
 export {
+  auditDensity,
+  ClaimDensityAuditSchema,
+  PerSourceDensitySchema,
+  NearDuplicateClusterSchema,
+  DensityFlagSchema,
+  type ClaimDensityAudit,
+  type PerSourceDensity,
+  type NearDuplicateCluster,
+  type DensityFlag,
+  type AuditDensityOptions,
+  type AuditDensityResult,
+} from './density/index.js';
+export {
   HeuristicClaimExtractor,
   OllamaInternClaimExtractor,
   defaultClaimExtractors,
