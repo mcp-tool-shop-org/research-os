@@ -33,6 +33,9 @@
     "verify": "npm run build && npm run typecheck && npm run lint && npm run test",
     "prepublishOnly": "npm run verify"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.9.0",
