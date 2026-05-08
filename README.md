@@ -53,6 +53,45 @@ intake
 
 Most "deep research" tools collapse this to *search → summarize → pretty report*. `research-os` refuses to.
 
+## Install
+
+**Requirements:** Node.js ≥ 20.
+
+```bash
+# From source (v0.1.0 is not yet published to npm)
+git clone https://github.com/mcp-tool-shop-org/research-os.git
+cd research-os
+npm install
+npm run build
+npm link   # makes `research-os` available on your PATH
+```
+
+## Quick start
+
+```bash
+# Create a new research-pack
+research-os init "How should X be structured?"
+
+# Add a section
+research-os section add 01-landscape --purpose "Map the current landscape"
+
+# Gather a source
+research-os gather 01-landscape --url https://example.com/paper
+
+# Run the full chain
+research-os claim extract 01-landscape
+research-os claim triage 01-landscape
+research-os contradict map 01-landscape
+research-os gate 01-landscape
+research-os review 01-landscape --two-pass-llm
+research-os review-promote 01-landscape
+research-os cowork handoff
+research-os audit
+research-os freeze
+```
+
+**Requires [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
+
 ## Vocabulary
 
 | Term | Meaning |
@@ -62,9 +101,13 @@ Most "deep research" tools collapse this to *search → summarize → pretty rep
 | `research section` | A bounded unit of investigation inside a pack |
 | `research receipt` | Proof a section passed source/claim/gate checks |
 
+## Security
+
+`research-os` is a local-first CLI. It reads and writes files within the research-pack directory you point it at, and (when using `gather`) issues outbound HTTP requests to fetch source URLs you provide. It does not: run a server, accept inbound connections, store credentials, or send telemetry. No secrets are written to pack artifacts. See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
+
 ## Status
 
-v0.1.0 — early development. Workflow chain under active build, dogfooded against a real research topic.
+v0.1.0 — dogfood-proven. The full workflow chain (discover → gather → claims → contradictions → gate → review → audit → handoff → synthesis → freeze) shipped and was gated through its own research-pack. See [docs/dogfood-proof.md](docs/dogfood-proof.md) for the proof artifact.
 
 ## License
 

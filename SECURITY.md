@@ -2,9 +2,14 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security issue in `research-os`, please report it privately by opening a GitHub Security Advisory on the repository, or by emailing the maintainer listed in `package.json`.
+If you discover a security issue in `research-os`, please report it privately:
+
+- **GitHub Security Advisory:** Open a private advisory on the repository (preferred).
+- **Email:** 64996768+mcp-tool-shop@users.noreply.github.com
 
 Do not file a public issue for security reports.
+
+**Response timeline:** We aim to acknowledge reports within 72 hours and provide a resolution timeline within 7 days.
 
 ## Scope
 

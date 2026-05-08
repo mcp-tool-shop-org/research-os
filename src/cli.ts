@@ -38,6 +38,7 @@ import { RESEARCH_OS_VERSION } from './index.js';
 function reportError(err: unknown): never {
   if (err instanceof ResearchOSError) {
     process.stderr.write(`research-os: ${err.code}: ${err.message}\n`);
+    if (err.hint) process.stderr.write(`  hint: ${err.hint}\n`);
   } else if (err instanceof Error) {
     process.stderr.write(`research-os: ${err.message}\n`);
   } else {

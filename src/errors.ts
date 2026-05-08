@@ -1,6 +1,12 @@
 export class ResearchOSError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message);
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly hint?: string,
+    cause?: Error,
+    public readonly retryable?: boolean,
+  ) {
+    super(message, cause ? { cause } : undefined);
     this.name = 'ResearchOSError';
   }
 }
