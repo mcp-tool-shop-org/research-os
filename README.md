@@ -143,13 +143,17 @@ research-os freeze
 - Not battle-tested by external users. The single dogfood run found seven bugs.
 - Not yet on npm. Install from source until `npm publish` happens.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
-- Not API-stable under semver. v1.0.0 will come after external users have validated the surface over time.
+- Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the five experiments that close the gap.
 
 ### Known limitations
 
 - **Extractor provenance is not visible at the gate seam.** A section can pass the accepted-claim floor while relying on heuristic-fallback claims when the calibrated extractor (Ollama with the configured model) is unavailable. Recorded as a known weakness; future hardening will report accepted claims by extractor and require the floor's worth of accepted claims from the calibrated path.
 - **Reviewer model selection beyond the calibrated `hermes-two-pass` baseline is unresolved.** The dogfood arc validated one reviewer config; alternative models need their own seeded-failure recall calibration before they can be trusted.
 - **The dogfood pack used `mistral-nemo:12b` for extraction (canonical default is `hermes3:8b`).** Discovery hallucinated wrong-domain results for self-referential section names — corrected by query-precision discipline (see handbook) and operator-pre-staged URLs for ambiguous topics.
+
+## Roadmap to v1.0
+
+v1.0 is an earned state, not a release date. Five open experiments stand between v0.1 and v1.0 — API stability under external pressure, a non-self-referential dogfood pack, closing the extractor-provenance gap, generalizing reviewer calibration beyond `hermes-two-pass`, and a clean baseline run on `hermes3:8b`. Full plan in [`docs/roadmap.md`](docs/roadmap.md). The architecture lock holds throughout; v1.0 deepens what v0.1 proved rather than reopening it.
 
 ## License
 
