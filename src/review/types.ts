@@ -1,5 +1,6 @@
 import type { Claim } from '../claims/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
+import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { Excerpt } from '../sources/excerpts/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 import type { ResearchYaml, Section } from '../intake/schema.js';
@@ -56,6 +57,8 @@ export interface ReviewerInput {
   sources: SourceCard[];
   receipts: FetchReceipt[];
   contradictions: Contradiction[];
+  /** Resolution ledger entries — latest-wins per contradiction_id. Optional for backward compat. */
+  resolutions?: ContradictionResolution[];
   gateResult: SectionGateResult | null;
   rawTextBySourceId: Map<string, string>;
   // Span-first ledgers, keyed by source_id. Each value is excerpt_id → Excerpt.

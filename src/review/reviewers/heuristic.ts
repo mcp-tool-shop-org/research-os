@@ -248,9 +248,22 @@ export class HeuristicReviewer implements Reviewer {
         }
       }
 
-      // unmapped_contradiction — claim is involved in an unresolved contradiction
+      // unmapped_contradiction — claim is involved in an unresolved contradiction.
+      // Check resolution ledger (latest-wins) before falling back to the raw status field.
+      const resolvedContradictionIds = new Set<string>();
+      if (input.resolutions && input.resolutions.length > 0) {
+        const sorted = [...input.resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+        const effectiveMap = new Map<string, string>();
+        for (const r of sorted) effectiveMap.set(r.contradiction_id, r.status);
+        for (const [cid, status] of effectiveMap) {
+          if (status !== 'unresolved') resolvedContradictionIds.add(cid);
+        }
+      }
       const involved = input.contradictions.filter(
-        (c) => c.claim_ids.includes(claim.claim_id) && c.status === 'unresolved',
+        (c) =>
+          c.claim_ids.includes(claim.claim_id) &&
+          c.status === 'unresolved' &&
+          !resolvedContradictionIds.has(c.contradiction_id),
       );
       const blockingInvolved = involved.filter(
         (c) => c.severity === 'high' || c.severity === 'blocking',

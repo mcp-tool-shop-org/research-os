@@ -8,6 +8,7 @@ import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml, type Section } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
+import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
 import {
   FetchReceiptSchema,
   SourceCardSchema,
@@ -243,6 +244,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
   const sources = await readSourceCards(packPath);
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
+  const resolutions = await readJsonl<ContradictionResolution>(packPath, `sections/${options.sectionId}/contradiction-resolutions.jsonl`, (r) => ContradictionResolutionSchema.parse(r));
   const gateResult = await readGateResult(packPath, options.sectionId);
   const rawTextBySourceId = await readRawTextBySource(packPath, receipts);
   const excerptsBySourceId = await readExcerptsBySource(packPath, claims);
@@ -265,6 +267,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
       sources,
       receipts,
       contradictions,
+      resolutions,
       gateResult,
       rawTextBySourceId,
       excerptsBySourceId,
@@ -281,6 +284,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     sources,
     receipts,
     contradictions,
+    resolutions,
     excerptsBySourceId,
     gateResult,
     rawTextBySourceId,
@@ -304,6 +308,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
       sources,
       receipts,
       contradictions,
+      resolutions,
       gateResult,
       rawTextBySourceId,
       excerptsBySourceId,
@@ -346,6 +351,7 @@ interface ReviewWithSpecificReviewerArgs {
   sources: SourceCard[];
   receipts: FetchReceipt[];
   contradictions: Contradiction[];
+  resolutions?: ContradictionResolution[];
   gateResult: SectionGateResult | null;
   rawTextBySourceId: Map<string, string>;
   excerptsBySourceId: Map<string, Map<string, Excerpt>>;
@@ -381,6 +387,7 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
       sources: args.sources,
       receipts: args.receipts,
       contradictions: args.contradictions,
+      resolutions: args.resolutions,
       excerptsBySourceId: args.excerptsBySourceId,
       gateResult: args.gateResult,
       rawTextBySourceId: args.rawTextBySourceId,
@@ -446,6 +453,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     sources: args.sources,
     receipts: args.receipts,
     contradictions: args.contradictions,
+    resolutions: args.resolutions,
     gateResult: args.gateResult,
     rawTextBySourceId: args.rawTextBySourceId,
     excerptsBySourceId: args.excerptsBySourceId,
