@@ -12,6 +12,10 @@ import {
   type ContradictionResolution,
 } from '../contradictions/resolution-schema.js';
 import {
+  ClaimSynthesisDispositionSchema,
+  type ClaimSynthesisDisposition,
+} from '../dispositions/schema.js';
+import {
   FetchReceiptSchema,
   SourceCardSchema,
   type FetchReceipt,
@@ -163,6 +167,11 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
       (r) => ContradictionResolutionSchema.parse(r),
       warnings,
     );
+    const dispositions = await readJsonl<ClaimSynthesisDisposition>(
+      join(packPath, 'sections', sid, 'claim-synthesis-dispositions.jsonl'),
+      (r) => ClaimSynthesisDispositionSchema.parse(r),
+      warnings,
+    );
     const findings = await readJsonl<ReviewFinding>(
       join(packPath, 'audits', `${sid}-findings.jsonl`),
       (r) => ReviewFindingSchema.parse(r),
@@ -176,6 +185,7 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
       claimReviews,
       contradictions,
       resolutions,
+      dispositions,
       gate,
       findings,
       sourceIdsForSection,

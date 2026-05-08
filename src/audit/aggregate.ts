@@ -3,6 +3,7 @@ import type { Claim } from '../claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
 import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
+import type { ClaimSynthesisDisposition } from '../dispositions/schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 import type { CoworkHandoffPayload } from '../cowork/schema.js';
@@ -36,6 +37,7 @@ export interface AggregateInput {
       claimReviews: ClaimReview[];
       contradictions: Contradiction[];
       resolutions?: ContradictionResolution[];
+      dispositions?: ClaimSynthesisDisposition[];
       gate: SectionGateResult | null;
       findings: ReviewFinding[];
       sourceIdsForSection: string[];
@@ -84,6 +86,27 @@ function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<str
   if (resolutions.length === 0) return map;
   const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
   for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
+}
+
+function buildEffectiveDispositions(
+  dispositions: ClaimSynthesisDisposition[],
+  decisionByClaim: Map<string, ClaimReview>,
+  warnings: string[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (dispositions.length === 0) return map;
+  const sorted = [...dispositions].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const d of sorted) {
+    const review = decisionByClaim.get(d.claim_id);
+    if (review?.decision === 'accepted_for_synthesis') {
+      warnings.push(
+        `invalid disposition: claim ${d.claim_id} has accepted_for_synthesis review but a disposition entry was found — layer separation violated`,
+      );
+      continue;
+    }
+    map.set(d.claim_id, d.status);
+  }
   return map;
 }
 
@@ -380,23 +403,35 @@ function buildSourceDiversityGaps(input: AggregateInput): SourceDiversityGapRow[
   return out;
 }
 
-function buildSectionReadiness(input: AggregateInput): SynthesisReadinessRow[] {
+function buildSectionReadiness(input: AggregateInput, warnings: string[]): SynthesisReadinessRow[] {
   const handoffMode: HandoffMode =
     (input.handoff?.mode as HandoffMode | undefined) ?? 'unknown';
   const workspaceAllowed = input.handoff?.synthesis_allowed ?? false;
   return input.research.sections.map((s) => {
     const data = input.perSection.get(s.id);
     const decisionByClaim = data ? latestDecisionByClaim(data.claimReviews) : new Map();
+    const effectiveDispositions = buildEffectiveDispositions(
+      data?.dispositions ?? [],
+      decisionByClaim,
+      warnings,
+    );
     let accepted = 0;
     let repair = 0;
     let rejected = 0;
+    let dispositioned = 0;
     if (data) {
       for (const c of data.candidateClaims) {
         const d = decisionByClaim.get(c.claim_id);
         if (!d) continue;
-        if (d.decision === 'accepted_for_synthesis') accepted += 1;
-        else if (d.decision === 'rejected') rejected += 1;
-        else repair += 1;
+        if (d.decision === 'accepted_for_synthesis') {
+          accepted += 1;
+        } else if (d.decision === 'rejected') {
+          rejected += 1;
+        } else if (effectiveDispositions.has(c.claim_id)) {
+          dispositioned += 1;
+        } else {
+          repair += 1;
+        }
       }
     }
     return {
@@ -411,6 +446,7 @@ function buildSectionReadiness(input: AggregateInput): SynthesisReadinessRow[] {
       accepted_claims: accepted,
       repair_claims: repair,
       rejected_claims: rejected,
+      dispositioned_claims: dispositioned,
       blocking_reasons: data?.gate?.blocking_reasons ?? [],
       cowork_handoff_mode: handoffMode,
       workspace_allowed: workspaceAllowed,
@@ -418,12 +454,13 @@ function buildSectionReadiness(input: AggregateInput): SynthesisReadinessRow[] {
   });
 }
 
-function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[]): ClaimSummary {
+function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[], warnings: string[]): ClaimSummary {
   let total = 0;
   let candidate = 0;
   let accepted = 0;
   let rejected = 0;
   let repair = 0;
+  let dispositioned = 0;
   let noReview = 0;
   let withEvidence = 0;
   let withSourceHashes = 0;
@@ -433,6 +470,11 @@ function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[]): Cl
     total += data.claims.length;
     candidate += data.candidateClaims.length;
     const decisionByClaim = latestDecisionByClaim(data.claimReviews);
+    const effectiveDispositions = buildEffectiveDispositions(
+      data.dispositions ?? [],
+      decisionByClaim,
+      warnings,
+    );
     for (const c of data.candidateClaims) {
       if (c.evidence_excerpt.trim().length > 0) withEvidence += 1;
       if (c.source_hashes.length > 0) withSourceHashes += 1;
@@ -442,6 +484,7 @@ function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[]): Cl
       if (!d) noReview += 1;
       else if (d.decision === 'accepted_for_synthesis') accepted += 1;
       else if (d.decision === 'rejected') rejected += 1;
+      else if (effectiveDispositions.has(c.claim_id)) dispositioned += 1;
       else repair += 1;
     }
   }
@@ -452,6 +495,7 @@ function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[]): Cl
     accepted_for_synthesis: accepted,
     rejected,
     needs_repair: repair,
+    dispositioned,
     no_review: noReview,
     with_evidence_excerpt: withEvidence,
     with_source_hashes: withSourceHashes,
@@ -729,9 +773,9 @@ export function aggregate(input: AggregateInput): AggregateOutput {
   const unresolvedContradictions = buildUnresolvedContradictions(input);
   const scopeWideningRisks = buildScopeWideningRisks(input);
   const sourceDiversityGaps = buildSourceDiversityGaps(input);
-  const sectionRows = buildSectionReadiness(input);
+  const sectionRows = buildSectionReadiness(input, input.warnings);
 
-  const claimSummary = buildClaimSummary(input, orphanClaims);
+  const claimSummary = buildClaimSummary(input, orphanClaims, input.warnings);
   const sourceSummary = buildSourceSummary(input);
   const contradictionSummary = buildContradictionSummary(input);
   const reviewSummary = buildReviewSummary(input);

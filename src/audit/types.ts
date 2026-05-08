@@ -94,6 +94,7 @@ export interface SynthesisReadinessRow {
   accepted_claims: number;
   repair_claims: number;
   rejected_claims: number;
+  dispositioned_claims: number;
   blocking_reasons: string[];
   cowork_handoff_mode: HandoffMode;
   workspace_allowed: boolean;
@@ -105,6 +106,7 @@ export interface ClaimSummary {
   accepted_for_synthesis: number;
   rejected: number;
   needs_repair: number;
+  dispositioned: number;
   no_review: number;
   with_evidence_excerpt: number;
   with_source_hashes: number;

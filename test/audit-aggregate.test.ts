@@ -6,6 +6,7 @@ import type { Claim } from '../src/claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../src/review/schema.js';
 import type { Contradiction } from '../src/contradictions/schema.js';
 import type { ContradictionResolution } from '../src/contradictions/resolution-schema.js';
+import type { ClaimSynthesisDisposition } from '../src/dispositions/schema.js';
 import type { FetchReceipt, SourceCard } from '../src/sources/schema.js';
 import type { SectionGateResult } from '../src/gates/schema.js';
 
@@ -511,6 +512,192 @@ describe('audit.aggregate', () => {
       const result = runWithResolutions([contradiction], resolutions);
       expect(result.unresolvedContradictions).toHaveLength(1);
       expect(result.payload.contradiction_summary.unresolved).toBe(1);
+    });
+  });
+
+  describe('claim-synthesis-dispositions ledger integration', () => {
+    function makeRepairClaim(id: string): Claim {
+      return claim(id, '01-test');
+    }
+
+    function makeRepairReview(claim_id: string): ClaimReview {
+      return {
+        claim_id,
+        decision: 'needs_human_review',
+        reason: 'claim_overproduction',
+        finding_ids: [],
+        reviewer: 'heuristic',
+        review_method: 'heuristic_field_and_grounding_checks',
+        created_at: '2026-05-08T00:00:00.000Z',
+      };
+    }
+
+    function makeDisposition(
+      claim_id: string,
+      status: ClaimSynthesisDisposition['status'],
+      created_at = '2026-05-08T01:00:00.000Z',
+    ): ClaimSynthesisDisposition {
+      return {
+        claim_id,
+        section_id: '01-test',
+        status,
+        reason: 'test disposition reason',
+        decided_by: 'sonnet',
+        authorized_by: 'operator',
+        source: 'pack-truth-consistency-run',
+        created_at,
+      };
+    }
+
+    function runWithDispositions(
+      claims: Claim[],
+      claimReviews: ClaimReview[],
+      dispositions: ClaimSynthesisDisposition[],
+    ) {
+      return aggregate({
+        research: research(['01-test']),
+        perSection: new Map([
+          ['01-test', {
+            claims,
+            candidateClaims: claims,
+            claimReviews,
+            contradictions: [],
+            dispositions,
+            gate: gate('01-test', true),
+            findings: [],
+            sourceIdsForSection: [],
+          }],
+        ]),
+        sources: [],
+        receipts: [],
+        handoff: null,
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+    }
+
+    it('dispositioned needs_scope_repair claim no longer counts as active repair blocker', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev: ClaimReview = { ...makeRepairReview(c.claim_id), decision: 'needs_scope_repair' };
+      const disp = makeDisposition(c.claim_id, 'parked_not_for_synthesis');
+      const result = runWithDispositions([c], [rev], [disp]);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.repair_claims).toBe(0);
+      expect(section.dispositioned_claims).toBe(1);
+    });
+
+    it('dispositioned needs_human_review claim no longer counts as active repair blocker', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev = makeRepairReview(c.claim_id);
+      const disp = makeDisposition(c.claim_id, 'needs_human_review_excluded');
+      const result = runWithDispositions([c], [rev], [disp]);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.repair_claims).toBe(0);
+      expect(section.dispositioned_claims).toBe(1);
+    });
+
+    it('dispositioned claim is NOT counted in claim_summary.needs_repair', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev = makeRepairReview(c.claim_id);
+      const disp = makeDisposition(c.claim_id, 'parked_not_for_synthesis');
+      const result = runWithDispositions([c], [rev], [disp]);
+      expect(result.payload.claim_summary.needs_repair).toBe(0);
+      expect(result.payload.claim_summary.dispositioned).toBe(1);
+    });
+
+    it('undisposed repair claim still blocks (default-blocking holds)', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev = makeRepairReview(c.claim_id);
+      const result = runWithDispositions([c], [rev], []);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.repair_claims).toBe(1);
+      expect(section.dispositioned_claims).toBe(0);
+    });
+
+    it('out_of_bounds_regression_fixture claim is visible in section summary under dispositioned_claims, not repair_claims', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev: ClaimReview = { ...makeRepairReview(c.claim_id), decision: 'needs_scope_repair' };
+      const disp = makeDisposition(c.claim_id, 'out_of_bounds_regression_fixture');
+      const result = runWithDispositions([c], [rev], [disp]);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.repair_claims).toBe(0);
+      expect(section.dispositioned_claims).toBe(1);
+    });
+
+    it('latest disposition wins — parked then later preserved reads as preserved_for_human_note', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev = makeRepairReview(c.claim_id);
+      const dispositions: ClaimSynthesisDisposition[] = [
+        makeDisposition(c.claim_id, 'parked_not_for_synthesis', '2026-05-08T01:00:00.000Z'),
+        makeDisposition(c.claim_id, 'preserved_for_human_note', '2026-05-08T02:00:00.000Z'),
+      ];
+      const result = runWithDispositions([c], [rev], dispositions);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.dispositioned_claims).toBe(1);
+      expect(section.repair_claims).toBe(0);
+    });
+
+    it('attempting to disposition an accepted_for_synthesis claim adds a warning (layer separation)', () => {
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const rev = review(c.claim_id, 'accepted_for_synthesis');
+      const disp = makeDisposition(c.claim_id, 'parked_not_for_synthesis');
+      const warnings: string[] = [];
+      aggregate({
+        research: research(['01-test']),
+        perSection: new Map([
+          ['01-test', {
+            claims: [c],
+            candidateClaims: [c],
+            claimReviews: [rev],
+            contradictions: [],
+            dispositions: [disp],
+            gate: gate('01-test', true),
+            findings: [],
+            sourceIdsForSection: [],
+          }],
+        ]),
+        sources: [],
+        receipts: [],
+        handoff: null,
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings,
+      });
+      expect(warnings.some((w) => w.includes('invalid disposition'))).toBe(true);
+      expect(warnings.some((w) => w.includes(c.claim_id))).toBe(true);
+    });
+
+    it('writing a disposition does not modify the accepted count for the accepted claim', () => {
+      const accepted = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const repair = claim('clm_bbbbbbbbbbbb_heuristic_1', '01-test');
+      const claimReviews = [
+        review(accepted.claim_id, 'accepted_for_synthesis'),
+        makeRepairReview(repair.claim_id),
+      ];
+      // Only the repair claim has a disposition
+      const disp = makeDisposition(repair.claim_id, 'parked_not_for_synthesis');
+      const result = runWithDispositions([accepted, repair], claimReviews, [disp]);
+      const section = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(section.accepted_claims).toBe(1);
+      expect(section.repair_claims).toBe(0);
+      expect(section.dispositioned_claims).toBe(1);
+    });
+
+    it('existing audit tests are unaffected: no dispositions → behavior identical to before', () => {
+      const r = research(['01-test']);
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const result = aggregate({
+        research: r,
+        perSection: new Map([
+          ['01-test', { claims: [c], candidateClaims: [c], claimReviews: [review(c.claim_id, 'accepted_for_synthesis')], contradictions: [], gate: gate('01-test', true), findings: [], sourceIdsForSection: ['src_aaaaaaaaaaaa'] }],
+        ]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-06T22:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      expect(result.payload.claim_summary.dispositioned).toBe(0);
     });
   });
 });

@@ -8,6 +8,7 @@ import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
 import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
+import { ClaimSynthesisDispositionSchema, type ClaimSynthesisDisposition } from '../dispositions/schema.js';
 import { SectionGateResultSchema, type SectionGateResult } from '../gates/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
 import { indexDbPath } from '../indexer/db.js';
@@ -89,8 +90,13 @@ export async function handoff(options: HandoffOptions): Promise<HandoffSummary> 
       (r) => ContradictionResolutionSchema.parse(r),
       warnings,
     );
+    const dispositions = await readJsonl<ClaimSynthesisDisposition>(
+      join(packPath, 'sections', sid, 'claim-synthesis-dispositions.jsonl'),
+      (r) => ClaimSynthesisDispositionSchema.parse(r),
+      warnings,
+    );
     const gate = await readGate(packPath, sid, warnings);
-    perSection.set(sid, { gate, candidateClaims, claimReviews, contradictions, resolutions });
+    perSection.set(sid, { gate, candidateClaims, claimReviews, contradictions, resolutions, dispositions });
   }
 
   const indexExists = existsSync(indexDbPath(packPath));

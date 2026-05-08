@@ -5,6 +5,7 @@ import type { Claim } from '../claims/schema.js';
 import type { ClaimReview } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
 import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
+import type { ClaimSynthesisDisposition } from '../dispositions/schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
 
 import type {
@@ -26,6 +27,7 @@ export interface DeriveInput {
       claimReviews: ClaimReview[];
       contradictions: Contradiction[];
       resolutions?: ContradictionResolution[];
+      dispositions?: ClaimSynthesisDisposition[];
     }
   >;
   indexStatus: IndexStatus;
@@ -90,6 +92,27 @@ function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<str
   return map;
 }
 
+function buildEffectiveDispositions(
+  dispositions: ClaimSynthesisDisposition[],
+  decisionByClaim: Map<string, ClaimReview>,
+  warnings: string[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  if (dispositions.length === 0) return map;
+  const sorted = [...dispositions].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const d of sorted) {
+    const review = decisionByClaim.get(d.claim_id);
+    if (review?.decision === 'accepted_for_synthesis') {
+      warnings.push(
+        `invalid disposition: claim ${d.claim_id} has accepted_for_synthesis review but a disposition entry was found — layer separation violated`,
+      );
+      continue;
+    }
+    map.set(d.claim_id, d.status);
+  }
+  return map;
+}
+
 function buildSectionState(args: {
   sectionId: string;
   research: ResearchYaml;
@@ -98,23 +121,33 @@ function buildSectionState(args: {
   claimReviews: ClaimReview[];
   contradictions: Contradiction[];
   resolutions?: ContradictionResolution[];
+  dispositions?: ClaimSynthesisDisposition[];
+  warnings: string[];
 }): SectionState {
-  const { sectionId, research, gate, candidateClaims, claimReviews, contradictions, resolutions = [] } = args;
+  const { sectionId, research, gate, candidateClaims, claimReviews, contradictions, resolutions = [], dispositions = [], warnings } = args;
   const sectionMeta = research.sections.find((s) => s.id === sectionId);
   const purpose = sectionMeta?.purpose ?? '';
   const status = sectionMeta?.status ?? 'unknown';
 
   const decisionByClaim = latestDecisionByClaim(claimReviews);
+  const effectiveDispositions = buildEffectiveDispositions(dispositions, decisionByClaim, warnings);
 
   const accepted: string[] = [];
   const repair: string[] = [];
   const rejected: string[] = [];
+  const dispositioned: string[] = [];
   for (const c of candidateClaims) {
     const d = decisionByClaim.get(c.claim_id);
     if (!d) continue;
-    if (d.decision === 'accepted_for_synthesis') accepted.push(c.claim_id);
-    else if (d.decision === 'rejected') rejected.push(c.claim_id);
-    else repair.push(c.claim_id);
+    if (d.decision === 'accepted_for_synthesis') {
+      accepted.push(c.claim_id);
+    } else if (d.decision === 'rejected') {
+      rejected.push(c.claim_id);
+    } else if (effectiveDispositions.has(c.claim_id)) {
+      dispositioned.push(c.claim_id);
+    } else {
+      repair.push(c.claim_id);
+    }
   }
 
   const effectiveStatuses = buildEffectiveStatuses(resolutions);
@@ -137,6 +170,7 @@ function buildSectionState(args: {
     accepted_claim_ids: accepted,
     repair_claim_ids: repair,
     rejected_claim_ids: rejected,
+    dispositioned_claim_ids: dispositioned,
     candidate_claims_total: candidateClaims.length,
     unresolved_contradiction_ids: unresolved.map((c) => c.contradiction_id),
     blocking_reasons: gate?.blocking_reasons ?? [],
@@ -259,6 +293,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
   const acceptedAll: string[] = [];
   const repairAll: string[] = [];
   const blockedAll: string[] = [];
+  const dispositionedAll: string[] = [];
   const unresolvedContradictionsAll: string[] = [];
   const gateVerdicts: CoworkHandoffPayload['gate_verdicts'] = [];
   const reviewDecisionCounts: ReviewDecisionCount[] = [];
@@ -278,11 +313,14 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
       claimReviews: data.claimReviews,
       contradictions: data.contradictions,
       resolutions: data.resolutions,
+      dispositions: data.dispositions,
+      warnings: input.warnings,
     });
     sections.push(state);
     acceptedAll.push(...state.accepted_claim_ids);
     repairAll.push(...state.repair_claim_ids);
     blockedAll.push(...state.rejected_claim_ids);
+    dispositionedAll.push(...state.dispositioned_claim_ids);
     unresolvedContradictionsAll.push(...state.unresolved_contradiction_ids);
 
     if (data.gate) {
@@ -316,7 +354,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
   const summary = (() => {
     const ready = sections.filter((s) => s.synthesis_eligible).length;
     const blocked = sections.length - ready;
-    return `Pack mode=${mode}; ${sections.length} section(s) total, ${ready} synthesis-eligible, ${blocked} blocked or unrun. ${acceptedAll.length} accepted claim(s); ${repairAll.length} need repair; ${blockedAll.length} rejected; ${unresolvedContradictionsAll.length} unresolved contradiction(s); ${waivers.length} waiver(s).`;
+    return `Pack mode=${mode}; ${sections.length} section(s) total, ${ready} synthesis-eligible, ${blocked} blocked or unrun. ${acceptedAll.length} accepted claim(s); ${repairAll.length} need repair; ${dispositionedAll.length} dispositioned; ${blockedAll.length} rejected; ${unresolvedContradictionsAll.length} unresolved contradiction(s); ${waivers.length} waiver(s).`;
   })();
 
   return {
@@ -330,6 +368,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
     accepted_claim_ids: acceptedAll,
     repair_claim_ids: repairAll,
     blocked_claim_ids: blockedAll,
+    dispositioned_claim_ids: dispositionedAll,
     unresolved_contradiction_ids: unresolvedContradictionsAll,
     waivers,
     gate_verdicts: gateVerdicts,

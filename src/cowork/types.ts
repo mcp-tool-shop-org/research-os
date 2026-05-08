@@ -13,6 +13,7 @@ export interface SectionState {
   accepted_claim_ids: string[];
   repair_claim_ids: string[];
   rejected_claim_ids: string[];
+  dispositioned_claim_ids: string[];
   candidate_claims_total: number;
   unresolved_contradiction_ids: string[];
   blocking_reasons: string[];
@@ -50,6 +51,7 @@ export interface CoworkHandoffPayload {
   accepted_claim_ids: string[];
   repair_claim_ids: string[];
   blocked_claim_ids: string[];
+  dispositioned_claim_ids: string[];
   unresolved_contradiction_ids: string[];
   waivers: WaiverEntry[];
   gate_verdicts: GateVerdictEntry[];
