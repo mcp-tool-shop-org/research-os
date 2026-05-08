@@ -168,7 +168,7 @@ export function renderDecisionBrief(map: CrossSectionMap): string {
   lines.push('');
   lines.push('## Recommendation');
   lines.push('');
-  lines.push('_(empty — Cowork or operator writes here. Cite accepted_claim_ids inline as `[clm_...]`.)_');
+  lines.push('_(empty — Cowork or operator writes here. Cite accepted_claim_ids inline as `[claim:clm_...]`.)_');
   lines.push('');
   lines.push('## Evidence cited');
   lines.push('');
@@ -207,7 +207,7 @@ export function renderWorkingReport(map: CrossSectionMap): string {
   lines.push('> **Guardrails:**');
   lines.push('> - This is the working synthesis area. Drafts here are not final.');
   for (const g of COMMON_GUARDRAILS) lines.push(`> ${g}`);
-  lines.push('> - **Every paragraph must cite at least one accepted_claim_id (inline `[clm_...]`).**');
+  lines.push('> - **Every paragraph must cite at least one accepted_claim_id (inline `[claim:clm_...]`).**');
   lines.push('> - **Unresolved contradictions must remain visible in the prose, not summarized away.**');
   lines.push('');
   lines.push('## Working synthesis');

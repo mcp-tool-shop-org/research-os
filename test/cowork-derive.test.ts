@@ -4,6 +4,8 @@ import { ResearchYamlSchema } from '../src/intake/schema.js';
 import type { Claim } from '../src/claims/schema.js';
 import type { ClaimReview } from '../src/review/schema.js';
 import type { SectionGateResult } from '../src/gates/schema.js';
+import type { Contradiction } from '../src/contradictions/schema.js';
+import type { ClaimSynthesisDisposition } from '../src/dispositions/schema.js';
 
 function research(sectionIds: string[] = ['01-test']) {
   return ResearchYamlSchema.parse({
@@ -291,5 +293,343 @@ describe('cowork.derive', () => {
     });
     expect(result.forbidden_actions.length).toBeGreaterThan(0);
     expect(result.forbidden_actions.some((a) => /claims\.jsonl/i.test(a))).toBe(true);
+  });
+
+  // ── Required new tests: corrected readiness predicates ──────────────────────
+
+  function claimN(n: number, sectionId = '01-test'): Claim {
+    const hex = n.toString(16).padStart(12, '0');
+    return {
+      claim_id: `clm_${hex}_heuristic_${n}`,
+      section_id: sectionId,
+      source_ids: ['src_aaaaaaaaaaaa'],
+      source_hashes: ['a'.repeat(64)],
+      asserts: `claim ${n}`,
+      scope: 'narrow',
+      not: 'broad',
+      evidence_excerpt: 'literal',
+      evidence_location: null,
+      confidence: 'low',
+      extractor: 'heuristic',
+      extraction_method: 'heuristic_key_point',
+      created_at: '2026-05-06T22:00:00.000Z',
+      review_state: 'candidate',
+    };
+  }
+
+  function reviewN(n: number, decision: ClaimReview['decision'], ts?: string): ClaimReview {
+    const hex = n.toString(16).padStart(12, '0');
+    return {
+      claim_id: `clm_${hex}_heuristic_${n}`,
+      decision,
+      reason: `test ${decision}`,
+      finding_ids: [],
+      reviewer: 'heuristic',
+      review_method: 'heuristic_field_and_grounding_checks',
+      created_at: ts ?? '2026-05-06T22:00:01.000Z',
+    };
+  }
+
+  function dispositionN(
+    n: number,
+    status: ClaimSynthesisDisposition['status'] = 'parked_not_for_synthesis',
+    sectionId = '01-test',
+  ): ClaimSynthesisDisposition {
+    const hex = n.toString(16).padStart(12, '0');
+    return {
+      claim_id: `clm_${hex}_heuristic_${n}`,
+      section_id: sectionId,
+      status,
+      reason: 'test disposition',
+      decided_by: 'operator',
+      authorized_by: 'operator',
+      source: 'test',
+      created_at: '2026-05-06T22:00:02.000Z',
+    };
+  }
+
+  function contradiction(id: string, severity: Contradiction['severity'] = 'medium'): Contradiction {
+    return {
+      contradiction_id: `cnt_${id.padEnd(12, '0')}_heuristic`,
+      section_id: '01-test',
+      claim_ids: ['clm_aaaaaaaaaaaa_heuristic_1', 'clm_aaaaaaaaaaaa_heuristic_2'],
+      source_ids: ['src_aaaaaaaaaaaa'],
+      type: 'direct_conflict',
+      summary: 'A vs B',
+      scope_analysis: '',
+      overlap_assessment: 'fully_overlapping',
+      severity,
+      confidence: 'medium',
+      detector: 'heuristic',
+      detection_method: 'heuristic_similarity_negation',
+      evidence: '',
+      status: 'unresolved',
+      created_at: '2026-05-06T22:00:00.000Z',
+    };
+  }
+
+  function passingGate(sectionId = '01-test'): SectionGateResult {
+    return {
+      section_id: sectionId,
+      verdict: 'warn',
+      summary: 'mock',
+      checked_at: '2026-05-06T22:00:00.000Z',
+      synthesis_eligible: true,
+      gate_results: [],
+      failures: [],
+      warnings: [],
+      waivers_applied: [],
+      blocking_reasons: [],
+      claim_counts: { total: 5, candidate: 5, with_evidence_excerpt: 5, with_source_hashes: 5, with_scope: 5, with_not: 5, universal_scope_null: 0, orphans: 0 },
+      source_counts: { total: 2, primary: 0, secondary: 2, forum: 0, benchmark: 0, docs: 0, unknown: 0, independent_publishers: 2, failed_fetches: 0 },
+      contradiction_counts: { total: 0, unresolved: 0, blocking: 0, by_type: {} },
+      freshness_summary: { policy_required: false, max_source_age_months: null, stale_source_policy: 'warn', stale_count: 0, unknown_date_count: 0 },
+      scope_integrity_summary: { universal_claims: 0, scoped_claims: 5, with_not_constraint: 5, overgen_risks_total: 0, overgen_risks_blocking: 0 },
+      next_actions: [],
+    };
+  }
+
+  it('T1: overproduction-baseline — rejected and triage-parked do not block synthesis', () => {
+    const r = research();
+    const claims = Array.from({ length: 100 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      ...Array.from({ length: 20 }, (_, i) => reviewN(i + 6, 'rejected')),
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 26, 'needs_human_review')),
+      // claims 31-100 have no review (triage-parked)
+    ];
+    const dispositions: ClaimSynthesisDisposition[] = Array.from({ length: 5 }, (_, i) =>
+      dispositionN(i + 26, 'parked_not_for_synthesis'),
+    );
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [], dispositions }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.synthesis_allowed).toBe(true);
+    expect(result.sections[0]!.provenance_summary?.accepted_count).toBe(5);
+    expect(result.sections[0]!.provenance_summary?.rejected_count).toBe(20);
+    expect(result.sections[0]!.provenance_summary?.triage_parked_count).toBe(70);
+    expect(result.sections[0]!.provenance_summary?.dispositioned_count).toBe(5);
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(0);
+  });
+
+  it('T2: default-blocking holds — one undispositioned needs_human_review blocks synthesis', () => {
+    const r = research();
+    const claims = Array.from({ length: 100 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      ...Array.from({ length: 20 }, (_, i) => reviewN(i + 6, 'rejected')),
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 26, 'needs_human_review')),
+    ];
+    // Only 4 of the 5 needs_human_review are dispositioned — claim 30 (n=30) has no disposition
+    const dispositions: ClaimSynthesisDisposition[] = Array.from({ length: 4 }, (_, i) =>
+      dispositionN(i + 26, 'parked_not_for_synthesis'),
+    );
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [], dispositions }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('repair_required');
+    expect(result.synthesis_allowed).toBe(false);
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBeGreaterThanOrEqual(1);
+    expect(result.repair_claim_ids.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('T3: rejected claims with provenance do not block synthesis', () => {
+    const r = research();
+    const claims = Array.from({ length: 35 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      ...Array.from({ length: 30 }, (_, i) => reviewN(i + 6, 'rejected')),
+    ];
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.sections[0]!.provenance_summary?.rejected_count).toBe(30);
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(0);
+  });
+
+  it('T4: unreviewed candidates do not block synthesis', () => {
+    const r = research();
+    const claims = Array.from({ length: 205 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = Array.from({ length: 5 }, (_, i) =>
+      reviewN(i + 1, 'accepted_for_synthesis'),
+    );
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.sections[0]!.provenance_summary?.triage_parked_count).toBe(200);
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(0);
+  });
+
+  it('T5: dispositioned claims surface correctly in provenance_summary', () => {
+    const r = research();
+    const claims = Array.from({ length: 10 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      reviewN(1, 'accepted_for_synthesis'),
+      reviewN(2, 'needs_human_review'),
+      reviewN(3, 'needs_human_review'),
+      reviewN(4, 'needs_scope_repair'),
+    ];
+    const dispositions: ClaimSynthesisDisposition[] = [
+      dispositionN(2, 'parked_not_for_synthesis'),
+      dispositionN(3, 'preserved_for_human_note'),
+      dispositionN(4, 'needs_human_review_excluded'),
+    ];
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [], dispositions }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    const ps = result.sections[0]!.provenance_summary!;
+    expect(ps.dispositioned_count).toBe(3);
+    expect(ps.dispositioned_breakdown.parked_not_for_synthesis).toBe(1);
+    expect(ps.dispositioned_breakdown.preserved_for_human_note).toBe(1);
+    expect(ps.dispositioned_breakdown.needs_human_review_excluded).toBe(1);
+    expect(ps.dispositioned_breakdown.out_of_bounds_regression_fixture).toBe(0);
+    expect(ps.active_repair_blockers).toBe(0);
+  });
+
+  it('T6: active unresolved contradiction blocks synthesis (non-high severity)', () => {
+    const r = research();
+    const claims = Array.from({ length: 5 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = Array.from({ length: 5 }, (_, i) =>
+      reviewN(i + 1, 'accepted_for_synthesis'),
+    );
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', {
+          gate: passingGate(),
+          candidateClaims: claims,
+          claimReviews: reviews,
+          contradictions: [contradiction('abc123', 'medium')],
+        }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('repair_required');
+    expect(result.synthesis_allowed).toBe(false);
+    expect(result.sections[0]!.provenance_summary?.active_unresolved_contradictions).toBe(1);
+    expect(result.recommended_next_actions.some((a) => /contradiction/i.test(a))).toBe(true);
+  });
+
+  it('T7: active repair blocker blocks synthesis (undispositioned needs_scope_repair)', () => {
+    const r = research();
+    const claims = Array.from({ length: 6 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 5 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      reviewN(6, 'needs_scope_repair'),
+    ];
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('repair_required');
+    expect(result.repair_claim_ids).toContain('clm_000000000006_heuristic_6');
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(1);
+  });
+
+  it('T8: provenance_summary present on every required section in handoff payload', () => {
+    const r = research(['01-test', '02-prod']);
+    const c1 = claimN(1);
+    const c2 = { ...claimN(1), claim_id: 'clm_000000000002_heuristic_1', section_id: '02-prod' };
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate('01-test'), candidateClaims: [c1], claimReviews: [reviewN(1, 'accepted_for_synthesis')], contradictions: [] }],
+        ['02-prod', { gate: passingGate('02-prod'), candidateClaims: [c2], claimReviews: [{ ...reviewN(1, 'accepted_for_synthesis'), claim_id: 'clm_000000000002_heuristic_1' }], contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    for (const s of result.sections) {
+      expect(s.provenance_summary).toBeDefined();
+      const ps = s.provenance_summary!;
+      expect(typeof ps.accepted_count).toBe('number');
+      expect(typeof ps.rejected_count).toBe('number');
+      expect(typeof ps.triage_parked_count).toBe('number');
+      expect(typeof ps.needs_review_undispositioned_count).toBe('number');
+      expect(typeof ps.dispositioned_count).toBe('number');
+      expect(typeof ps.active_repair_blockers).toBe('number');
+      expect(typeof ps.active_unresolved_contradictions).toBe('number');
+      expect(Array.isArray(ps.waivers_active)).toBe(true);
+      expect(typeof ps.overrides_applied_count).toBe('number');
+    }
+  });
+
+  it('T9: sections 03 + 06 shaped — both synthesis_eligible=true with zero active blockers yield synthesis_ready', () => {
+    const r = research(['03-source-and-claim-truth', '06-repo-knowledge-integration']);
+    const make = (sectionId: string, n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        ...claimN(i + 1),
+        claim_id: `clm_${(i + 1).toString(16).padStart(12, '0')}_heuristic_${i + 1}`,
+        section_id: sectionId,
+      }));
+    const makeReviews = (n: number) =>
+      Array.from({ length: n }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis'));
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['03-source-and-claim-truth', {
+          gate: passingGate('03-source-and-claim-truth'),
+          candidateClaims: make('03-source-and-claim-truth', 42),
+          claimReviews: makeReviews(42),
+          contradictions: [],
+        }],
+        ['06-repo-knowledge-integration', {
+          gate: passingGate('06-repo-knowledge-integration'),
+          candidateClaims: make('06-repo-knowledge-integration', 21),
+          claimReviews: makeReviews(21),
+          contradictions: [],
+        }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    for (const s of result.sections) {
+      expect(s.synthesis_eligible).toBe(true);
+      expect(s.provenance_summary?.active_repair_blockers).toBe(0);
+      expect(s.provenance_summary?.active_unresolved_contradictions).toBe(0);
+    }
   });
 });

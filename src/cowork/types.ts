@@ -2,6 +2,24 @@ export type HandoffMode = 'repair_required' | 'synthesis_ready' | 'human_review_
 
 export type IndexStatus = 'present' | 'missing';
 
+export interface ProvenanceSummary {
+  accepted_count: number;
+  rejected_count: number;
+  triage_parked_count: number;
+  needs_review_undispositioned_count: number;
+  dispositioned_count: number;
+  dispositioned_breakdown: {
+    parked_not_for_synthesis: number;
+    preserved_for_human_note: number;
+    needs_human_review_excluded: number;
+    out_of_bounds_regression_fixture: number;
+  };
+  active_repair_blockers: number;
+  active_unresolved_contradictions: number;
+  waivers_active: string[];
+  overrides_applied_count: number;
+}
+
 export interface SectionState {
   section_id: string;
   purpose: string;
@@ -18,6 +36,7 @@ export interface SectionState {
   unresolved_contradiction_ids: string[];
   blocking_reasons: string[];
   blocking_contradictions_unresolved: number;
+  provenance_summary?: ProvenanceSummary;
 }
 
 export interface WaiverEntry {

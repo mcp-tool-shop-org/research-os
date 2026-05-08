@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { aggregate } from '../src/audit/aggregate.js';
 import { ResearchYamlSchema } from '../src/intake/schema.js';
 import { CoworkHandoffPayloadSchema } from '../src/cowork/schema.js';
+import { renderDecisionBrief, renderWorkingReport } from '../src/synth/markdown.js';
 import type { Claim } from '../src/claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../src/review/schema.js';
 import type { Contradiction } from '../src/contradictions/schema.js';
@@ -9,6 +10,7 @@ import type { ContradictionResolution } from '../src/contradictions/resolution-s
 import type { ClaimSynthesisDisposition } from '../src/dispositions/schema.js';
 import type { FetchReceipt, SourceCard } from '../src/sources/schema.js';
 import type { SectionGateResult } from '../src/gates/schema.js';
+import type { CrossSectionMap } from '../src/synth/types.js';
 
 function research(sectionIds: string[] = ['01-test']) {
   return ResearchYamlSchema.parse({
@@ -105,6 +107,31 @@ function receipt(source_id: string, opts: Partial<FetchReceipt> = {}): FetchRece
     extraction_extractor: 'heuristic',
     extraction_error: null,
     ...opts,
+  };
+}
+
+function repairReview(claim_id: string): ClaimReview {
+  return {
+    claim_id,
+    decision: 'needs_human_review',
+    reason: 'repair needed',
+    finding_ids: [],
+    reviewer: 'heuristic',
+    review_method: 'heuristic_field_and_grounding_checks',
+    created_at: '2026-05-08T00:00:00.000Z',
+  };
+}
+
+function testDisposition(claim_id: string, status: ClaimSynthesisDisposition['status']): ClaimSynthesisDisposition {
+  return {
+    claim_id,
+    section_id: '01-test',
+    status,
+    reason: 'operator disposition reason',
+    decided_by: 'sonnet',
+    authorized_by: 'operator',
+    source: 'audit-readiness-correction-run',
+    created_at: '2026-05-08T01:00:00.000Z',
   };
 }
 
@@ -698,6 +725,271 @@ describe('audit.aggregate', () => {
       });
       expect(result.payload.verdict).toBe('ready_for_synthesis');
       expect(result.payload.claim_summary.dispositioned).toBe(0);
+    });
+  });
+
+  describe('corrected active-blocker readiness predicate', () => {
+    function makeSection(
+      claims: Claim[],
+      claimReviews: ClaimReview[],
+      dispositions: ClaimSynthesisDisposition[] = [],
+      contradictions: Contradiction[] = [],
+      resolutions: ContradictionResolution[] = [],
+      eligible = true,
+    ) {
+      return {
+        claims,
+        candidateClaims: claims,
+        claimReviews,
+        contradictions,
+        resolutions,
+        dispositions,
+        gate: gate('01-test', eligible),
+        findings: [] as ReviewFinding[],
+        sourceIdsForSection: ['src_aaaaaaaaaaaa'],
+      };
+    }
+
+    it('overproduction-baseline: 100 candidates, 5 accepted, 20 rejected, 70 unreviewed, 5 dispositioned → ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 100 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+      const rejectedReviews = claims.slice(5, 25).map((c) => review(c.claim_id, 'rejected'));
+      const repairReviews = claims.slice(25, 30).map((c) => repairReview(c.claim_id));
+      const dispositions = claims.slice(25, 30).map((c) => testDisposition(c.claim_id, 'needs_human_review_excluded'));
+      // claims 30–99: never reviewed (triage-parked / unreviewed)
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, [...acceptedReviews, ...rejectedReviews, ...repairReviews], dispositions)]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.accepted_claims).toBe(5);
+      expect(s.rejected_claims).toBe(20);
+      expect(s.repair_claims).toBe(0);
+      expect(s.dispositioned_claims).toBe(5);
+    });
+
+    it('default-blocking holds (repair): one undispositioned needs_human_review → not ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 30 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+      const rejectedReviews = claims.slice(5, 25).map((c) => review(c.claim_id, 'rejected'));
+      const repairReviews = claims.slice(25, 30).map((c) => repairReview(c.claim_id));
+      // Only 4 of 5 repair claims dispositioned — one remains an active blocker
+      const dispositions = claims.slice(25, 29).map((c) => testDisposition(c.claim_id, 'needs_human_review_excluded'));
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, [...acceptedReviews, ...rejectedReviews, ...repairReviews], dispositions)]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).not.toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.repair_claims).toBe(1);
+    });
+
+    it('default-blocking holds (contradictions): 1 unresolved contradiction (medium severity) → not ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const c1 = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+      const c2 = claim('clm_bbbbbbbbbbbb_heuristic_1', '01-test');
+      const contradiction: Contradiction = {
+        contradiction_id: 'cnt_aaaaaaaaaaaa_heuristic',
+        section_id: '01-test',
+        claim_ids: [c1.claim_id, c2.claim_id],
+        source_ids: ['src_aaaaaaaaaaaa'],
+        type: 'direct_conflict',
+        summary: 'test',
+        scope_analysis: '',
+        overlap_assessment: 'fully_overlapping',
+        severity: 'medium',
+        confidence: 'medium',
+        detector: 'heuristic',
+        detection_method: 'm',
+        evidence: '',
+        status: 'unresolved',
+        created_at: '2026-05-08T00:00:00.000Z',
+      };
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection([c1, c2], [review(c1.claim_id, 'accepted_for_synthesis'), review(c2.claim_id, 'accepted_for_synthesis')], [], [contradiction], [])]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).not.toBe('ready_for_synthesis');
+      expect(result.unresolvedContradictions).toHaveLength(1);
+    });
+
+    it('rejected with provenance does not block: 5 accepted + 30 rejected, 0 repair blockers → ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 35 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+      const rejectedReviews = claims.slice(5, 35).map((c) => review(c.claim_id, 'rejected'));
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, [...acceptedReviews, ...rejectedReviews])]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.accepted_claims).toBe(5);
+      expect(s.rejected_claims).toBe(30);
+      expect(s.repair_claims).toBe(0);
+      expect(result.payload.readiness_summary.ready_sections).toBe(1);
+    });
+
+    it('unreviewed candidates do not block: 5 accepted + 195 never reviewed → ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 200 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, acceptedReviews)]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.candidate_claims).toBe(200);
+      expect(s.accepted_claims).toBe(5);
+      expect(s.repair_claims).toBe(0);
+    });
+
+    it('audit summary preserves visibility: rejected/dispositioned counts appear even when verdict is ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 30 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+      const rejectedReviews = claims.slice(5, 20).map((c) => review(c.claim_id, 'rejected'));
+      const repairReviews = claims.slice(20, 25).map((c) => repairReview(c.claim_id));
+      const dispositions = claims.slice(20, 25).map((c) => testDisposition(c.claim_id, 'parked_not_for_synthesis'));
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, [...acceptedReviews, ...rejectedReviews, ...repairReviews], dispositions)]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.rejected_claims).toBe(15);
+      expect(s.dispositioned_claims).toBe(5);
+      expect(s.accepted_claims).toBe(5);
+      expect(result.payload.claim_summary.rejected).toBe(15);
+      expect(result.payload.claim_summary.dispositioned).toBe(5);
+    });
+
+    it('cowork-audit agreement: state satisfying cowork synthesis_ready predicates also produces audit ready_for_synthesis', () => {
+      // Mirrors exactly what cowork determineMode checks: synthesis_eligible, has_review_run,
+      // repair_claim_ids.length === 0, unresolved_contradiction_ids.length === 0
+      const r = research(['01-test']);
+      const claims = [
+        claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test'),
+        claim('clm_bbbbbbbbbbbb_heuristic_1', '01-test'),
+        claim('clm_cccccccccccc_heuristic_1', '01-test'),
+        claim('clm_dddddddddddd_heuristic_1', '01-test'),
+        claim('clm_eeeeeeeeeeee_heuristic_1', '01-test'),
+      ];
+      const claimReviews = [
+        review(claims[0].claim_id, 'accepted_for_synthesis'),
+        review(claims[1].claim_id, 'accepted_for_synthesis'),
+        review(claims[2].claim_id, 'accepted_for_synthesis'),
+        review(claims[3].claim_id, 'rejected'),
+        review(claims[4].claim_id, 'rejected'),
+      ];
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, claimReviews, [], [], [])]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      expect(result.payload.readiness_summary.ready_sections).toBe(1);
+    });
+
+    it('floor still bites: gate-blocked section (synthesis_eligible=false) → not ready_for_synthesis', () => {
+      const r = research(['01-test']);
+      const c = claim('clm_aaaaaaaaaaaa_heuristic_1', '01-test');
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection([c], [review(c.claim_id, 'accepted_for_synthesis')], [], [], [], false)]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('repair_required'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).not.toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.synthesis_eligible).toBe(false);
+    });
+
+    it('workspace template emits [claim:clm_...] not bare [clm_...] in decision brief and working report', () => {
+      const minimalMap: CrossSectionMap = {
+        pack_id: 'test000000000',
+        pack_topic: 'test topic',
+        pack_decision: 'test decision',
+        generated_at: '2026-05-08T00:00:00.000Z',
+        accepted_claim_ids: [],
+        sections: [],
+        claim_clusters: [],
+        shared_sources: [],
+        scope_overlaps: [],
+        cross_section_contradictions: [],
+        waiver_dependencies: [],
+        open_questions: [],
+        allowed_synthesis_inputs: [],
+        forbidden_inputs: [],
+      };
+
+      const brief = renderDecisionBrief(minimalMap);
+      const workingReport = renderWorkingReport(minimalMap);
+
+      expect(brief).toContain('[claim:clm_...]');
+      expect(workingReport).toContain('[claim:clm_...]');
+      // Old bare [clm_...] format must not appear
+      expect(brief).not.toMatch(/`\[clm_\.\.\.\]`/);
+      expect(workingReport).not.toMatch(/`\[clm_\.\.\.\]`/);
     });
   });
 });

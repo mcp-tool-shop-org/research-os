@@ -8,6 +8,24 @@ export const HandoffModeSchema = z.enum([
 
 export const IndexStatusSchema = z.enum(['present', 'missing']);
 
+export const ProvenanceSummarySchema = z.object({
+  accepted_count: z.number().int().nonnegative(),
+  rejected_count: z.number().int().nonnegative(),
+  triage_parked_count: z.number().int().nonnegative(),
+  needs_review_undispositioned_count: z.number().int().nonnegative(),
+  dispositioned_count: z.number().int().nonnegative(),
+  dispositioned_breakdown: z.object({
+    parked_not_for_synthesis: z.number().int().nonnegative(),
+    preserved_for_human_note: z.number().int().nonnegative(),
+    needs_human_review_excluded: z.number().int().nonnegative(),
+    out_of_bounds_regression_fixture: z.number().int().nonnegative(),
+  }),
+  active_repair_blockers: z.number().int().nonnegative(),
+  active_unresolved_contradictions: z.number().int().nonnegative(),
+  waivers_active: z.array(z.string()),
+  overrides_applied_count: z.number().int().nonnegative(),
+});
+
 export const SectionStateSchema = z.object({
   section_id: z.string().regex(/^[0-9]{2}-[a-z0-9-]+$/),
   purpose: z.string(),
@@ -24,6 +42,7 @@ export const SectionStateSchema = z.object({
   unresolved_contradiction_ids: z.array(z.string()),
   blocking_reasons: z.array(z.string()),
   blocking_contradictions_unresolved: z.number().int().nonnegative(),
+  provenance_summary: ProvenanceSummarySchema.optional(),
 });
 
 export const WaiverEntrySchema = z.object({

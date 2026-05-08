@@ -23,6 +23,7 @@ import {
   extractClaimCitations,
   extractContradictionDisclosures,
   extractWaiverDisclosures,
+  isWellFormedClaimId,
 } from './citations.js';
 import { renderFreezeReceiptMarkdown, renderFreezeRefusalMarkdown } from './markdown.js';
 import {
@@ -177,6 +178,7 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   // workspace ran, we want to catch it at freeze.
   const livePackClaimIds = new Set<string>();
   const liveLatestDecisionByClaim = new Map<string, string>();
+  const liveLatestCreatedAtByClaim = new Map<string, string>();
   for (const section of research.sections) {
     const claimsFile = join(packPath, 'sections', section.id, 'claims.jsonl');
     if (existsSync(claimsFile)) {
@@ -211,8 +213,9 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
       }
       // Latest by created_at wins
       for (const r of reviews) {
-        const existing = liveLatestDecisionByClaim.get(r.claim_id);
-        if (!existing || r.created_at > existing) {
+        const existingCreatedAt = liveLatestCreatedAtByClaim.get(r.claim_id);
+        if (!existingCreatedAt || r.created_at > existingCreatedAt) {
+          liveLatestCreatedAtByClaim.set(r.claim_id, r.created_at);
           liveLatestDecisionByClaim.set(r.claim_id, r.decision);
         }
       }
@@ -239,7 +242,7 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   const allCitedSet = new Set<string>([...citationsInFinal, ...citationsInBrief, ...citationsInWorking]);
   const allCited = Array.from(allCitedSet);
 
-  const unknownCitations = allCited.filter((c) => !allClaimIds.has(c));
+  const unknownCitations = allCited.filter((c) => isWellFormedClaimId(c) && !allClaimIds.has(c));
   const repairCitations = allCited.filter((c) => repairOrRejected.has(c));
   const uncitedAccepted = acceptedClaimIds.filter((c) => !allCitedSet.has(c));
 

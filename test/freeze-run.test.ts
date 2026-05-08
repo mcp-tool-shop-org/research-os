@@ -213,7 +213,7 @@ describe('freeze (refusal paths)', () => {
 
   it('refuses when final-report cites an unknown claim_id', async () => {
     await makeReadyToFreezePack({
-      finalReport: '# Final\n\nCiting [claim:clm_zzzzzzzzzzzz_heuristic_1] which does not exist.',
+      finalReport: '# Final\n\nCiting [claim:clm_deadbeefcafe_heuristic_1] which does not exist.',
     });
     const result = await freeze({ packPath });
     expect(result.verdict).toBe('refused');

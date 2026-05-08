@@ -12,6 +12,7 @@ import type {
   CoworkHandoffPayload,
   HandoffMode,
   IndexStatus,
+  ProvenanceSummary,
   ReviewDecisionCount,
   SectionState,
   WaiverEntry,
@@ -159,6 +160,42 @@ function buildSectionState(args: {
     (c) => c.severity === 'high' || c.severity === 'blocking',
   );
 
+  const reviewedClaimIds = new Set(decisionByClaim.keys());
+  const triageParkedCount = candidateClaims.filter((c) => !reviewedClaimIds.has(c.claim_id)).length;
+
+  const dispositionedBreakdown = {
+    parked_not_for_synthesis: 0,
+    preserved_for_human_note: 0,
+    needs_human_review_excluded: 0,
+    out_of_bounds_regression_fixture: 0,
+  };
+  for (const cid of dispositioned) {
+    const s = effectiveDispositions.get(cid);
+    if (s === 'parked_not_for_synthesis') dispositionedBreakdown.parked_not_for_synthesis++;
+    else if (s === 'preserved_for_human_note') dispositionedBreakdown.preserved_for_human_note++;
+    else if (s === 'needs_human_review_excluded') dispositionedBreakdown.needs_human_review_excluded++;
+    else if (s === 'out_of_bounds_regression_fixture') dispositionedBreakdown.out_of_bounds_regression_fixture++;
+  }
+
+  const overrideAcceptedCount = Array.from(decisionByClaim.values()).filter(
+    (r) => r.decision === 'accepted_for_synthesis' && r.review_method.includes('operator_override'),
+  ).length;
+
+  const waiversActive = gate?.waivers_applied.map((w) => `${w.family}:${w.check}`) ?? [];
+
+  const provenanceSummary: ProvenanceSummary = {
+    accepted_count: accepted.length,
+    rejected_count: rejected.length,
+    triage_parked_count: triageParkedCount,
+    needs_review_undispositioned_count: repair.length,
+    dispositioned_count: dispositioned.length,
+    dispositioned_breakdown: dispositionedBreakdown,
+    active_repair_blockers: repair.length,
+    active_unresolved_contradictions: unresolved.length,
+    waivers_active: waiversActive,
+    overrides_applied_count: overrideAcceptedCount,
+  };
+
   return {
     section_id: sectionId,
     purpose,
@@ -175,6 +212,7 @@ function buildSectionState(args: {
     unresolved_contradiction_ids: unresolved.map((c) => c.contradiction_id),
     blocking_reasons: gate?.blocking_reasons ?? [],
     blocking_contradictions_unresolved: blocking.length,
+    provenance_summary: provenanceSummary,
   };
 }
 
@@ -233,8 +271,7 @@ function determineMode(
       s.has_review_run &&
       s.candidate_claims_total > 0 &&
       s.repair_claim_ids.length === 0 &&
-      s.rejected_claim_ids.length === 0 &&
-      s.accepted_claim_ids.length === s.candidate_claims_total,
+      s.unresolved_contradiction_ids.length === 0,
   );
 
   if (allReady && sections.length > 0) return 'synthesis_ready';

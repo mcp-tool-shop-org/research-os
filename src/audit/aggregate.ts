@@ -611,23 +611,27 @@ function buildWaiverSummary(input: AggregateInput): WaiverSummary {
 function buildReadinessSummary(
   rows: SynthesisReadinessRow[],
   handoff: CoworkHandoffPayload | null,
+  unresolvedContradictions: UnresolvedContradictionRow[],
 ): ReadinessSummary {
   let ready = 0;
   let repair = 0;
   let blocked = 0;
   let noGate = 0;
   let noReview = 0;
+  const unresolvedBySection = new Map<string, number>();
+  for (const c of unresolvedContradictions) {
+    unresolvedBySection.set(c.section_id, (unresolvedBySection.get(c.section_id) ?? 0) + 1);
+  }
   for (const r of rows) {
     if (!r.has_gate_run) noGate += 1;
     if (!r.has_review_run) noReview += 1;
+    const unresolvedCount = unresolvedBySection.get(r.section_id) ?? 0;
     if (
-      r.has_gate_run &&
       r.synthesis_eligible &&
       r.has_review_run &&
       r.candidate_claims > 0 &&
-      r.accepted_claims === r.candidate_claims &&
       r.repair_claims === 0 &&
-      r.rejected_claims === 0
+      unresolvedCount === 0
     ) {
       ready += 1;
     } else if (r.has_gate_run && r.gate_verdict === 'blocked' && !r.synthesis_eligible) {
@@ -780,7 +784,7 @@ export function aggregate(input: AggregateInput): AggregateOutput {
   const contradictionSummary = buildContradictionSummary(input);
   const reviewSummary = buildReviewSummary(input);
   const waiverSummary = buildWaiverSummary(input);
-  const readinessSummary = buildReadinessSummary(sectionRows, input.handoff);
+  const readinessSummary = buildReadinessSummary(sectionRows, input.handoff, unresolvedContradictions);
 
   const { verdict, blockingReasons } = determineVerdict({
     rows: sectionRows,
