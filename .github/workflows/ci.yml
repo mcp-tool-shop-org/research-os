@@ -37,5 +37,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Coverage
+        if: matrix.node-version == 20
+        run: npm run test:coverage
+
       - name: Dependency audit
         run: npm audit --audit-level=high
