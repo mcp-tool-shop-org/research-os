@@ -70,13 +70,6 @@ async function readGateResult(packPath: string, sectionId: string): Promise<Sect
   return SectionGateResultSchema.parse(JSON.parse(text));
 }
 
-interface FactRow {
-  record_type: string;
-  record_id: string;
-  section_id: string | null;
-  artifact_path: string;
-  text: string;
-}
 
 function fileSha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -404,7 +397,7 @@ const ROLLUP_FILES: Array<{ filename: string; recordType: 'pack_audit' | 'audit_
 async function indexPackAuditRollups(
   db: Database.Database,
   packPath: string,
-  now: string,
+  _now: string,
 ): Promise<void> {
   const insertFts = db.prepare(
     `INSERT INTO facts_fts(record_type, record_id, section_id, artifact_path, text)

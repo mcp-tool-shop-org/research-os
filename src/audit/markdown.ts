@@ -87,10 +87,6 @@ export function renderPackAuditMarkdown(p: PackAuditPayload): string {
   return lines.join('\n');
 }
 
-function listOrEmpty<T>(items: T[], emptyMessage: string, render: (item: T) => string): string[] {
-  if (items.length === 0) return ['', `_${emptyMessage}_`, ''];
-  return items.map(render);
-}
 
 export function renderOrphanClaimsMarkdown(rows: OrphanClaimRow[]): string {
   const lines: string[] = [];

@@ -18,10 +18,9 @@ import { CrossSectionMapSchema } from '../synth/schema.js';
 import { ClaimSchema } from '../claims/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
 
-import { hashArtifact, pass, fail, type CheckContext } from './checks.js';
+import { hashArtifact, pass, type CheckContext } from './checks.js';
 import {
   extractClaimCitations,
-  extractContradictionDisclosures,
   extractWaiverDisclosures,
   isWellFormedClaimId,
 } from './citations.js';

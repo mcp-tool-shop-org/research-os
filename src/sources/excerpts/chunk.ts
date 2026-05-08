@@ -71,7 +71,7 @@ function splitSentences(paragraph: string): string[] {
       // boundary if next is space and nextNext is uppercase, OR end of string
       if (
         next === undefined ||
-        (next === ' ' && nextNext !== undefined && /[A-Z0-9"'(\[]/.test(nextNext))
+        (next === ' ' && nextNext !== undefined && /[A-Z0-9"'([]/u.test(nextNext))
       ) {
         out.push(buf.trim());
         buf = '';

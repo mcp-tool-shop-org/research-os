@@ -13,15 +13,11 @@ import {
   type SourceCard,
 } from '../sources/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
-import {
-  ContradictionSchema,
-  type Contradiction,
-} from '../contradictions/schema.js';
+import { ContradictionSchema } from '../contradictions/schema.js';
 import {
   ClaimReviewSchema,
   ReviewFindingSchema,
   type ClaimReview,
-  type ReviewFinding,
 } from '../review/schema.js';
 import { SectionReportSchema, type SectionReport } from './schema.js';
 

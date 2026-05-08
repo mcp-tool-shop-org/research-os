@@ -3,11 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as yamlParse } from 'yaml';
 
-import {
-  HandoffNotFoundError,
-  PackNotFoundError,
-  SynthesisNotReadyError,
-} from '../errors.js';
+import { HandoffNotFoundError, PackNotFoundError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';

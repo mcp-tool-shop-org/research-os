@@ -18,10 +18,6 @@ import type { TriageOptions, TriageRunResult } from './types.js';
 const DEFAULT_PER_SOURCE_CAP = 10;
 const DEFAULT_MIN_ASSERT_CHARS = 30;
 
-// Conservative scope-token overlap threshold for "generic source scope" — the
-// same heuristic used by the density audit, kept consistent so triage and
-// audit agree on what counts as generic.
-const GENERIC_SCOPE_OVERLAP = 0.5;
 
 function normaliseAssert(s: string): string {
   return s

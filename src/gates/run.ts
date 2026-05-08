@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
 import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
-import { ResearchYamlSchema, type ResearchYaml, type Section } from '../intake/schema.js';
+import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
 import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
