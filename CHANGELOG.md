@@ -2,6 +2,28 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.1.1] — 2026-05-08
+
+Documentation and release-alignment patch. No code or behavior changes — all production source and tests are identical to v0.1.0 (463 vitest cases, all passing).
+
+### Added
+- `docs/roadmap.md` — five experiments that stand between v0.1 and v1.0 (API stability under external pressure, non-self-referential dogfood, extractor-provenance gap closure, reviewer-calibration generalization, hermes3 baseline).
+- README "What v0.1 is not" section disclosing what hasn't been validated yet.
+- README "Known limitations" section naming the extractor-provenance gap and the model-substitution caveat.
+- README "Roadmap to v1.0" section linking to the roadmap doc.
+- Centered logo in README, hosted at `mcp-tool-shop-org/brand`.
+- Status badges: version, CI, license, Node ≥20, handbook.
+- Translated READMEs in 7 languages (ja, zh, es, fr, hi, it, pt-BR) plus the language nav bar.
+- `publishConfig.access=public` in `package.json` for the scoped npm package.
+
+### Fixed
+- README workflow chain order: `review`/`review-promote` come before `gate` (gate consumes review decisions, not the other way around). Quick-start commands updated to match.
+- README CLI invocation: `--triaged-only --preset hermes-two-pass --profile hermes-two-pass` matches the actual demonstrated workflow.
+- `pages.yml` workflow trigger: `branches: [master]` (was `[main]`); the deploy never fired on the v0.1.0 push because of this. Site is now live at <https://mcp-tool-shop-org.github.io/research-os/>.
+
+### Why a patch release
+The v0.1.0 tag was created before the documentation pass landed. The npm tarball at `0.1.0` already includes the corrected README (it was published after the doc commits), but the GitHub tag/release pointed to the pre-doc commit. v0.1.1 realigns everything: tag, GitHub Release, and npm tarball all point at the same coherent state.
+
 ## [0.1.0] — 2026-05-08
 
 ### Added
