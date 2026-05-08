@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/research-os/readme.png" alt="research-os" width="400">
+</p>
+
 # research-os
 
 Local-first research control plane for gated source packs, claim truth, contradiction handling, and long-running AI synthesis.
