@@ -1,4 +1,13 @@
 import type { GateCheckResult, GateInput } from '../types.js';
+import type { ContradictionResolution } from '../../contradictions/resolution-schema.js';
+
+function buildEffectiveStatuses(resolutions: ContradictionResolution[] | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!resolutions || resolutions.length === 0) return map;
+  const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+  for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
+}
 
 export function checkScopeIntegrity(input: GateInput): GateCheckResult[] {
   const results: GateCheckResult[] = [];
@@ -54,9 +63,12 @@ export function checkScopeIntegrity(input: GateInput): GateCheckResult[] {
   }
 
   // overgeneralization risks from contradictions ledger
-  const overgen = input.contradictions.filter(
-    (c) => c.type === 'overgeneralization_risk' && c.status === 'unresolved',
-  );
+  const effectiveStatuses = buildEffectiveStatuses(input.resolutions);
+  const overgen = input.contradictions.filter((c) => {
+    if (c.type !== 'overgeneralization_risk') return false;
+    const eff = effectiveStatuses.get(c.contradiction_id);
+    return eff !== undefined ? eff === 'unresolved' : c.status === 'unresolved';
+  });
   const overgenBlocking = overgen.filter(
     (c) => c.severity === 'blocking' || c.severity === 'high',
   );

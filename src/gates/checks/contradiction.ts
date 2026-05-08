@@ -1,10 +1,23 @@
 import type { GateCheckResult, GateInput } from '../types.js';
+import type { ContradictionResolution } from '../../contradictions/resolution-schema.js';
+
+function buildEffectiveStatuses(resolutions: ContradictionResolution[] | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!resolutions || resolutions.length === 0) return map;
+  const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+  for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
+}
 
 export function checkContradiction(input: GateInput): GateCheckResult[] {
   const cfg = input.research.gates.contradiction;
   const results: GateCheckResult[] = [];
   const all = input.contradictions;
-  const unresolved = all.filter((c) => c.status === 'unresolved');
+  const effectiveStatuses = buildEffectiveStatuses(input.resolutions);
+  const unresolved = all.filter((c) => {
+    const eff = effectiveStatuses.get(c.contradiction_id);
+    return eff !== undefined ? eff === 'unresolved' : c.status === 'unresolved';
+  });
   const blocking = unresolved.filter(
     (c) => c.severity === 'blocking' || c.severity === 'high',
   );

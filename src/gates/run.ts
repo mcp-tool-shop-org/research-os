@@ -7,6 +7,7 @@ import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml, type Section } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
+import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
 import { FetchReceiptSchema, SourceCardSchema, type FetchReceipt, type SourceCard } from '../sources/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
 
@@ -100,9 +101,23 @@ function summarizeSourceCounts(input: GateInput): SourceCounts {
   };
 }
 
+function buildEffectiveStatuses(resolutions: ContradictionResolution[] | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!resolutions || resolutions.length === 0) return map;
+  const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+  for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
+}
+
+function isEffectivelyUnresolved(contradictionId: string, rawStatus: string, effectiveStatuses: Map<string, string>): boolean {
+  const effective = effectiveStatuses.get(contradictionId);
+  return effective !== undefined ? effective === 'unresolved' : rawStatus === 'unresolved';
+}
+
 function summarizeContradictionCounts(input: GateInput): ContradictionCounts {
   const all = input.contradictions;
-  const unresolved = all.filter((c) => c.status === 'unresolved');
+  const effectiveStatuses = buildEffectiveStatuses(input.resolutions);
+  const unresolved = all.filter((c) => isEffectivelyUnresolved(c.contradiction_id, c.status, effectiveStatuses));
   const blocking = unresolved.filter(
     (c) => c.severity === 'blocking' || c.severity === 'high',
   );
@@ -149,8 +164,9 @@ function summarizeFreshness(input: GateInput): FreshnessSummary {
 
 function summarizeScopeIntegrity(input: GateInput): ScopeIntegritySummary {
   const cand = input.candidateClaims;
+  const effectiveStatuses = buildEffectiveStatuses(input.resolutions);
   const overgen = input.contradictions.filter(
-    (c) => c.type === 'overgeneralization_risk' && c.status === 'unresolved',
+    (c) => c.type === 'overgeneralization_risk' && isEffectivelyUnresolved(c.contradiction_id, c.status, effectiveStatuses),
   );
   const blocking = overgen.filter(
     (c) => c.severity === 'blocking' || c.severity === 'high',
@@ -271,6 +287,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
   const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r));
+  const resolutions = await readJsonl<ContradictionResolution>(packPath, `sections/${options.sectionId}/contradiction-resolutions.jsonl`, (r) => ContradictionResolutionSchema.parse(r));
 
   const input: GateInput = {
     research,
@@ -281,6 +298,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
     receipts,
     contradictions,
     claimReviews,
+    resolutions,
   };
 
   const rawResults: GateCheckResult[] = [

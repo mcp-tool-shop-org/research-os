@@ -2,6 +2,7 @@ import type { ResearchYaml, Section } from '../intake/schema.js';
 import type { Claim } from '../claims/schema.js';
 import type { ClaimReview } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
+import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 
 export type GateFamily =
@@ -114,6 +115,8 @@ export interface GateInput {
   sources: SourceCard[];
   receipts: FetchReceipt[];
   contradictions: Contradiction[];
+  /** Resolution ledger — latest-wins per contradiction_id. Optional for backward compat. */
+  resolutions?: ContradictionResolution[];
   claimReviews: ClaimReview[];
 }
 
