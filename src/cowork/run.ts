@@ -7,6 +7,7 @@ import { PackNotFoundError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
+import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
 import { SectionGateResultSchema, type SectionGateResult } from '../gates/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
 import { indexDbPath } from '../indexer/db.js';
@@ -83,8 +84,13 @@ export async function handoff(options: HandoffOptions): Promise<HandoffSummary> 
       (r) => ContradictionSchema.parse(r),
       warnings,
     );
+    const resolutions = await readJsonl<ContradictionResolution>(
+      join(packPath, 'sections', sid, 'contradiction-resolutions.jsonl'),
+      (r) => ContradictionResolutionSchema.parse(r),
+      warnings,
+    );
     const gate = await readGate(packPath, sid, warnings);
-    perSection.set(sid, { gate, candidateClaims, claimReviews, contradictions });
+    perSection.set(sid, { gate, candidateClaims, claimReviews, contradictions, resolutions });
   }
 
   const indexExists = existsSync(indexDbPath(packPath));

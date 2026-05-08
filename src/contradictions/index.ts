@@ -1,4 +1,11 @@
 export { map } from './map.js';
+export { resolve } from './resolve.js';
+export {
+  ContradictionResolutionSchema,
+  ResolutionStatusSchema,
+  type ContradictionResolution,
+  type ResolutionStatus,
+} from './resolution-schema.js';
 export {
   HeuristicContradictionDetector,
   OllamaInternContradictionDetector,

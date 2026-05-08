@@ -4,6 +4,7 @@ import type { ResearchYaml } from '../intake/schema.js';
 import type { Claim } from '../claims/schema.js';
 import type { ClaimReview } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
+import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
 
 import type {
@@ -24,6 +25,7 @@ export interface DeriveInput {
       candidateClaims: Claim[];
       claimReviews: ClaimReview[];
       contradictions: Contradiction[];
+      resolutions?: ContradictionResolution[];
     }
   >;
   indexStatus: IndexStatus;
@@ -81,6 +83,13 @@ function latestDecisionByClaim(reviews: ClaimReview[]): Map<string, ClaimReview>
   return map;
 }
 
+function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<string, string> {
+  const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+  const map = new Map<string, string>();
+  for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
+}
+
 function buildSectionState(args: {
   sectionId: string;
   research: ResearchYaml;
@@ -88,8 +97,9 @@ function buildSectionState(args: {
   candidateClaims: Claim[];
   claimReviews: ClaimReview[];
   contradictions: Contradiction[];
+  resolutions?: ContradictionResolution[];
 }): SectionState {
-  const { sectionId, research, gate, candidateClaims, claimReviews, contradictions } = args;
+  const { sectionId, research, gate, candidateClaims, claimReviews, contradictions, resolutions = [] } = args;
   const sectionMeta = research.sections.find((s) => s.id === sectionId);
   const purpose = sectionMeta?.purpose ?? '';
   const status = sectionMeta?.status ?? 'unknown';
@@ -107,7 +117,11 @@ function buildSectionState(args: {
     else repair.push(c.claim_id);
   }
 
-  const unresolved = contradictions.filter((c) => c.status === 'unresolved');
+  const effectiveStatuses = buildEffectiveStatuses(resolutions);
+  const unresolved = contradictions.filter((c) => {
+    const effective = effectiveStatuses.get(c.contradiction_id);
+    return effective !== undefined ? effective === 'unresolved' : c.status === 'unresolved';
+  });
   const blocking = unresolved.filter(
     (c) => c.severity === 'high' || c.severity === 'blocking',
   );
@@ -263,6 +277,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
       candidateClaims: data.candidateClaims,
       claimReviews: data.claimReviews,
       contradictions: data.contradictions,
+      resolutions: data.resolutions,
     });
     sections.push(state);
     acceptedAll.push(...state.accepted_claim_ids);

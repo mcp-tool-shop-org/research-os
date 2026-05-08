@@ -12,7 +12,7 @@ import {
 } from './discover/index.js';
 import { auditDensity, extract as claimExtract } from './claims/index.js';
 import { triage as runTriage } from './triage/index.js';
-import { map as contradictMap } from './contradictions/index.js';
+import { map as contradictMap, resolve as contradictResolve } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import {
   DEFAULT_PROFILE,
@@ -481,6 +481,49 @@ contradictCmd
       if (result.detectorError) {
         process.stdout.write(`\ndetector error: ${result.detectorError}\n`);
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+contradictCmd
+  .command('resolve')
+  .description('Record resolution status for contradiction candidates in a section')
+  .argument('<section>', 'Section id, e.g. "08-acceptance-suite"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--id <id>',
+    'Contradiction ID to resolve (repeatable)',
+    (v: string, prev: string[] = []) => { prev.push(v); return prev; },
+  )
+  .option('--all', 'Resolve all currently-unresolved contradictions in the section', false)
+  .requiredOption('--status <status>', 'Resolution status: resolved, preserved, or rejected')
+  .requiredOption('--reason <text>', 'Reason for this resolution (min 4 chars)')
+  .option('--by <identifier>', 'Who resolved it (recorded in ledger)', 'operator')
+  .action(async (section: string, opts) => {
+    try {
+      if (!opts.all && (!opts.id || opts.id.length === 0)) {
+        process.stderr.write('research-os: must provide --id <id> (repeatable) or --all\n');
+        process.exit(1);
+      }
+      if (opts.status === 'unresolved') {
+        process.stderr.write('research-os: --status unresolved is the default; use resolved, preserved, or rejected\n');
+        process.exit(1);
+      }
+      const result = await contradictResolve({
+        sectionId: section,
+        packPath: opts.pack,
+        contradictionIds: opts.id,
+        all: opts.all,
+        status: opts.status,
+        reason: opts.reason,
+        resolvedBy: opts.by,
+      });
+      process.stdout.write(`contradict resolve complete\n`);
+      process.stdout.write(`  section:      ${result.sectionId}\n`);
+      process.stdout.write(`  applied:      ${result.applied}\n`);
+      process.stdout.write(`  skipped:      ${result.skipped}\n`);
+      process.stdout.write(`  ledger:       ${result.ledgerPath}\n`);
     } catch (err) {
       reportError(err);
     }
