@@ -2,6 +2,7 @@ import type { ResearchYaml } from '../intake/schema.js';
 import type { Claim } from '../claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
+import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 import type { CoworkHandoffPayload } from '../cowork/schema.js';
@@ -34,6 +35,7 @@ export interface AggregateInput {
       candidateClaims: Claim[];
       claimReviews: ClaimReview[];
       contradictions: Contradiction[];
+      resolutions?: ContradictionResolution[];
       gate: SectionGateResult | null;
       findings: ReviewFinding[];
       sourceIdsForSection: string[];
@@ -75,6 +77,14 @@ function latestDecisionByClaim(reviews: ClaimReview[]): Map<string, ClaimReview>
     if (!existing || r.created_at > existing.created_at) m.set(r.claim_id, r);
   }
   return m;
+}
+
+function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<string, string> {
+  const map = new Map<string, string>();
+  if (resolutions.length === 0) return map;
+  const sorted = [...resolutions].sort((a, b) => a.resolved_at.localeCompare(b.resolved_at));
+  for (const r of sorted) map.set(r.contradiction_id, r.status);
+  return map;
 }
 
 function buildOrphanClaims(input: AggregateInput): OrphanClaimRow[] {
@@ -253,8 +263,11 @@ function buildWeakSources(input: AggregateInput): WeakSourceRow[] {
 function buildUnresolvedContradictions(input: AggregateInput): UnresolvedContradictionRow[] {
   const out: UnresolvedContradictionRow[] = [];
   for (const [sid, data] of input.perSection) {
+    const effectiveStatuses = buildEffectiveStatuses(data.resolutions ?? []);
     for (const c of data.contradictions) {
-      if (c.status !== 'unresolved') continue;
+      const eff = effectiveStatuses.get(c.contradiction_id);
+      const isUnresolved = eff !== undefined ? eff === 'unresolved' : c.status === 'unresolved';
+      if (!isUnresolved) continue;
       out.push({
         contradiction_id: c.contradiction_id,
         section_id: sid,
@@ -478,11 +491,19 @@ function buildSourceSummary(input: AggregateInput): SourceSummary {
 function buildContradictionSummary(input: AggregateInput): ContradictionSummary {
   const all: Contradiction[] = [];
   let cleanLedgers = 0;
-  for (const data of input.perSection.values()) {
+  const effectiveUnresolved: Contradiction[] = [];
+  for (const [, data] of input.perSection) {
     all.push(...data.contradictions);
     if (data.contradictions.length === 0) cleanLedgers += 1;
+    const effectiveStatuses = buildEffectiveStatuses(data.resolutions ?? []);
+    for (const c of data.contradictions) {
+      const eff = effectiveStatuses.get(c.contradiction_id);
+      if (eff !== undefined ? eff === 'unresolved' : c.status === 'unresolved') {
+        effectiveUnresolved.push(c);
+      }
+    }
   }
-  const unresolved = all.filter((c) => c.status === 'unresolved');
+  const unresolved = effectiveUnresolved;
   const blocking = unresolved.filter(
     (c) => c.severity === 'high' || c.severity === 'blocking',
   );

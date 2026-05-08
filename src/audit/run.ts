@@ -8,6 +8,10 @@ import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
 import {
+  ContradictionResolutionSchema,
+  type ContradictionResolution,
+} from '../contradictions/resolution-schema.js';
+import {
   FetchReceiptSchema,
   SourceCardSchema,
   type FetchReceipt,
@@ -154,6 +158,11 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
       (r) => ContradictionSchema.parse(r),
       warnings,
     );
+    const resolutions = await readJsonl<ContradictionResolution>(
+      join(packPath, 'sections', sid, 'contradiction-resolutions.jsonl'),
+      (r) => ContradictionResolutionSchema.parse(r),
+      warnings,
+    );
     const findings = await readJsonl<ReviewFinding>(
       join(packPath, 'audits', `${sid}-findings.jsonl`),
       (r) => ReviewFindingSchema.parse(r),
@@ -166,6 +175,7 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
       candidateClaims,
       claimReviews,
       contradictions,
+      resolutions,
       gate,
       findings,
       sourceIdsForSection,

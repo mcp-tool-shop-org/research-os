@@ -5,6 +5,7 @@ import { CoworkHandoffPayloadSchema } from '../src/cowork/schema.js';
 import type { Claim } from '../src/claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../src/review/schema.js';
 import type { Contradiction } from '../src/contradictions/schema.js';
+import type { ContradictionResolution } from '../src/contradictions/resolution-schema.js';
 import type { FetchReceipt, SourceCard } from '../src/sources/schema.js';
 import type { SectionGateResult } from '../src/gates/schema.js';
 
@@ -392,5 +393,124 @@ describe('audit.aggregate', () => {
     expect(result.payload.audit_files).toHaveLength(16);
     expect(result.payload.audit_files).toContain('audits/pack-audit.json');
     expect(result.payload.audit_files).toContain('audits/synthesis-readiness.md');
+  });
+
+  describe('contradiction-resolution ledger integration (latest-status-wins)', () => {
+    function makeContradiction(id: string, status: Contradiction['status'] = 'unresolved'): Contradiction {
+      return {
+        contradiction_id: id,
+        section_id: '01-test',
+        claim_ids: ['clm_aaaaaaaaaaaa_heuristic_1'],
+        source_ids: ['src_aaaaaaaaaaaa'],
+        type: 'direct_conflict',
+        summary: 'test contradiction',
+        scope_analysis: '',
+        overlap_assessment: 'fully_overlapping',
+        severity: 'medium',
+        confidence: 'medium',
+        detector: 'heuristic',
+        detection_method: 'heuristic_similarity_negation',
+        evidence: '',
+        status,
+        created_at: '2026-05-06T22:00:00.000Z',
+      };
+    }
+
+    function makeResolution(
+      id: string,
+      status: ContradictionResolution['status'],
+      resolvedAt = '2026-05-07T00:00:00.000Z',
+    ): ContradictionResolution {
+      return {
+        contradiction_id: id,
+        status,
+        reason: 'test resolution reason',
+        resolved_at: resolvedAt,
+        resolved_by: 'operator',
+      };
+    }
+
+    function runWithResolutions(
+      contradictions: Contradiction[],
+      resolutions: ContradictionResolution[],
+    ) {
+      return aggregate({
+        research: research(['01-test']),
+        perSection: new Map([
+          ['01-test', {
+            claims: [],
+            candidateClaims: [],
+            claimReviews: [],
+            contradictions,
+            resolutions,
+            gate: null,
+            findings: [],
+            sourceIdsForSection: [],
+          }],
+        ]),
+        sources: [],
+        receipts: [],
+        handoff: null,
+        generatedAt: '2026-05-06T22:00:00.000Z',
+        warnings: [],
+      });
+    }
+
+    it('100 raw contradictions + 100 resolved entries → 0 unresolved', () => {
+      const contradictions = Array.from({ length: 100 }, (_, i) =>
+        makeContradiction(`cnt_${String(i).padStart(12, '0')}_heuristic`),
+      );
+      const resolutions = contradictions.map((c) =>
+        makeResolution(c.contradiction_id, 'resolved'),
+      );
+      const result = runWithResolutions(contradictions, resolutions);
+      expect(result.unresolvedContradictions).toHaveLength(0);
+      expect(result.payload.contradiction_summary.unresolved).toBe(0);
+    });
+
+    it('100 raw + 50 resolved + 50 preserved → 0 unresolved', () => {
+      const contradictions = Array.from({ length: 100 }, (_, i) =>
+        makeContradiction(`cnt_${String(i).padStart(12, '0')}_heuristic`),
+      );
+      const resolutions = contradictions.map((c, i) =>
+        makeResolution(c.contradiction_id, i < 50 ? 'resolved' : 'preserved'),
+      );
+      const result = runWithResolutions(contradictions, resolutions);
+      expect(result.unresolvedContradictions).toHaveLength(0);
+      expect(result.payload.contradiction_summary.unresolved).toBe(0);
+    });
+
+    it('100 raw + 99 resolved + 1 without resolution entry → 1 unresolved', () => {
+      const contradictions = Array.from({ length: 100 }, (_, i) =>
+        makeContradiction(`cnt_${String(i).padStart(12, '0')}_heuristic`),
+      );
+      // resolve all except the last one
+      const resolutions = contradictions.slice(0, 99).map((c) =>
+        makeResolution(c.contradiction_id, 'resolved'),
+      );
+      const result = runWithResolutions(contradictions, resolutions);
+      expect(result.unresolvedContradictions).toHaveLength(1);
+      expect(result.payload.contradiction_summary.unresolved).toBe(1);
+    });
+
+    it('100 raw + 0 resolution entries → 100 unresolved (default-unresolved holds)', () => {
+      const contradictions = Array.from({ length: 100 }, (_, i) =>
+        makeContradiction(`cnt_${String(i).padStart(12, '0')}_heuristic`),
+      );
+      const result = runWithResolutions(contradictions, []);
+      expect(result.unresolvedContradictions).toHaveLength(100);
+      expect(result.payload.contradiction_summary.unresolved).toBe(100);
+    });
+
+    it('latest-wins: resolved then later entry sets it back to unresolved → 1 unresolved', () => {
+      const contradiction = makeContradiction('cnt_aaaaaaaaaaaa_heuristic');
+      const resolutions: ContradictionResolution[] = [
+        makeResolution('cnt_aaaaaaaaaaaa_heuristic', 'resolved', '2026-05-07T10:00:00.000Z'),
+        makeResolution('cnt_aaaaaaaaaaaa_heuristic', 'unresolved', '2026-05-07T11:00:00.000Z'),
+      ];
+      const result = runWithResolutions([contradiction], resolutions);
+      expect(result.unresolvedContradictions).toHaveLength(1);
+      expect(result.payload.contradiction_summary.unresolved).toBe(1);
+    });
   });
 });
