@@ -8,48 +8,50 @@ Local-first research control plane for gated source packs, claim truth, contradi
 
 It is not a report generator. It is the operating environment for grounded research.
 
-## The load-bearing laws
+## The 16 load-bearing laws
 
-> **1. No synthesis before source truth.**
->
-> **2. Fetch is evidence; extraction is interpretation.**
->
-> **3. Models may interpret source spans; they may not author evidence spans.**
->
-> **4. Extraction may overproduce; synthesis may not inherit abundance.**
+| # | Law |
+|---|-----|
+| 1 | No synthesis before source truth. |
+| 2 | Fetch is evidence; extraction is interpretation. |
+| 3 | Models may interpret source spans; they may not author evidence spans. |
+| 4 | Extraction may overproduce; synthesis may not inherit abundance. |
+| 5 | Contradiction mapping surfaces tension; it does not resolve, synthesize, or decide which claim wins. |
+| 6 | Gates decide whether a section is eligible for synthesis. They do not synthesize or hide failure. |
+| 7 | Adversarial review judges research integrity. It does not synthesize or rewrite source truth. |
+| 8 | Indexing makes research truth queryable. It does not create new truth or become the source of record. |
+| 9 | Cowork handoff renders operational instructions from research truth. It does not create truth or bypass gates. |
+| 10 | Synthesis workspace organizes accepted research truth for Cowork. It does not create synthesis or bypass handoff mode. |
+| 11 | Pack audit aggregates existing research truth. It does not create new truth or hide section-level evidence. |
+| 12 | Discovery proposes leads; only fetch produces evidence. |
+| 13 | A reviewer is not trusted until seeded failures prove recall. |
+| 14 | Claim abundance is not research quality. Claims must be triaged before they can compete for synthesis. |
+| 15 | Freeze locks completed research truth. It does not complete unfinished research or convert repair state into evidence. |
+| 16 | Waivers relax source constraints; they cannot manufacture evidence. |
 
-Law #4 means: between extraction and review there is a formal triage pass (`research-os claim triage`) that deduplicates, caps per-source contribution, and parks low-leverage candidates. Triage does NOT mutate `claims.jsonl` — parked claims remain on the canonical ledger as research truth, simply excluded from the next review pass via an append-only triage ledger. The reviewer keeps its job (interpretive judgement); triage absorbs the garbage-compaction load that paged extraction can produce.
+**Law 3** — the LLM never authors evidence text. research-os builds a deterministic excerpt ledger (stable IDs like `ex_<source_id_hex>_001`); the LLM picks excerpt IDs; research-os copies the literal text. The "paraphrase-as-quote" failure class is structurally impossible.
 
-Law #3 means: when a claim cites source text, the LLM never authors that text. research-os builds a deterministic excerpt ledger from each source (paragraph + sentence chunking, stable IDs like `ex_<source_id_hex>_001`), the LLM picks excerpt IDs from that ledger, and research-os copies the literal text into the claim's `evidence_excerpt`. This eliminates the entire "paraphrase-as-quote" failure class — the model can't author quotes it can't actually source.
+**Law 14** — between extraction and review, `research-os claim triage` deduplicates, caps per-source contribution, and parks low-leverage candidates. Triage does NOT mutate `claims.jsonl`; parked claims remain on the canonical ledger.
 
-The umbrella term "hallucination" is replaced by six precise rejection categories — three at extraction time (mechanical) and three at review time (interpretive):
-
-| When | Category | Meaning |
-|------|----------|---------|
-| extract | `excerpt_id_missing` | LLM picked an excerpt ID that isn't in the ledger |
-| extract | `excerpt_id_malformed` | LLM returned a string that isn't a valid excerpt ID |
-| extract | `extractor_invalid_json` | LLM didn't return parseable JSON |
-| review | `unsupported_claim` | Claim isn't justified by its chosen excerpt(s) |
-| review | `scope_missing` | Claim may be true but its scope is absent |
-| review | `scope_widening` | Claim was promoted beyond the source's scope |
-
-The lifecycle:
+## The v0.1 workflow chain
 
 ```
-intake
-→ section plan
-→ source gather
-→ source-card validation
-→ claim extraction
-→ claim gate
-→ contradiction gate
-→ section brief
-→ adversarial review
-→ repo-knowledge index
+discover
+→ gather
+→ claim extract
+→ claim triage
+→ contradict map
+→ gate
+→ review
+→ review-promote
+→ index
 → cowork handoff
-→ cross-section synthesis
+→ synth workspace
+→ audit
 → freeze
 ```
+
+Each step is a CLI command. Each step writes to append-only artifacts. No step synthesizes, resolves, or creates new truth — those invariants are enforced, not trusted. See [docs/dogfood-proof.md](docs/dogfood-proof.md) for the v0.1 proof that the chain holds end-to-end.
 
 Most "deep research" tools collapse this to *search → summarize → pretty report*. `research-os` refuses to.
 
