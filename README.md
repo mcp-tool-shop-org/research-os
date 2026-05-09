@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.1.1"><img src="https://img.shields.io/badge/version-0.1.1-blue" alt="version 0.1.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/version-0.2.0-blue" alt="version 0.2.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -76,6 +76,10 @@ research-os index build --all
 research-os cowork handoff
 research-os synth workspace   # only if handoff returned synthesis_ready
 research-os freeze
+
+# Export to the research-packs archive
+research-os pack publish \
+  --to <research-packs>/packages/<name>
 ```
 
 **For a real worked example**, see the dogfood pack at `research-os-packs/research-os-spec/` — every artifact, every receipt, every disposition, every freeze fingerprint, all on disk in append-only ledgers. That pack is what produced `docs/dogfood-proof.md`.
@@ -147,18 +151,19 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ## Status
 
-**v0.1.1** — published to npm as `@mcptoolshop/research-os@0.1.1`, 2026-05-08. Documentation and release-alignment patch; all production source and tests are identical to v0.1.0. 463/463 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
+**v0.2.0** — published to npm as `@mcptoolshop/research-os@0.2.0`, 2026-05-09. Ships `research-os pack publish` (Experiment 2) and the Pattern 2 readiness predicate fix. 515/515 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
+
+**`research-os pack publish`** — Frozen packs export to the canonical `research-packs` archive with a single command. Derives `pack.manifest.json`, generates `README.md`, provisions `docs/how-to-read-this.md`, verifies the admission contract. See [`docs/pack-publish.md`](docs/pack-publish.md). Dogfood: both existing packages re-derived and `verify-pack.mjs` PASS — see [`docs/pack-publish-dogfood.md`](docs/pack-publish-dogfood.md).
 
 **v0.1.0** — dogfood pack frozen 2026-05-08. The pack at `research-os-packs/research-os-spec/` (sibling repo) reached freeze with 296 accepted claims across 8 sections, 17 dispositioned, 30 operator-overridden, 0 active repair blockers, 0 unresolved contradictions, all gates `synthesis_eligible=true`. Sixteen load-bearing laws cumulative. See [`docs/dogfood-proof.md`](docs/dogfood-proof.md) for the seven findings and freeze receipt fingerprints.
 
-**research-packs archive monorepo** — planned. Bootstraps at v1 Experiment 1 closeout with two day-one packages: the ComfyUI workflow durability pack (current arc) and the v0.1 self-dogfood pack (backfill). Layout, per-package admission contract, and `pack.manifest.json` schema are specified in [`docs/roadmap.md`](docs/roadmap.md). The monorepo will live at `mcp-tool-shop-org/research-packs`; no public artifacts ship until the repo is created and both packages meet the admission contract.
+**research-packs archive monorepo** — live at [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) with two day-one packages. `comfyui-workflow-durability` (Experiment 1, 302 accepted claims, 8 sections) and `research-os-self-dogfood` (v0.1 dogfood backfill, 296 accepted claims, 8 sections). Both packages PASS `verify-pack.mjs`.
 
-**v1 Experiment 1 (ComfyUI workflow durability)** — section phase closed 2026-05-09. All 8 sections at Terminal A, pack synthesis-ready, freeze pending. The arc accumulated operational depth across ten sessions: prefer operator-staged URLs over LLM discovery for code-repository topics; use the GitHub Search API (`/search/issues?q=...`) rather than the issues endpoint with a `q=` parameter (silently ignored by the API); force heuristic contradiction detection on narrow-topic sections where the ollama-intern detector stalls on high token-overlap; treat `llms.txt` aggregate sources as expected to trigger source-dominance capping and rely on the triage layer to cap them; verify text-content (not just HTTP 200) for community-distribution sources where JS-rendered shells, paywalls, and stale URLs are common. The community-source-accessibility finding is the strongest Experiment 1 result: the v0.1 fetch-then-extract chain fails at the community-distribution tier of the ecosystem — precisely the tier where workflow-sharing instability manifests. No public artifacts ship until synthesis is citation-clean, `research-os freeze` succeeds, and the pack is admitted to the planned `research-packs` monorepo.
+**v1 Experiment 1 (ComfyUI workflow durability)** — CLOSED 2026-05-09. All 8 sections at Terminal A, pack frozen, archive live. See [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### What v0.1 is not
+### What v0.2 is not
 
 - Not battle-tested by external users. Two dogfood arcs have run — one self-referential, one external-domain. External user pressure is Experiment 3 (API stability) in the v1.0 roadmap.
-- Not archived publicly yet. Frozen packs live on disk; `mcp-tool-shop-org/research-packs` is the planned public archive.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
 - Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the six experiments that close the gap.
 

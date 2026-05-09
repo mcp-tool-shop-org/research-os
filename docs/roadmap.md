@@ -36,7 +36,7 @@ Partial publication is forbidden. None of the three ships until all of: 8/8 sect
 
 ## 2. `research-os pack publish` — automate the canonical archive
 
-**Status: IMPLEMENTED 2026-05-09 — ships in v0.2.0 alongside Pattern 2 fix**
+**Status: CLOSED 2026-05-09 — shipped in v0.2.0.** Implementation at commit `558c42a`. Documentation: [`docs/pack-publish.md`](pack-publish.md). Dogfood receipt: [`docs/pack-publish-dogfood.md`](pack-publish-dogfood.md).
 
 **The question.** Experiment 1 produces the `research-packs` monorepo by hand. What does the manual closeout teach us about the right shape for `research-os pack publish` — a first-class command that exports any frozen pack into the canonical monorepo format?
 

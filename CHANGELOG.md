@@ -2,6 +2,80 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.2.0] — 2026-05-09
+
+Tight release. Two real, tested, dogfooded improvements: `research-os pack publish`
+(Experiment 2) and the Pattern 2 readiness predicate fix (Session 11 escalation).
+No other v0.2 candidates shipped — remaining 7 items (large-page chunker, JSON-aware
+excerpt chunker, publisher derivation, model-fallback warnings, contradict detector
+strategy, GitHub source guidance, llms.txt guard) are deferred to v0.3/v0.x.
+
+### Added
+
+- **`research-os pack publish`** — exports a frozen pack into the canonical
+  [`research-packs`](https://github.com/mcp-tool-shop-org/research-packs) archive format.
+  CLI: `research-os pack publish --to <path> [--from <path>] [--operator-notes <text>] [--force] [--dry-run]`.
+  Exit 0 on PASS, 2 on refusal. Derives `pack.manifest.json` from pack artifacts,
+  generates `README.md` from `synthesis/final-report.md`, provisions `docs/how-to-read-this.md`
+  scaffold, verifies the admission contract (5 required files, sha256 receipt reproduction,
+  all fingerprinted artifacts). See [`docs/pack-publish.md`](docs/pack-publish.md).
+
+- **48 new tests** under `test/pack-publish/` covering all 8 minimum-scope behaviors
+  (copy, manifest derivation, sha256 verification, accepted-claims derivation,
+  preserved-contradiction-records derivation, README generation, how-to-read scaffold,
+  inline verify-pack) plus refusal cases (missing receipt, missing synthesis,
+  freeze-refusal present, non-empty target without --force, tampered artifacts).
+
+- **`docs/pack-publish.md`** — full CLI reference: flags, refusal cases, produced layout,
+  what the command does NOT do, typical operator workflow.
+
+- **`docs/pack-publish-dogfood.md`** — dogfood receipt: both existing `research-packs`
+  packages re-derived via `pack publish` and verified by `research-packs/scripts/verify-pack.mjs`.
+  `comfyui-workflow-durability` PASS (302 claims, 124 artifacts); `research-os-self-dogfood`
+  PASS (296 claims, 131 artifacts).
+
+- **Handbook page** at `/handbook/pack-publish` — condensed reference with flags, refusal
+  cases, typical workflow, and links to the full reference doc and dogfood receipt.
+
+### Changed
+
+- **Pattern 2 readiness predicate enforcement completed** (commit `22b5dba`).
+  `src/cowork/derive.ts:determineMode` and `src/audit/aggregate.ts:buildReadinessSummary`
+  now use `active_blockers.length === 0` semantics instead of `repair_claim_ids.length === 0`
+  and `repair_claims === 0`. Under Pattern 2, `needs_scope_repair`, `needs_source_repair`,
+  and `needs_human_review` decisions are settled state (review ran, gate passed with
+  sufficient accepted claims) — they are not active blockers.
+
+  **Behavioral change:** packs that previously returned `audit: repair_required` or
+  `handoff: repair_required` solely because claims carry intermediate reviewer decisions
+  (not because any active gate blocker remains) now correctly return
+  `audit: ready_for_synthesis` / `handoff: synthesis_ready`. The `active_blockers` field
+  is now the authoritative readiness signal; it was already correctly computed but was
+  not wired into the verdict in v0.1.
+
+  The v0.1 dogfood pack (`research-os-self-dogfood`) is regression-clean under the new
+  predicate — it used the heuristic reviewer (only `accepted_for_synthesis` and `rejected`
+  decisions), so `repair_claim_ids.length === 0` was equivalent to `active_blockers.length === 0`
+  by coincidence. That coincidence is gone; the intent is now enforced directly.
+
+### Documentation
+
+- README status block updated to v0.2.0; `pack publish` mentioned in the workflow chain.
+- `docs/roadmap.md` Experiment 2 entry updated: `IMPLEMENTED → CLOSED 2026-05-09`.
+- `SHIP_GATE.md` D2 updated: version bump + tag for v0.2.0.
+
+### Tests
+
+- **515 total** (467 at v0.1.1 → 515 at v0.2.0, +48 from `test/pack-publish/`).
+
+### Migration notes
+
+No migration required for existing v0.1.x packs. The Pattern 2 predicate change is
+forward-only: if your pack previously returned `repair_required` and the verdict was
+wrong (all active gate blockers were already resolved), re-running `research-os audit`
+or `research-os cowork handoff` after upgrading to v0.2.0 will return the correct
+`ready_for_synthesis` / `synthesis_ready` verdict. Existing freeze receipts remain valid.
+
 ## [0.1.1] — 2026-05-08
 
 Documentation and release-alignment patch. No code or behavior changes — all production source and tests are identical to v0.1.0 (463 vitest cases, all passing).
