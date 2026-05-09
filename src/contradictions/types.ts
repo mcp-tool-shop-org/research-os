@@ -1,5 +1,7 @@
 import type { Claim } from '../claims/schema.js';
 
+export type DetectorMode = 'auto' | 'heuristic' | 'ollama-intern';
+
 export type ContradictionType =
   | 'direct_conflict'
   | 'scope_conflict'
@@ -54,6 +56,14 @@ export interface MapOptions {
   sectionId: string;
   packPath?: string;
   detectors?: ContradictionDetector[];
+  // Controls which detector is used. 'auto' (default) preserves existing
+  // env-var-driven behavior. 'heuristic' bypasses Ollama entirely.
+  // 'ollama-intern' requires LLM — exits visibly if the model is unavailable.
+  detectorMode?: DetectorMode;
+  // Optional Ollama config (host, model, fetchImpl) injected into the
+  // OllamaInternContradictionDetector when detectorMode is 'ollama-intern'
+  // or 'auto'. Primarily used in tests to mock the Ollama client.
+  ollamaConfig?: { host?: string; model?: string; timeoutMs?: number; fetchImpl?: typeof fetch };
   // When true, only claims with a triage decision of selected_for_review
   // are passed to the detector. Reduces N² pair classification on dense
   // sections from intractable to manageable.
@@ -70,4 +80,6 @@ export interface MapSummary {
   contradictionsDeduped: number;
   contradictionIds: string[];
   detectorError: string | null;
+  // Emitted at run-start by the CLI. Encodes which detector ran and why.
+  detectorAnnouncement: string;
 }

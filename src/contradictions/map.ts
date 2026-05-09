@@ -7,11 +7,13 @@ import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from './schema.js';
 import {
-  defaultContradictionDetectors,
   pickContradictionDetector,
 } from './detectors/index.js';
+import { HeuristicContradictionDetector } from './detectors/heuristic.js';
+import { OllamaInternContradictionDetector } from './detectors/ollama-intern.js';
 import { renderMarkdownView } from './markdown.js';
 import type {
+  ContradictionDetector,
   ContradictionDetectorName,
   MapOptions,
   MapSummary,
@@ -96,6 +98,66 @@ function buildContradiction(args: {
   });
 }
 
+const VALID_DETECTOR_MODES = ['auto', 'heuristic', 'ollama-intern'] as const;
+
+async function resolveDetector(options: MapOptions): Promise<{
+  detector: ContradictionDetector;
+  announcement: string;
+}> {
+  const mode = options.detectorMode ?? 'auto';
+
+  if (!VALID_DETECTOR_MODES.includes(mode as (typeof VALID_DETECTOR_MODES)[number])) {
+    throw new Error(
+      `contradict map: invalid --detector value "${mode}"; valid values are: auto, heuristic, ollama-intern`,
+    );
+  }
+
+  if (mode === 'heuristic') {
+    return {
+      detector: new HeuristicContradictionDetector(),
+      announcement: 'contradict map: using heuristic detector',
+    };
+  }
+
+  if (mode === 'ollama-intern') {
+    const d = new OllamaInternContradictionDetector(options.ollamaConfig ?? {});
+    if (!(await d.available())) {
+      throw new Error(
+        `contradict map: ollama-intern detector requested but model ${d.model} is unavailable; aborting (use --detector heuristic to bypass)`,
+      );
+    }
+    return {
+      detector: d,
+      announcement: `contradict map: using ollama-intern detector with model ${d.model}`,
+    };
+  }
+
+  // auto mode — preserve existing env-var-driven behavior; announce which path ran
+  const detectors =
+    options.detectors ??
+    [
+      new OllamaInternContradictionDetector(options.ollamaConfig ?? {}),
+      new HeuristicContradictionDetector(),
+    ];
+  const detector = await pickContradictionDetector(detectors);
+
+  if (detector.name === 'ollama-intern') {
+    const modelName =
+      detector instanceof OllamaInternContradictionDetector
+        ? detector.model
+        : (process.env.OLLAMA_INTERN_MODEL ?? 'hermes3:8b');
+    return {
+      detector,
+      announcement: `contradict map: using ollama-intern detector with model ${modelName}`,
+    };
+  }
+
+  return {
+    detector,
+    announcement: 'contradict map: ollama-intern unavailable; using heuristic detector',
+  };
+}
+
 export async function map(options: MapOptions): Promise<MapSummary> {
   const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
   if (!existsSync(join(packPath, 'research.yaml'))) throw new PackNotFoundError(packPath);
@@ -108,8 +170,7 @@ export async function map(options: MapOptions): Promise<MapSummary> {
     const allowed = await readTriagedClaimIds(packPath, options.sectionId);
     candidateClaims = candidateClaims.filter((c) => allowed.has(c.claim_id));
   }
-  const adapters = options.detectors ?? defaultContradictionDetectors();
-  const detector = await pickContradictionDetector(adapters);
+  const { detector, announcement } = await resolveDetector(options);
 
   const summary: MapSummary = {
     sectionId: options.sectionId,
@@ -121,6 +182,7 @@ export async function map(options: MapOptions): Promise<MapSummary> {
     contradictionsDeduped: 0,
     contradictionIds: [],
     detectorError: null,
+    detectorAnnouncement: announcement,
   };
 
   const ledgerPath = join(sectionDir, 'contradictions.jsonl');

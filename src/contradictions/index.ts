@@ -33,6 +33,7 @@ export type {
   ContradictionType,
   Severity,
   ContradictionDetectorName,
+  DetectorMode,
   OverlapAssessment,
   ContradictionStatus,
   DraftContradiction,

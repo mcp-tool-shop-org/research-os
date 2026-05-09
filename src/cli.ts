@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
 import { reportSection } from './section_report/index.js';
@@ -465,13 +465,23 @@ contradictCmd
     'Only consider claims that triage selected_for_review; reduces N² pair classification on dense sections',
     false,
   )
+  .addOption(
+    new Option(
+      '--detector <mode>',
+      'Detector to use: auto (default, env-var-driven), heuristic (always fast, no LLM), ollama-intern (require LLM, fail visibly if unavailable)',
+    )
+      .choices(['auto', 'heuristic', 'ollama-intern'])
+      .default('auto'),
+  )
   .action(async (section: string, opts) => {
     try {
       const result = await contradictMap({
         sectionId: section,
         packPath: opts.pack,
         triagedOnly: opts.triagedOnly,
+        detectorMode: opts.detector,
       });
+      process.stdout.write(`${result.detectorAnnouncement}\n`);
       process.stdout.write(`contradiction map complete\n`);
       process.stdout.write(`  section:                 ${result.sectionId}\n`);
       process.stdout.write(`  detector:                ${result.detector}\n`);

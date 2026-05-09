@@ -82,7 +82,7 @@ export interface OllamaContradictionConfig {
 export class OllamaInternContradictionDetector implements ContradictionDetector {
   readonly name = 'ollama-intern' as const;
   private readonly host: string;
-  private readonly model: string;
+  readonly model: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
