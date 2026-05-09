@@ -36,6 +36,8 @@ Partial publication is forbidden. None of the three ships until all of: 8/8 sect
 
 ## 2. `research-os pack publish` — automate the canonical archive
 
+**Status: IMPLEMENTED 2026-05-09 — ships in v0.2.0 alongside Pattern 2 fix**
+
 **The question.** Experiment 1 produces the `research-packs` monorepo by hand. What does the manual closeout teach us about the right shape for `research-os pack publish` — a first-class command that exports any frozen pack into the canonical monorepo format?
 
 **Done looks like.** A frozen pack on disk can be published into a local `research-packs` checkout with a single command:
@@ -49,6 +51,8 @@ The command copies the frozen pack into the package layout, generates `pack.mani
 **Likely shape.** Experiment 1's manual closeout reveals the contract. Implementation is a new CLI subcommand that wraps file copy, manifest generation, and receipt-verification. Tests cover: refusal on missing freeze receipt, refusal on missing synthesis, manifest-generation determinism, receipt-fingerprint preservation across copy. The schema for `pack.manifest.json` is fixed during this experiment. The monorepo's admission contract becomes machine-enforced.
 
 **Why it matters.** Until publication is automated, every external-domain pack carries a session-shaped publication tax and the admission contract is enforced by checklist discipline rather than code. Experiment 1 proves the chain generalizes; Experiment 2 proves the closeout generalizes. Without it, the monorepo grows by hand-edits and ages by drift. With it, `research-packs` has a first-class write path and the admission contract becomes a runtime guarantee.
+
+**What shipped.** `src/pack/publish/` (7 modules: schema, types, copy, manifest, readme, how-to-read, verify, index). CLI: `research-os pack publish --to <path> [--from <path>] [--operator-notes <text>] [--force] [--dry-run]`. 48 new tests (515 total). Dogfood: both existing `research-packs` packages republished via CLI; `verify-pack.mjs` returns PASS for both.
 
 ---
 

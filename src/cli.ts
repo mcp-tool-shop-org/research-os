@@ -32,6 +32,7 @@ import { workspace as synthWorkspace } from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
 import { invalidateExtraction, invalidateReview } from './invalidate/index.js';
+import { publish as packPublish } from './pack/publish/index.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -1093,6 +1094,59 @@ program
       process.stdout.write(`  promoted_reviewer: ${result.promoted_reviewer}\n`);
       process.stdout.write(`  status bumped:     ${result.section_status_bumped}\n`);
       process.stdout.write(`  canonical files updated: ${result.canonical_files_updated.length}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const packCmd = program
+  .command('pack')
+  .description('Pack-level publication and archive operations');
+
+packCmd
+  .command('publish')
+  .description(
+    'Export a frozen pack into the research-packs archive format. ' +
+      'Copies the pack, derives pack.manifest.json, generates README.md, ' +
+      'provisions docs/how-to-read-this.md, and verifies the admission contract.',
+  )
+  .requiredOption('--to <path>', 'Target package directory, e.g. <research-packs>/packages/<name>')
+  .option('--from <path>', 'Source frozen pack directory (defaults to cwd)', process.cwd())
+  .option('--operator-notes <text>', 'Operator notes recorded in pack.manifest.json', '')
+  .option('--force', 'Overwrite an existing non-empty target directory', false)
+  .option('--dry-run', 'Print derived manifest and README plan; write nothing', false)
+  .action(async (opts) => {
+    try {
+      const result = await packPublish({
+        fromDir: opts.from as string,
+        toDir: opts.to as string,
+        operatorNotes: opts.operatorNotes as string,
+        force: Boolean(opts.force),
+        dryRun: Boolean(opts.dryRun),
+      });
+      if (result.dryRun) {
+        process.stdout.write(`pack publish: DRY-RUN — no files written\n`);
+        process.stdout.write(`  package name:  ${result.packageName}\n`);
+        if (result.dryRunManifest) {
+          const m = result.dryRunManifest;
+          process.stdout.write(`  topic:         ${m.topic.slice(0, 80)}\n`);
+          process.stdout.write(`  frozen_at:     ${m.frozen_at}\n`);
+          process.stdout.write(`  sections:      ${m.totals.sections}\n`);
+          process.stdout.write(`  accepted:      ${m.totals.accepted_claims}\n`);
+          process.stdout.write(`  receipt sha256:${m.freeze_receipt_sha256.slice(0, 16)}…\n`);
+        }
+        return;
+      }
+      process.stdout.write(`pack publish: DONE\n`);
+      process.stdout.write(`  package name:  ${result.packageName}\n`);
+      process.stdout.write(`  files written: ${result.filesWritten.length}\n`);
+      for (const f of result.filesWritten) process.stdout.write(`    ${f}\n`);
+      process.stdout.write(`  verify:        ${result.verifyPassed ? 'PASS' : 'FAIL'}\n`);
+      if (result.warnings.length > 0) {
+        process.stdout.write(`\nwarnings:\n`);
+        for (const w of result.warnings) process.stdout.write(`  - ${w}\n`);
+      }
+      if (!result.verifyPassed) process.exitCode = 2;
     } catch (err) {
       reportError(err);
     }
