@@ -24,7 +24,63 @@ Local-first CLI that turns an open-ended topic into a gated **research-pack** �
 
 It is not a report generator. It is not an LLM-orchestration framework. It does not write your synthesis for you. It enforces the conditions under which synthesis can begin.
 
-**v0.1 has been used exactly once: by itself, on itself.** That single use found seven correctness gaps in `research-os`, each fixed before this release. The proof trail — seven sessions, two integration patterns earned, 463 vitest cases, one frozen pack — lives in [`docs/dogfood-proof.md`](docs/dogfood-proof.md). Live handbook: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+Frozen packs are archived in the planned `research-packs` monorepo (`mcp-tool-shop-org/research-packs`), a public monorepo where every package is a freeze-receipt-verifiable research artifact. The first packages will land at v1 Experiment 1 closeout, as specified in [`docs/roadmap.md`](docs/roadmap.md).
+
+v0.1 has been pressure-tested in two dogfood arcs. The first — research-os researching its own spec — found seven correctness gaps before the v0.1.0 release, each requiring a real code fix and earning a law or integration pattern. The second (v1 Experiment 1: ComfyUI workflow durability, currently 6 of 8 sections at Terminal A) is yielding operating-mode findings on a domain that shares no vocabulary with research-os itself. The v0.1 proof trail — seven sessions, two integration patterns earned, 463 vitest cases, one frozen pack — lives in [`docs/dogfood-proof.md`](docs/dogfood-proof.md). Live handbook: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+
+## Install
+
+**Requirements:** Node.js ≥ 20.
+
+```bash
+npm install -g @mcptoolshop/research-os
+```
+
+For contributors building from source:
+
+```bash
+git clone https://github.com/mcp-tool-shop-org/research-os.git
+cd research-os
+npm install
+npm run build
+npm link
+```
+
+## Quick start
+
+```bash
+# Create a new research-pack
+research-os init "How should X be structured?"
+
+# Add a section
+research-os section add 01-landscape --purpose "Map the current landscape"
+
+# Discover and approve sources, then gather
+research-os discover run 01-landscape
+research-os discover approve 01-landscape --top 8
+research-os gather 01-landscape --approved
+
+# Run the per-section chain
+research-os claim extract 01-landscape
+research-os claim audit-density 01-landscape
+research-os claim triage 01-landscape
+research-os contradict map 01-landscape --triaged-only
+research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
+research-os review-promote 01-landscape --profile hermes-two-pass
+research-os gate 01-landscape
+research-os section report 01-landscape
+
+# Pack-level finish
+research-os audit
+research-os index build --all
+research-os cowork handoff
+research-os synth workspace   # only if handoff returned synthesis_ready
+research-os freeze
+```
+
+**For a real worked example**, see the dogfood pack at `research-os-packs/research-os-spec/` — every artifact, every receipt, every disposition, every freeze fingerprint, all on disk in append-only ledgers. That pack is what produced `docs/dogfood-proof.md`.
+
+**Requires [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. Default model is `hermes3:8b`; override with `OLLAMA_INTERN_MODEL=<model>`. Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
 
 ## The 16 load-bearing laws
 
@@ -76,55 +132,6 @@ Each step is a CLI command. Each step writes to append-only artifacts. No step s
 
 This is the structural alternative to *search → summarize → pretty report*. The chain is the product.
 
-## Install
-
-**Requirements:** Node.js ≥ 20.
-
-```bash
-# From source (v0.1.0 is not yet published to npm)
-git clone https://github.com/mcp-tool-shop-org/research-os.git
-cd research-os
-npm install
-npm run build
-npm link   # makes `research-os` available on your PATH
-```
-
-## Quick start
-
-```bash
-# Create a new research-pack
-research-os init "How should X be structured?"
-
-# Add a section
-research-os section add 01-landscape --purpose "Map the current landscape"
-
-# Discover and approve sources, then gather
-research-os discover run 01-landscape
-research-os discover approve 01-landscape --top 8
-research-os gather 01-landscape --approved
-
-# Run the per-section chain
-research-os claim extract 01-landscape
-research-os claim audit-density 01-landscape
-research-os claim triage 01-landscape
-research-os contradict map 01-landscape --triaged-only
-research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
-research-os review-promote 01-landscape --profile hermes-two-pass
-research-os gate 01-landscape
-research-os section report 01-landscape
-
-# Pack-level finish
-research-os audit
-research-os index build --all
-research-os cowork handoff
-research-os synth workspace   # only if handoff returned synthesis_ready
-research-os freeze
-```
-
-**For a real worked example**, see the dogfood pack at `research-os-packs/research-os-spec/` — every artifact, every receipt, every disposition, every freeze fingerprint, all on disk in append-only ledgers. That pack is what produced `docs/dogfood-proof.md`.
-
-**Requires [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. Default model is `hermes3:8b`; override with `OLLAMA_INTERN_MODEL=<model>`. Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
-
 ## Vocabulary
 
 | Term | Meaning |
@@ -140,24 +147,30 @@ research-os freeze
 
 ## Status
 
-**v0.1.0** — frozen 2026-05-08. The dogfood pack at `research-os-packs/research-os-spec/` (sibling repo) reached freeze with 296 accepted claims across 8 sections, 17 dispositioned, 30 operator-overridden, 0 active repair blockers, 0 unresolved contradictions, all gates `synthesis_eligible=true`. 463/463 vitest passing. Sixteen load-bearing laws cumulative. See [`docs/dogfood-proof.md`](docs/dogfood-proof.md) for the seven findings and the freeze receipt fingerprints.
+**v0.1.1** — published to npm as `@mcptoolshop/research-os@0.1.1`, 2026-05-08. Documentation and release-alignment patch; all production source and tests are identical to v0.1.0. 463/463 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
+
+**v0.1.0** — dogfood pack frozen 2026-05-08. The pack at `research-os-packs/research-os-spec/` (sibling repo) reached freeze with 296 accepted claims across 8 sections, 17 dispositioned, 30 operator-overridden, 0 active repair blockers, 0 unresolved contradictions, all gates `synthesis_eligible=true`. Sixteen load-bearing laws cumulative. See [`docs/dogfood-proof.md`](docs/dogfood-proof.md) for the seven findings and freeze receipt fingerprints.
+
+**research-packs archive monorepo** — planned. Bootstraps at v1 Experiment 1 closeout with two day-one packages: the ComfyUI workflow durability pack (current arc) and the v0.1 self-dogfood pack (backfill). Layout, per-package admission contract, and `pack.manifest.json` schema are specified in [`docs/roadmap.md`](docs/roadmap.md). The monorepo will live at `mcp-tool-shop-org/research-packs`; no public artifacts ship until the repo is created and both packages meet the admission contract.
+
+**v1 Experiment 1 (ComfyUI workflow durability)** — in progress. 6 of 8 sections at Terminal A as of the last recorded session; sections 04 and 05 remain. The arc has accumulated operational depth: prefer operator-staged URLs over LLM discovery for code-repository topics; use the GitHub Search API (`/search/issues?q=...`) rather than the issues endpoint with a `q=` parameter (silently ignored by the API); force heuristic contradiction detection on narrow-topic sections where the ollama-intern detector stalls on high token-overlap; treat `llms.txt` aggregate sources as expected to trigger source-dominance capping and rely on the triage layer to cap them. No public artifacts ship until all 8 sections reach Terminal A, synthesis is citation-clean, and `research-os freeze` succeeds.
 
 ### What v0.1 is not
 
-- Not battle-tested by external users. The single dogfood run found seven bugs.
-- Not yet on npm. Install from source until `npm publish` happens.
+- Not battle-tested by external users. Two dogfood arcs have run — one self-referential, one external-domain. External user pressure is Experiment 3 (API stability) in the v1.0 roadmap.
+- Not archived publicly yet. Frozen packs live on disk; `mcp-tool-shop-org/research-packs` is the planned public archive.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
-- Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the five experiments that close the gap.
+- Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the six experiments that close the gap.
 
 ### Known limitations
 
-- **Extractor provenance is not visible at the gate seam.** A section can pass the accepted-claim floor while relying on heuristic-fallback claims when the calibrated extractor (Ollama with the configured model) is unavailable. Recorded as a known weakness; future hardening will report accepted claims by extractor and require the floor's worth of accepted claims from the calibrated path.
-- **Reviewer model selection beyond the calibrated `hermes-two-pass` baseline is unresolved.** The dogfood arc validated one reviewer config; alternative models need their own seeded-failure recall calibration before they can be trusted.
-- **The dogfood pack used `mistral-nemo:12b` for extraction (canonical default is `hermes3:8b`).** Discovery hallucinated wrong-domain results for self-referential section names — corrected by query-precision discipline (see handbook) and operator-pre-staged URLs for ambiguous topics.
+- **Extractor provenance is not visible at the gate seam.** A section can pass the accepted-claim floor while relying on heuristic-fallback claims when the calibrated extractor (Ollama with the configured model) is unavailable. Recorded as Experiment 4 in the roadmap; future hardening will report accepted claims by extractor and require the floor's worth of accepted claims from the calibrated path.
+- **Reviewer model selection beyond the calibrated `hermes-two-pass` baseline is unresolved.** The dogfood arc validated one reviewer config; alternative models need their own seeded-failure recall calibration before they can be trusted. Experiment 5 in the roadmap.
+- **The v0.1 self-dogfood pack used `mistral-nemo:12b` for extraction (canonical default is `hermes3:8b`).** `hermes3:8b` was not available on this rig during the v0.1 arc. The substitution disclosure stands until a hermes3-based receipt is produced — Experiment 6 in the roadmap. For operators on rigs without `hermes3:8b`, set `OLLAMA_INTERN_MODEL` to an available model; operator-pre-staged URLs and query-precision discipline (see handbook) mitigate discovery hallucination on ambiguous topics.
 
 ## Roadmap to v1.0
 
-v1.0 is an earned state, not a release date. Five open experiments stand between v0.1 and v1.0 — API stability under external pressure, a non-self-referential dogfood pack, closing the extractor-provenance gap, generalizing reviewer calibration beyond `hermes-two-pass`, and a clean baseline run on `hermes3:8b`. Full plan in [`docs/roadmap.md`](docs/roadmap.md). The architecture lock holds throughout; v1.0 deepens what v0.1 proved rather than reopening it.
+v1.0 is an earned state, not a release date. Six open experiments stand between v0.1 and v1.0 — non-self-referential dogfood (currently in progress as the ComfyUI workflow durability pack), a `research-os pack publish` command that automates export into the canonical `research-packs` monorepo (Experiment 2, scoped behind Experiment 1's manual closeout), API stability under external pressure, closing the extractor-provenance gap, generalizing reviewer calibration beyond `hermes-two-pass`, and a clean baseline run on `hermes3:8b`. Experiment 1 is not done at pack freeze — it closes when the frozen pack ships as the first package in the `research-packs` monorepo alongside the v0.1 self-dogfood backfill. Full plan in [`docs/roadmap.md`](docs/roadmap.md). The architecture lock holds throughout; v1.0 deepens what v0.1 proved rather than reopening it.
 
 ## License
 
