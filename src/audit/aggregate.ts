@@ -1,4 +1,4 @@
-import type { ResearchYaml } from '../intake/schema.js';
+import type { ResearchYaml, SectionScopedWaiver } from '../intake/schema.js';
 import type { Claim } from '../claims/schema.js';
 import type { ClaimReview, ReviewFinding } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
@@ -216,6 +216,32 @@ function buildStaleSources(input: AggregateInput): StaleSourceRow[] {
   return out;
 }
 
+function findSectionWaiver(
+  research: ResearchYaml,
+  sectionId: string,
+  scope: SectionScopedWaiver['scope'],
+): SectionScopedWaiver | undefined {
+  return (research.primary_source_waiver.section_waivers ?? []).find(
+    (w) => w.section_id === sectionId && w.scope === scope,
+  );
+}
+
+function annotateWeakSource(
+  row: WeakSourceRow,
+  waiver: SectionScopedWaiver | undefined,
+): WeakSourceRow {
+  if (!waiver) return row;
+  return { ...row, waived: true, waiver_reason: waiver.reason };
+}
+
+function annotateDiversityGap(
+  row: SourceDiversityGapRow,
+  waiver: SectionScopedWaiver | undefined,
+): SourceDiversityGapRow {
+  if (!waiver) return row;
+  return { ...row, waived: true, waiver_reason: waiver.reason };
+}
+
 function buildWeakSources(input: AggregateInput): WeakSourceRow[] {
   const out: WeakSourceRow[] = [];
   const cfg = input.research.gates.source_floor;
@@ -225,33 +251,50 @@ function buildWeakSources(input: AggregateInput): WeakSourceRow[] {
     const publishers = new Set(
       sectionSources.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
     );
+    const monopolyWaiver = findSectionWaiver(input.research, sid, 'min_independent_publishers');
+    const primaryWaiver = findSectionWaiver(input.research, sid, 'primary_sources_required');
     if (publishers.size === 1 && sectionSources.length >= 2) {
-      out.push({
-        reason: 'source_cluster_monopoly',
-        section_id: sid,
-        details: `Every source in this section traces to a single publisher (${[...publishers][0]}).`,
-        evidence_ids: sectionSources.map((s) => s.source_id),
-        artifact_path: `sections/${sid}/sources.jsonl`,
-      });
+      out.push(
+        annotateWeakSource(
+          {
+            reason: 'source_cluster_monopoly' as const,
+            section_id: sid,
+            details: `Every source in this section traces to a single publisher (${[...publishers][0]}).`,
+            evidence_ids: sectionSources.map((s) => s.source_id),
+            artifact_path: `sections/${sid}/sources.jsonl`,
+          },
+          monopolyWaiver,
+        ),
+      );
     }
     if (publishers.size < cfg.min_independent_publishers) {
-      out.push({
-        reason: 'low_independent_publishers',
-        section_id: sid,
-        details: `${publishers.size} independent publisher(s) — pack policy requires at least ${cfg.min_independent_publishers}.`,
-        evidence_ids: [...publishers],
-        artifact_path: `sections/${sid}/sources.jsonl`,
-      });
+      out.push(
+        annotateWeakSource(
+          {
+            reason: 'low_independent_publishers' as const,
+            section_id: sid,
+            details: `${publishers.size} independent publisher(s) — pack policy requires at least ${cfg.min_independent_publishers}.`,
+            evidence_ids: [...publishers],
+            artifact_path: `sections/${sid}/sources.jsonl`,
+          },
+          monopolyWaiver,
+        ),
+      );
     }
     const primary = sectionSources.filter((c) => c.source_type === 'primary').length;
     if (primary < cfg.primary_sources_required) {
-      out.push({
-        reason: 'missing_primary_source',
-        section_id: sid,
-        details: `${primary} primary source(s) — pack policy requires at least ${cfg.primary_sources_required}.`,
-        evidence_ids: sectionSources.filter((c) => c.source_type === 'primary').map((c) => c.source_id),
-        artifact_path: `sections/${sid}/sources.jsonl`,
-      });
+      out.push(
+        annotateWeakSource(
+          {
+            reason: 'missing_primary_source' as const,
+            section_id: sid,
+            details: `${primary} primary source(s) — pack policy requires at least ${cfg.primary_sources_required}.`,
+            evidence_ids: sectionSources.filter((c) => c.source_type === 'primary').map((c) => c.source_id),
+            artifact_path: `sections/${sid}/sources.jsonl`,
+          },
+          primaryWaiver,
+        ),
+      );
     }
     const types = new Map<string, number>();
     for (const c of sectionSources) types.set(c.source_type, (types.get(c.source_type) ?? 0) + 1);
@@ -366,20 +409,31 @@ function buildSourceDiversityGaps(input: AggregateInput): SourceDiversityGapRow[
       });
       continue;
     }
+    const monopolyWaiver = findSectionWaiver(input.research, sid, 'min_independent_publishers');
     if (publishers.size === 1 && sectionSources.length >= 2) {
-      out.push({
-        reason: 'section_publisher_monopoly',
-        section_id: sid,
-        details: `Section sources monopolized by ${[...publishers][0]}.`,
-        evidence_ids: sectionSources.map((s) => s.source_id),
-      });
+      out.push(
+        annotateDiversityGap(
+          {
+            reason: 'section_publisher_monopoly' as const,
+            section_id: sid,
+            details: `Section sources monopolized by ${[...publishers][0]}.`,
+            evidence_ids: sectionSources.map((s) => s.source_id),
+          },
+          monopolyWaiver,
+        ),
+      );
     } else if (publishers.size < cfg.min_independent_publishers) {
-      out.push({
-        reason: 'low_section_publisher_count',
-        section_id: sid,
-        details: `${publishers.size} publisher(s); pack policy requires ${cfg.min_independent_publishers}.`,
-        evidence_ids: [...publishers],
-      });
+      out.push(
+        annotateDiversityGap(
+          {
+            reason: 'low_section_publisher_count' as const,
+            section_id: sid,
+            details: `${publishers.size} publisher(s); pack policy requires ${cfg.min_independent_publishers}.`,
+            evidence_ids: [...publishers],
+          },
+          monopolyWaiver,
+        ),
+      );
     }
   }
   // cross-section overlap: a publisher dominating across multiple sections

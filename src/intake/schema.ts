@@ -56,10 +56,28 @@ export const GateConfigSchema = z.object({
   section_budget: SectionBudgetGateSchema.default({}),
 });
 
+// Section-scoped source-floor waiver. Each entry stands alone with its own
+// reason + compensating_controls audit trail. Earned by Experiment 3 XRPL
+// Pack Session 2 — canonical-protocol sections (XRPL Foundation docs, XLS
+// standards, rippled implementation) are structurally single-publisher and
+// the global publisher-diversity floor inappropriately fails them. The
+// waiver is per-(section_id, scope), so a section can have separate
+// waivers for different floor checks without weakening the pack default.
+export const SectionScopedWaiverSchema = z.object({
+  section_id: z.string().regex(/^[0-9]{2}-[a-z0-9-]+$/, 'Section id must look like "01-landscape"'),
+  scope: z.enum(['min_independent_publishers', 'primary_sources_required']),
+  reason: z.string().min(1),
+  compensating_controls: z.array(z.string()).min(1),
+});
+
 export const PrimarySourceWaiverSchema = z.object({
   status: z.enum(['none', 'requested', 'granted']).default('none'),
   reason: z.string().optional(),
   compensating_controls: z.array(z.string()).default([]),
+  // Section-scoped waivers; each entry is its own waiver record. Independent
+  // of the pack-level status/reason/compensating_controls fields above.
+  // Defaults to [] for backward compatibility — existing packs unaffected.
+  section_waivers: z.array(SectionScopedWaiverSchema).default([]),
 });
 
 export const FreshnessRequirementsSchema = z.object({
@@ -126,5 +144,6 @@ export const ResearchYamlSchema = z.object({
 export type Section = z.infer<typeof SectionSchema>;
 export type GateConfig = z.infer<typeof GateConfigSchema>;
 export type PrimarySourceWaiver = z.infer<typeof PrimarySourceWaiverSchema>;
+export type SectionScopedWaiver = z.infer<typeof SectionScopedWaiverSchema>;
 export type ReviewProfilePreset = z.infer<typeof ReviewProfilePresetSchema>;
 export type ResearchYaml = z.infer<typeof ResearchYamlSchema>;

@@ -337,6 +337,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     drafts: acceptedDrafts,
     llmFindingsRejected,
     profile: options.profile ?? DEFAULT_PROFILE,
+    research,
   });
 }
 
@@ -442,6 +443,7 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     drafts: merged,
     llmFindingsRejected,
     profile: args.options.profile ?? DEFAULT_PROFILE,
+    research: args.research,
   });
 }
 
@@ -471,6 +473,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     drafts: result.drafts,
     llmFindingsRejected: 0,
     profile: args.options.profile ?? DEFAULT_PROFILE,
+    research: args.research,
   });
 }
 
@@ -483,6 +486,9 @@ interface FinalizeArgs {
   drafts: DraftFinding[];
   llmFindingsRejected: number;
   profile: string;
+  // v0.3.1+: research context for resolving active section-scoped waivers.
+  // Filtered against args.sectionId before passing to deriveClaimReviews.
+  research: ResearchYaml;
 }
 
 async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
@@ -507,11 +513,16 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     dedupedFindings.push(f);
   }
 
+  const activeSectionWaivers = args.research.primary_source_waiver.section_waivers.filter(
+    (w) => w.section_id === args.sectionId,
+  );
+
   const claimReviews: ClaimReview[] = deriveClaimReviews({
     claims: args.candidateClaims,
     findings: dedupedFindings,
     reviewer: args.reviewer,
     reviewMethod: args.reviewMethod,
+    activeSectionWaivers,
   });
 
   const decisionCounts: Record<ReviewDecision, number> = {

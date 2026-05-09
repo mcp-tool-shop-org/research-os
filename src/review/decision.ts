@@ -1,4 +1,5 @@
 import type { Claim } from '../claims/schema.js';
+import type { SectionScopedWaiver } from '../intake/schema.js';
 import type { ClaimReview, ReviewFinding } from './schema.js';
 import type { ReviewDecision, ReviewerName } from './types.js';
 
@@ -61,10 +62,29 @@ export function deriveClaimReviews(args: {
   findings: ReviewFinding[];
   reviewer: ReviewerName;
   reviewMethod: string;
+  // v0.3.1+: section-scoped waivers active for this section. When a
+  // min_independent_publishers waiver is present, the source_cluster_monopoly
+  // finding remains in the ledger as a visible caveat but does NOT, by itself,
+  // route per-claim decisions to needs_source_repair. Other source-quality
+  // findings (per-claim source_quality_problem, scope_widening, etc.) continue
+  // to apply normally — the waiver only neutralises the section-wide monopoly
+  // signal that operators have explicitly disclosed and accepted.
+  activeSectionWaivers?: SectionScopedWaiver[];
 }): ClaimReview[] {
-  const { claims, findings, reviewer, reviewMethod } = args;
+  const { claims, findings, reviewer, reviewMethod, activeSectionWaivers } = args;
   const reviews: ClaimReview[] = [];
   const now = new Date().toISOString();
+
+  // A section-scoped min_independent_publishers waiver neutralises the
+  // section-wide source_cluster_monopoly signal at the per-claim
+  // decision-routing layer. The finding remains in the ledger; only its
+  // contribution to the decision is suppressed.
+  const monopolyWaived =
+    Array.isArray(activeSectionWaivers) &&
+    activeSectionWaivers.some((w) => w.scope === 'min_independent_publishers');
+
+  const isWaivedFinding = (f: ReviewFinding): boolean =>
+    monopolyWaived && f.category === 'source_cluster_monopoly';
 
   for (const claim of claims) {
     const claimFindings = findings.filter((f) => f.claim_ids.includes(claim.claim_id));
@@ -83,6 +103,7 @@ export function deriveClaimReviews(args: {
 
     let decisions: ReviewDecision[] = [];
     for (const f of claimFindings) {
+      if (isWaivedFinding(f)) continue;
       if (f.severity === 'block') {
         decisions.push(BLOCK_TO_DECISION[f.category] ?? 'rejected');
       } else if (f.severity === 'warn') {
@@ -111,7 +132,11 @@ export function deriveClaimReviews(args: {
     const decision = pickHighestPriority(decisions);
     const reasonParts = claimFindings
       .filter((f) => f.severity !== 'info')
-      .map((f) => `${f.category} (${f.severity})`);
+      .map((f) =>
+        isWaivedFinding(f)
+          ? `${f.category} (${f.severity}, waived)`
+          : `${f.category} (${f.severity})`,
+      );
     const reason =
       reasonParts.length > 0
         ? `Findings: ${reasonParts.join('; ')}.`

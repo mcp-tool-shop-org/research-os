@@ -47,6 +47,12 @@ export interface WeakSourceRow {
   details: string;
   evidence_ids: string[];
   artifact_path: string;
+  // v0.3.1+: when a section-scoped waiver covers the gate-failure check that
+  // produced this row, the row is annotated rather than removed (Law 16:
+  // waivers do not hide evidence). Operators reading the rollup see both the
+  // structural fact and the deliberate disclosure.
+  waived?: boolean;
+  waiver_reason?: string;
 }
 
 export interface UnresolvedContradictionRow {
@@ -80,6 +86,9 @@ export interface SourceDiversityGapRow {
   section_id: string;
   details: string;
   evidence_ids: string[];
+  // v0.3.1+: see WeakSourceRow.waived. Annotation, not suppression.
+  waived?: boolean;
+  waiver_reason?: string;
 }
 
 export interface SynthesisReadinessRow {
