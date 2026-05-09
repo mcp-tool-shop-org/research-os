@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/version-0.2.0-blue" alt="version 0.2.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/version-0.3.0-blue" alt="version 0.3.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,9 +151,11 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ## Status
 
-**v0.2.0** — published to npm as `@mcptoolshop/research-os@0.2.0`, 2026-05-09. Ships `research-os pack publish` (Experiment 2) and the Pattern 2 readiness predicate fix. 515/515 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
+**v0.3.0** — published to npm as `@mcptoolshop/research-os@0.3.0`, 2026-05-09. Ships the `--detector <auto|heuristic|ollama-intern>` flag on `contradict map` (F-09 chain-blocker fix from Experiment 3 Session 1, XRPL pack). 527/527 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/contradict-map.md`](docs/contradict-map.md).
 
-**`research-os pack publish`** — Frozen packs export to the canonical `research-packs` archive with a single command. Derives `pack.manifest.json`, generates `README.md`, provisions `docs/how-to-read-this.md`, verifies the admission contract. See [`docs/pack-publish.md`](docs/pack-publish.md). Dogfood: both existing packages re-derived and `verify-pack.mjs` PASS — see [`docs/pack-publish-dogfood.md`](docs/pack-publish-dogfood.md).
+**`contradict map --detector`** — Detector selection is now an explicit operator choice instead of a state-dependent env-var dance. `auto` (default) preserves prior behavior; `heuristic` always works without LLM and completes quickly on narrow-topic documentation sections; `ollama-intern` requires the configured model and exits visibly if unavailable. Mode is announced visibly on every run. The earlier "clear `OLLAMA_INTERN_MODEL` to force heuristic" workaround is superseded by `--detector heuristic` as the canonical operator surface; see the [research-packs operator playbook](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md) and the [handbook contradict-map page](https://mcp-tool-shop-org.github.io/research-os/handbook/contradict-map/).
+
+**v0.2.0** — published 2026-05-09. Shipped `research-os pack publish` (Experiment 2) and the Pattern 2 readiness predicate fix. 515/515 vitest passing then. See [CHANGELOG.md](CHANGELOG.md). Frozen packs export to the canonical `research-packs` archive with a single command; admission contract is enforced by code, not checklist. See [`docs/pack-publish.md`](docs/pack-publish.md).
 
 **v0.1.0** — dogfood pack frozen 2026-05-08. The pack at `research-os-packs/research-os-spec/` (sibling repo) reached freeze with 296 accepted claims across 8 sections, 17 dispositioned, 30 operator-overridden, 0 active repair blockers, 0 unresolved contradictions, all gates `synthesis_eligible=true`. Sixteen load-bearing laws cumulative. See [`docs/dogfood-proof.md`](docs/dogfood-proof.md) for the seven findings and freeze receipt fingerprints.
 
@@ -161,9 +163,9 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 **v1 Experiment 1 (ComfyUI workflow durability)** — CLOSED 2026-05-09. All 8 sections at Terminal A, pack frozen, archive live. See [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### What v0.2 is not
+### What v0.3 is not
 
-- Not battle-tested by external users. Two dogfood arcs have run — one self-referential, one external-domain. External user pressure is Experiment 3 (API stability) in the v1.0 roadmap.
+- Not battle-tested by external users. Two dogfood arcs have closed — one self-referential, one external-domain — and Experiment 3 (API stability under external pressure) is in progress: pack #1 of 3 (XRPL creator-token durability) earned the v0.3.0 `--detector` flag. Two more external-domain packs required for Experiment 3 closure.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
 - Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the six experiments that close the gap.
 

@@ -46,7 +46,7 @@
 ## D. Shipping Hygiene
 
 - [x] `[all]` `verify` script exists — `npm run build && npm run typecheck && npm run lint && npm run test` (2026-05-08)
-- [x] `[all]` Version in manifest matches git tag — v0.2.0 in package.json + RESEARCH_OS_VERSION; tag v0.2.0 created at release commit (2026-05-09)
+- [x] `[all]` Version in manifest matches git tag — v0.3.0 in package.json + RESEARCH_OS_VERSION; tag v0.3.0 created at release commit (2026-05-09)
 - [x] `[all]` Dependency scanning runs in CI — `npm audit --audit-level=high` in .github/workflows/ci.yml (2026-05-08)
 - [x] `[all]` Automated dependency update mechanism exists — Dependabot weekly npm in .github/dependabot.yml (2026-05-08)
 - [x] `[npm]` `npm pack --dry-run` includes: dist/, README.md, CHANGELOG.md, LICENSE, SECURITY.md (2026-05-08)
@@ -54,13 +54,13 @@
 - [x] `[npm]` Lockfile committed — package-lock.json present (2026-05-08)
 - [ ] `[vsix]` SKIP: not a VS Code extension
 - [ ] `[desktop]` SKIP: not a desktop app
+- [ ] `[all]` SKIP: Translations (polyglot-mcp, 8 languages) — WAIVED for v0.3.0. README updated (status block, version badge, "What v0.3 is not"); translations will be stale at release time. Operator re-runs translations locally post-release per hard-rules.md (Claude does not run translations).
+- [ ] `[all]` SKIP: GitHub repo metadata (description, homepage, topics) — WAIVED for v0.3.0. Deferred to operator action post-release; not load-bearing for this release thesis.
 
 ## E. Identity (soft gate — does not block ship)
 
 - [x] `[all]` Logo in README header — centered, hosted at mcp-tool-shop-org/brand (2026-05-08)
-- [ ] `[all]` Translations (polyglot-mcp, 8 languages) — 7 languages added v0.1.1; v0.2.0 README changes require operator re-run post-release (user runs locally per hard-rules.md)
 - [x] `[org]` Landing page (@mcptoolshop/site-theme) — live at https://mcp-tool-shop-org.github.io/research-os/ (2026-05-08)
-- [ ] `[all]` GitHub repo metadata: description, homepage, topics — pending operator action
 
 ---
 

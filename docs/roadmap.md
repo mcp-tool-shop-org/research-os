@@ -58,6 +58,22 @@ The command copies the frozen pack into the package layout, generates `pack.mani
 
 ## 3. API stability under external pressure
 
+**Status: IN PROGRESS.** Pack #1 of 3 — XRPL creator-token durability — parked at Section 01 contradict map after F-09 (chain blocker) surfaced. F-09 fix shipped in **v0.3.0** (`--detector` flag on `contradict map`); chain unblocked. Two more external-domain packs required for closure.
+
+**Progress (2026-05-09):** F-09 chain blocker resolved in v0.3.0. The earlier
+"clear `OLLAMA_INTERN_MODEL` to force heuristic" workaround was state-dependent
+and silently broke once `hermes3:8b` was installed (the default model takes
+over and the LLM detector saturates the Jaccard prefilter on narrow-topic
+documentation sections). The new `--detector <auto|heuristic|ollama-intern>`
+flag makes heuristic mode a first-class operator choice that is
+environment-independent. Earned by the XRPL pack, ships as v0.3.0, generalizes
+to every future external-domain pack. Other Experiment 3 frictions cataloged
+as v0.3.x candidates (F-01 init version-stamp, F-02 packs-dir docs, F-05
+discover --query example, F-08 Windows process recovery) ship as their own
+scoped releases. XRPL Session 2 resumes against the npm-published v0.3.0 —
+the released CLI is the operator surface. Resuming from local source would
+invalidate the API-stability test.
+
 **The question.** Where do the CLI surface, schema files, and ledger formats break when packs we didn't write run through them?
 
 **Done looks like.** Three non-self-referential packs run end-to-end without requiring a breaking change. Schemas have been versioned with explicit migration receipts where they did change. The CLI's `--help` output is the contract — and the contract held under packs whose authors don't read this codebase. All three packs are admitted to `research-packs` via `pack publish` (Experiment 2), which means each one exercises the publication contract under load.

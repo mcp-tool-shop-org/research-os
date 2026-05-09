@@ -74,17 +74,20 @@ The `urls.operator-staged.txt` pattern is a first-class input; `discover run` is
 
 The ollama-intern contradiction detector uses a Jaccard token-overlap prefilter before running LLM classification on pairs. On narrow-topic sections (all claims share vocabulary like "workflow," "json," "schema," "install," "node"), the prefilter passes a large fraction of the N×(N-1)/2 pairs for LLM classification. With 50+ claims and high token overlap, the detector can stall for 20+ minutes with zero output.
 
-**Workaround:** Clear `OLLAMA_INTERN_MODEL` before running `contradict map` to force the heuristic detector:
+**Canonical surface (research-os ≥ v0.3.0): pass `--detector heuristic` to `contradict map`.**
 
 ```powershell
 # PowerShell
-Remove-Item Env:OLLAMA_INTERN_MODEL -ErrorAction SilentlyContinue
-research-os contradict map <section> --triaged-only
+research-os contradict map <section> --triaged-only --detector heuristic
 ```
+
+The flag is the canonical operator surface: it is environment-independent, fails fast on invalid values, and announces the chosen detector visibly on every run. The three modes — `auto` (default, env-var-driven), `heuristic` (always works, no LLM), `ollama-intern` (require LLM, fail visibly if unavailable) — are documented on the [contradict map](/research-os/handbook/contradict-map/) page.
+
+**Do not rely on clearing `OLLAMA_INTERN_MODEL` to force fallback.** That earlier workaround was state-dependent: it worked when no default model was installed but stopped working silently once `hermes3:8b` (the default) was pulled — `contradict map` in `auto` mode would re-acquire the default and stall on narrow-topic sections. F-09 from Experiment 3 Session 1 (XRPL pack) earned the `--detector` flag fix; the env-var-clearing pattern is now superseded.
 
 The heuristic detector is pure CPU, completes in seconds for 1,000+ pairs, and correctly finds zero contradictions on sections where claims describe orthogonal aspects of the same phenomenon (failure modes, configuration settings, schema fields).
 
-**When to use the ollama-intern detector:** Wide-topic sections where claims span genuinely different domains (e.g., different tools in a survey section, different failure categories). The prefilter passes fewer pairs because vocabulary overlap is low, so the LLM calls complete in reasonable time.
+**When to use the ollama-intern detector:** Wide-topic sections where claims span genuinely different domains (e.g., different tools in a survey section, different failure categories). The prefilter passes fewer pairs because vocabulary overlap is low, so the LLM calls complete in reasonable time. Use `--detector ollama-intern` to require the LLM detector explicitly and fail visibly if the configured model is unavailable, instead of silently falling back to heuristic.
 
 ---
 

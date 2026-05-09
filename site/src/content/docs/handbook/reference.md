@@ -95,7 +95,14 @@ Detect tensions between candidate claims.
 ```bash
 research-os contradict map 01-landscape
 research-os contradict map 01-landscape --triaged-only   # only selected_for_review claims
+research-os contradict map 01-landscape --detector heuristic   # bypass LLM (v0.3.0+)
 ```
+
+`--detector <auto|heuristic|ollama-intern>` (v0.3.0+) chooses the
+detector explicitly. Default `auto` preserves env-var-driven behavior;
+`heuristic` always works without LLM; `ollama-intern` requires the
+configured model and exits visibly if unavailable. Mode is announced
+on every run. Full reference: [contradict map](/research-os/handbook/contradict-map/).
 
 ---
 

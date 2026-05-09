@@ -2,6 +2,84 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.3.0] — 2026-05-09
+
+Tight release. One real, tested, dogfooded improvement: `--detector` flag on
+`research-os contradict map`. F-09 from Experiment 3 Session 1 (XRPL pack)
+earned the fix. No other v0.3 candidates shipped — F-01 (init version-stamp),
+F-02 (packs-dir docs), F-05 (discover --query example), F-08 (Windows process
+recovery) are deferred to v0.3.x.
+
+### Added
+
+- **`--detector <auto|heuristic|ollama-intern>`** flag on
+  `research-os contradict map`. Three explicit modes:
+
+  - `auto` (default) — preserves env-var-driven behavior. When the
+    configured Ollama model is available, runs the LLM detector;
+    otherwise falls through to heuristic. Mirrors v0.2.x behavior.
+  - `heuristic` — bypasses Ollama entirely. No model availability check,
+    no LLM calls. Always works. Always completes quickly.
+  - `ollama-intern` — requires the configured model. Exits with code 2
+    and a visible failure message if the model is unavailable, instead
+    of silently falling back to heuristic.
+
+  Invalid `--detector` values exit with code 2. The mode chosen is
+  announced visibly on the first output line of every run; there are no
+  silent shifts. Full reference: [`docs/contradict-map.md`](docs/contradict-map.md).
+
+- **12 new tests** in `test/contradictions-detector-flag.test.ts` covering
+  all three modes (heuristic never instantiates the Ollama client;
+  ollama-intern errors visibly when model unavailable; auto preserves
+  existing behavior; invalid value fails fast), heuristic ledger validity,
+  and a regression fixture that mirrors the XRPL Section 01 pattern (~60
+  claims with ~5-token shared vocabulary completes via heuristic in well
+  under 30 seconds).
+
+- **`docs/contradict-map.md`** — full CLI reference: detector modes, mode
+  announcements (verbatim strings), when-to-use-which guidance, and the
+  release thesis.
+
+- **Handbook page** at `/handbook/contradict-map` — condensed reference
+  matching the docs page.
+
+### Changed
+
+- **CLI `--help`** for `contradict map` now lists the three `--detector`
+  choices.
+- **Reference page** in the handbook updated to mention the flag and
+  link to the new contradict-map page.
+
+### Documentation
+
+- README status block updated to v0.3.0; version badge updated.
+- `docs/roadmap.md` Experiment 3 entry: F-09 chain blocker noted as
+  resolved in v0.3.0 (Experiment 3 itself remains in progress; closure
+  requires a third external-domain pack).
+- **Cross-repo:** `research-packs/docs/operator-playbook.md` updated in
+  the same release window. The earlier "clear `OLLAMA_INTERN_MODEL` to
+  force heuristic" workaround is replaced with `--detector heuristic`
+  as the canonical operator surface. The handbook mirror in this repo
+  is kept consistent with the canonical.
+- `SHIP_GATE.md` D2 updated: version bump + tag for v0.3.0.
+
+### Tests
+
+- **527 total** (515 at v0.2.0 → 527 at v0.3.0, +12 from
+  `test/contradictions-detector-flag.test.ts`).
+
+### Migration notes
+
+No code-level migration required. Existing scripts that don't pass
+`--detector` continue to work via `auto` mode.
+
+For operators who previously cleared `OLLAMA_INTERN_MODEL` to force the
+heuristic detector: that pattern still works in environments where the
+default model isn't installed, but the flag is the canonical surface
+and is environment-independent. Switch to `--detector heuristic` when
+re-running narrow-topic sections; the v0.3.0 operator-playbook update
+in `research-packs` documents the rationale.
+
 ## [0.2.0] — 2026-05-09
 
 Tight release. Two real, tested, dogfooded improvements: `research-os pack publish`
