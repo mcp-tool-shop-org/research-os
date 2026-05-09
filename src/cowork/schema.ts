@@ -41,6 +41,7 @@ export const SectionStateSchema = z.object({
   candidate_claims_total: z.number().int().nonnegative(),
   unresolved_contradiction_ids: z.array(z.string()),
   blocking_reasons: z.array(z.string()),
+  active_blockers: z.array(z.string()).default([]),
   blocking_contradictions_unresolved: z.number().int().nonnegative(),
   provenance_summary: ProvenanceSummarySchema.optional(),
 });

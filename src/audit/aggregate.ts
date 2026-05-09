@@ -630,7 +630,7 @@ function buildReadinessSummary(
       r.synthesis_eligible &&
       r.has_review_run &&
       r.candidate_claims > 0 &&
-      r.repair_claims === 0 &&
+      r.blocking_reasons.length === 0 &&
       unresolvedCount === 0
     ) {
       ready += 1;

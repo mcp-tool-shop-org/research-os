@@ -104,7 +104,7 @@ describe('cowork.derive', () => {
     expect(result.synthesis_allowed).toBe(false);
   });
 
-  it('produces repair_required when zero claims accepted', () => {
+  it('produces synthesis_ready when gate passes even if zero claims accepted (calibrated-reviewer settled decisions do not gate mode)', () => {
     const r = research();
     const c = claim('clm_aaaaaaaaaaaa_heuristic_1');
     const result = derive({
@@ -116,9 +116,9 @@ describe('cowork.derive', () => {
       generatedAt: '2026-05-06T22:00:00.000Z',
       warnings: [],
     });
-    expect(result.mode).toBe('repair_required');
+    expect(result.mode).toBe('synthesis_ready');
     expect(result.accepted_claim_ids).toEqual([]);
-    expect(result.repair_claim_ids).toContain(c.claim_id);
+    expect(result.repair_claim_ids).toContain(c.claim_id); // informational, not a gate
   });
 
   it('produces synthesis_ready when gates pass and every candidate is accepted', () => {
@@ -419,7 +419,7 @@ describe('cowork.derive', () => {
     expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(0);
   });
 
-  it('T2: default-blocking holds — one undispositioned needs_human_review blocks synthesis', () => {
+  it('T2: calibrated-reviewer needs_human_review without disposition is settled state — does not gate synthesis when active_blockers is empty', () => {
     const r = research();
     const claims = Array.from({ length: 100 }, (_, i) => claimN(i + 1));
     const reviews: ClaimReview[] = [
@@ -427,7 +427,7 @@ describe('cowork.derive', () => {
       ...Array.from({ length: 20 }, (_, i) => reviewN(i + 6, 'rejected')),
       ...Array.from({ length: 5 }, (_, i) => reviewN(i + 26, 'needs_human_review')),
     ];
-    // Only 4 of the 5 needs_human_review are dispositioned — claim 30 (n=30) has no disposition
+    // 4 of the 5 needs_human_review are dispositioned; 1 is undispositioned (n=30)
     const dispositions: ClaimSynthesisDisposition[] = Array.from({ length: 4 }, (_, i) =>
       dispositionN(i + 26, 'parked_not_for_synthesis'),
     );
@@ -440,10 +440,12 @@ describe('cowork.derive', () => {
       generatedAt: '2026-05-06T22:00:00.000Z',
       warnings: [],
     });
-    expect(result.mode).toBe('repair_required');
-    expect(result.synthesis_allowed).toBe(false);
-    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBeGreaterThanOrEqual(1);
-    expect(result.repair_claim_ids.length).toBeGreaterThanOrEqual(1);
+    // Gate is passing (synthesis_eligible=true, active_blockers=[]) — reviewer decisions are settled state
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.synthesis_allowed).toBe(true);
+    expect(result.sections[0]!.active_blockers).toEqual([]);
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBeGreaterThanOrEqual(1); // informational
+    expect(result.repair_claim_ids.length).toBeGreaterThanOrEqual(1); // informational
   });
 
   it('T3: rejected claims with provenance do not block synthesis', () => {
@@ -545,7 +547,7 @@ describe('cowork.derive', () => {
     expect(result.recommended_next_actions.some((a) => /contradiction/i.test(a))).toBe(true);
   });
 
-  it('T7: active repair blocker blocks synthesis (undispositioned needs_scope_repair)', () => {
+  it('T7: needs_scope_repair is settled state — visible in repair_claim_ids but does not gate synthesis when gate is passing', () => {
     const r = research();
     const claims = Array.from({ length: 6 }, (_, i) => claimN(i + 1));
     const reviews: ClaimReview[] = [
@@ -561,9 +563,11 @@ describe('cowork.derive', () => {
       generatedAt: '2026-05-06T22:00:00.000Z',
       warnings: [],
     });
-    expect(result.mode).toBe('repair_required');
-    expect(result.repair_claim_ids).toContain('clm_000000000006_heuristic_6');
-    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(1);
+    // Gate is passing — needs_scope_repair is the reviewer's settled decision, not an open blocker
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.sections[0]!.active_blockers).toEqual([]);
+    expect(result.repair_claim_ids).toContain('clm_000000000006_heuristic_6'); // informational
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(1); // informational
   });
 
   it('T8: provenance_summary present on every required section in handoff payload', () => {
@@ -593,6 +597,81 @@ describe('cowork.derive', () => {
       expect(Array.isArray(ps.waivers_active)).toBe(true);
       expect(typeof ps.overrides_applied_count).toBe('number');
     }
+  });
+
+  it('P2-fix-1: calibrated reviewer with non-empty repair_claim_ids and empty active_blockers → synthesis_ready', () => {
+    // Core regression for Pattern 2 fix. Simulates ComfyUI-style pack: hermes3:8b two-pass
+    // reviewer produced needs_scope_repair / needs_source_repair / needs_human_review decisions,
+    // none dispositioned. Gate says synthesis_eligible=true. No unresolved contradictions.
+    // These review decisions are settled state, not open work — synthesis must not be blocked.
+    const r = research();
+    const claims = Array.from({ length: 8 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 3 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      reviewN(4, 'needs_scope_repair'),
+      reviewN(5, 'needs_scope_repair'),
+      reviewN(6, 'needs_source_repair'),
+      reviewN(7, 'needs_human_review'),
+      reviewN(8, 'needs_human_review'),
+    ];
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.synthesis_allowed).toBe(true);
+    expect(result.sections[0]!.active_blockers).toEqual([]);
+    expect(result.repair_claim_ids.length).toBe(5); // visible but not a gate
+    expect(result.sections[0]!.provenance_summary?.active_repair_blockers).toBe(5); // informational
+    expect(result.accepted_claim_ids.length).toBe(3);
+  });
+
+  it('P2-fix-2: gate-blocked section has non-empty active_blockers → repair_required', () => {
+    // Active blockers are gate-level blocking reasons (synthesis_eligible=false); repair
+    // vocabulary decisions are NOT active_blockers and do not appear here.
+    const r = research();
+    const c = claimN(1);
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: gate(false), candidateClaims: [c], claimReviews: [review(c.claim_id, 'accepted_for_synthesis')], contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('repair_required');
+    expect(result.sections[0]!.active_blockers.length).toBeGreaterThan(0);
+    expect(result.sections[0]!.synthesis_eligible).toBe(false);
+  });
+
+  it('P2-fix-3: heuristic-reviewer regression — only accepted/rejected vocabulary, no repair → synthesis_ready', () => {
+    // Protects v0.1 dogfood pack: heuristic reviewer only outputs accepted_for_synthesis
+    // and rejected. repair_claim_ids = []. Under the new predicate this must still produce
+    // synthesis_ready (no regression from the pre-calibrated-reviewer baseline).
+    const r = research();
+    const claims = Array.from({ length: 10 }, (_, i) => claimN(i + 1));
+    const reviews: ClaimReview[] = [
+      ...Array.from({ length: 3 }, (_, i) => reviewN(i + 1, 'accepted_for_synthesis')),
+      ...Array.from({ length: 7 }, (_, i) => reviewN(i + 4, 'rejected')),
+    ];
+    const result = derive({
+      research: r,
+      perSection: new Map([
+        ['01-test', { gate: passingGate(), candidateClaims: claims, claimReviews: reviews, contradictions: [] }],
+      ]),
+      indexStatus: 'present',
+      generatedAt: '2026-05-06T22:00:00.000Z',
+      warnings: [],
+    });
+    expect(result.mode).toBe('synthesis_ready');
+    expect(result.repair_claim_ids).toHaveLength(0);
+    expect(result.sections[0]!.active_blockers).toEqual([]);
   });
 
   it('T9: sections 03 + 06 shaped — both synthesis_eligible=true with zero active blockers yield synthesis_ready', () => {

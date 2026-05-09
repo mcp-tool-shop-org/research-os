@@ -211,6 +211,7 @@ function buildSectionState(args: {
     candidate_claims_total: candidateClaims.length,
     unresolved_contradiction_ids: unresolved.map((c) => c.contradiction_id),
     blocking_reasons: gate?.blocking_reasons ?? [],
+    active_blockers: gate?.blocking_reasons ?? [],
     blocking_contradictions_unresolved: blocking.length,
     provenance_summary: provenanceSummary,
   };
@@ -270,7 +271,7 @@ function determineMode(
       s.synthesis_eligible &&
       s.has_review_run &&
       s.candidate_claims_total > 0 &&
-      s.repair_claim_ids.length === 0 &&
+      s.active_blockers.length === 0 &&
       s.unresolved_contradiction_ids.length === 0,
   );
 

@@ -35,6 +35,7 @@ export interface SectionState {
   candidate_claims_total: number;
   unresolved_contradiction_ids: string[];
   blocking_reasons: string[];
+  active_blockers: string[];
   blocking_contradictions_unresolved: number;
   provenance_summary?: ProvenanceSummary;
 }

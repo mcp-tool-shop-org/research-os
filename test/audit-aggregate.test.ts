@@ -778,7 +778,7 @@ describe('audit.aggregate', () => {
       expect(s.dispositioned_claims).toBe(5);
     });
 
-    it('default-blocking holds (repair): one undispositioned needs_human_review → not ready_for_synthesis', () => {
+    it('P2-fix: calibrated-reviewer repair decisions are settled state — undispositioned needs_human_review does not block when gate passes and blocking_reasons is empty', () => {
       const r = research(['01-test']);
       const claims = Array.from({ length: 30 }, (_, i) =>
         claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
@@ -786,7 +786,7 @@ describe('audit.aggregate', () => {
       const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
       const rejectedReviews = claims.slice(5, 25).map((c) => review(c.claim_id, 'rejected'));
       const repairReviews = claims.slice(25, 30).map((c) => repairReview(c.claim_id));
-      // Only 4 of 5 repair claims dispositioned — one remains an active blocker
+      // 4 of 5 repair claims dispositioned; 1 undispositioned — but gate is passing so not a blocker
       const dispositions = claims.slice(25, 29).map((c) => testDisposition(c.claim_id, 'needs_human_review_excluded'));
 
       const result = aggregate({
@@ -798,9 +798,46 @@ describe('audit.aggregate', () => {
         generatedAt: '2026-05-08T00:00:00.000Z',
         warnings: [],
       });
-      expect(result.payload.verdict).not.toBe('ready_for_synthesis');
+      // Gate passes (synthesis_eligible=true, blocking_reasons=[]) → ready_for_synthesis
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
       const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
-      expect(s.repair_claims).toBe(1);
+      expect(s.repair_claims).toBe(1); // informational, visible but not a gate
+      expect(s.blocking_reasons).toHaveLength(0); // the actual gate condition
+    });
+
+    it('P2-fix: non-empty repair_claims with empty blocking_reasons and synthesis_eligible=true → ready_for_synthesis', () => {
+      // Directly tests the corrected predicate: repair_claims > 0 does NOT gate synthesis
+      // when synthesis_eligible=true and blocking_reasons=[]. Simulates the ComfyUI pack shape:
+      // calibrated reviewer leaves undispositioned needs_scope_repair / needs_human_review claims,
+      // but gate is passing → audit must return ready_for_synthesis.
+      const r = research(['01-test']);
+      const claims = Array.from({ length: 15 }, (_, i) =>
+        claim(`clm_${String(i).padStart(12, '0')}_heuristic_1`, '01-test'),
+      );
+      const acceptedReviews = claims.slice(0, 5).map((c) => review(c.claim_id, 'accepted_for_synthesis'));
+      const rejectedReviews = claims.slice(5, 8).map((c) => review(c.claim_id, 'rejected'));
+      const repairReviews = [
+        ...claims.slice(8, 11).map((c) => review(c.claim_id, 'needs_scope_repair' as ClaimReview['decision'])),
+        ...claims.slice(11, 14).map((c) => review(c.claim_id, 'needs_source_repair' as ClaimReview['decision'])),
+        review(claims[14]!.claim_id, 'needs_human_review' as ClaimReview['decision']),
+      ];
+      // No dispositions — all 7 repair-vocabulary claims are undispositioned
+
+      const result = aggregate({
+        research: r,
+        perSection: new Map([['01-test', makeSection(claims, [...acceptedReviews, ...rejectedReviews, ...repairReviews])]]),
+        sources: [source('src_aaaaaaaaaaaa', 'p1')],
+        receipts: [receipt('src_aaaaaaaaaaaa')],
+        handoff: makeHandoff('synthesis_ready'),
+        generatedAt: '2026-05-08T00:00:00.000Z',
+        warnings: [],
+      });
+      expect(result.payload.verdict).toBe('ready_for_synthesis');
+      const s = result.payload.section_summaries.find((s) => s.section_id === '01-test')!;
+      expect(s.repair_claims).toBe(7); // informational
+      expect(s.accepted_claims).toBe(5);
+      expect(s.blocking_reasons).toHaveLength(0);
+      expect(result.payload.readiness_summary.ready_sections).toBe(1);
     });
 
     it('default-blocking holds (contradictions): 1 unresolved contradiction (medium severity) → not ready_for_synthesis', () => {
