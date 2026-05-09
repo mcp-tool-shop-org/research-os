@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/version-0.1.0-blue" alt="version 0.1.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -16,77 +16,34 @@
 
 # research-os
 
-Un'interfaccia a riga di comando (CLI) che trasforma un argomento aperto in un **pacchetto di ricerca strutturato** — un repository organizzato in cui Claude, Cowork o un sistema simile possono lavorare per ore senza generare informazioni errate o distorcere l'indagine.
+Un'interfaccia a riga di comando (CLI) che trasforma un argomento di ricerca in un "**pacchetto di ricerca**" strutturato, ovvero un repository organizzato in cui Claude, Cowork o un sistema simile possono lavorare per ore senza generare risultati errati o superficiali.
 
 ## Cos'è
 
-`research-os` è il sistema di controllo tra "Voglio fare ricerche su X" e una base di dati di prove consolidata e tracciabile. Separa le ipotesi iniziali dalla raccolta delle prove, l'estrazione dei dati dalla verifica delle affermazioni, il rilevamento delle contraddizioni dalla loro risoluzione e le decisioni di revisione dalle conclusioni. Ogni fase scrive su un registro immutabile; ogni valutazione di idoneità viene calcolata in base a tali registri, e non è una semplice affermazione.
+`research-os` è il livello di controllo che interviene tra la richiesta "Voglio ricercare X" e una base di dati strutturata e verificabile. Separa le ipotesi iniziali dalle prove raccolte, l'estrazione dei dati dalle affermazioni verificate, il rilevamento delle contraddizioni dalla loro risoluzione e le decisioni di revisione dalle conclusioni finali. Ogni passaggio viene registrato in un registro immutabile; ogni valutazione di disponibilità è calcolata a partire da questi registri, e non è una semplice affermazione.
 
-Non è un generatore di report. Non è un framework di orchestrazione di modelli linguistici di grandi dimensioni (LLM). Non scrive la sintesi per te. Impone le condizioni necessarie per l'inizio della sintesi.
+Non è un generatore di report. Non è un framework per l'orchestrazione di modelli linguistici di grandi dimensioni (LLM). Non scrive la sintesi per te. Impone le condizioni necessarie per l'inizio della sintesi.
 
-**La versione 0.1 è stata utilizzata una sola volta: da sola, su se stessa.** Questa singola iterazione ha rilevato sette errori in `research-os`, tutti corretti prima di questa versione. La documentazione del processo — sette sessioni, due modelli di integrazione implementati, 463 test unitari, un pacchetto consolidato — è disponibile in [`docs/dogfood-proof.md`](docs/dogfood-proof.md). Manuale online: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+I pacchetti finalizzati vengono archiviati in [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) e sono disponibili, con due pacchetti iniziali. Consultare [`docs/roadmap.md`](docs/roadmap.md) per la roadmap della versione 1.0.
 
-## Le 16 leggi fondamentali
-
-| # | Legge |
-|---|-----|
-| 1 | Nessuna sintesi prima della verifica delle fonti. |
-| 2 | La raccolta è una prova; l'estrazione è un'interpretazione. |
-| 3 | I modelli possono interpretare porzioni di testo originale; non possono creare porzioni di testo che costituiscono una prova. |
-| 4 | L'estrazione può produrre un eccesso di informazioni; la sintesi non può ereditare questa abbondanza. |
-| 5 | La mappatura delle contraddizioni evidenzia le discrepanze; non le risolve, non le sintetizza e non decide quale affermazione è corretta. |
-| 6 | I controlli determinano se una sezione è idonea per la sintesi. Non eseguono la sintesi né nascondono i fallimenti. |
-| 7 | La revisione critica valuta l'integrità della ricerca. Non esegue la sintesi né riscrive il testo originale. |
-| 8 | L'indicizzazione rende la ricerca di informazioni basata su prove possibile. Non crea nuove informazioni né diventa la fonte ufficiale. |
-| 9 | La funzione di trasferimento a Cowork genera istruzioni operative a partire dalle informazioni verificate. Non crea informazioni né aggira i controlli. |
-| 10 | L'ambiente di lavoro per la sintesi organizza le informazioni verificate per Cowork. Non esegue la sintesi né aggira la modalità di trasferimento. |
-| 11 | L'audit del pacchetto aggrega le informazioni verificate esistenti. Non crea nuove informazioni né nasconde le prove a livello di sezione. |
-| 12 | La fase di scoperta propone spunti; solo la raccolta produce prove. |
-| 13 | Un revisore non è considerato affidabile finché non vengono dimostrati dei fallimenti e la sua capacità di rilevarli. |
-| 14 | L'abbondanza di affermazioni non è sinonimo di qualità della ricerca. Le affermazioni devono essere verificate prima di poter essere considerate per la sintesi. |
-| 15 | La fase di consolidamento blocca le informazioni verificate. Non completa la ricerca incompleta né converte lo stato di riparazione in prove. |
-| 16 | Le eccezioni allentano i vincoli delle fonti; non possono creare prove. |
-
-**Legge 3** — il modello linguistico non crea mai il testo delle prove. `research-os` crea un registro di estratti deterministico (con ID stabili come `ex_<source_id_hex>_001`); il modello linguistico seleziona gli ID degli estratti; `research-os` copia il testo letterale. La classe di errore "parafrasi come citazione" è strutturalmente impossibile.
-
-**Legge 14** — tra l'estrazione e la revisione, `research-os claim triage` deduplica, limita il contributo per fonte e mette da parte i candidati meno promettenti. La fase di triage NON modifica `claims.jsonl`; le affermazioni messe da parte rimangono nel registro principale.
-
-## La sequenza di lavoro della versione 0.1
-
-```
-discover
-→ gather
-→ claim extract
-→ claim audit-density
-→ claim triage
-→ contradict map
-→ contradict resolve
-→ review
-→ review-promote
-→ gate
-→ section report
-→ audit
-→ index build
-→ cowork handoff
-→ synth workspace
-→ freeze
-```
-
-Ogni passaggio è un comando da riga di comando. Ogni passaggio scrive su artefatti che possono essere solo aggiunti, non modificati. Nessun passaggio sintetizza, risolve o crea nuove verità; questi vincoli sono applicati, non considerati come affidabili. La fase di revisione accetta, rifiuta o richiede modifiche alle proposte; la fase di "gate" utilizza queste decisioni per calcolare l'idoneità alla sintesi; la fase di "freeze" è il blocco finale di integrità che impedisce di considerare un pacchetto come completato a meno che tutti i livelli non siano d'accordo. Consultare il file [docs/dogfood-proof.md](docs/dogfood-proof.md) per la documentazione della versione 0.1 che dimostra la coerenza dell'intera catena.
-
-Questa è un'alternativa strutturale a *ricerca → riepilogo → report dettagliato*. La catena è il prodotto.
+La versione 0.1 è stata testata in due cicli di "dogfooding". Il primo, che consisteva nella ricerca sulla propria specifica, ha identificato sette errori prima del rilascio della versione 0.1.0, ognuno dei quali ha richiesto una correzione del codice e ha portato all'implementazione di una regola o di un modello di integrazione. Il secondo (Esperimento 1: Durabilità del flusso di lavoro ComfyUI, 11 sessioni, un dominio senza sovrapposizioni lessicali con research-os) è stato completato il 2026-05-09: il pacchetto è stato finalizzato e l'archivio è attivo; l'applicazione della regola 2 è stata completata tramite il commit `22b5dba`. La documentazione del test della versione 0.1 è disponibile in [`docs/dogfood-proof.md`](docs/dogfood-proof.md); la documentazione dell'Esperimento 1 è disponibile in [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md). La guida completa è disponibile all'indirizzo: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
 
 ## Installazione
 
 **Requisiti:** Node.js ≥ 20.
 
 ```bash
-# From source (v0.1.0 is not yet published to npm)
+npm install -g @mcptoolshop/research-os
+```
+
+Per i contributori che costruiscono il software partendo dal codice sorgente:
+
+```bash
 git clone https://github.com/mcp-tool-shop-org/research-os.git
 cd research-os
 npm install
 npm run build
-npm link   # makes `research-os` available on your PATH
+npm link
 ```
 
 ## Guida rapida
@@ -119,45 +76,110 @@ research-os index build --all
 research-os cowork handoff
 research-os synth workspace   # only if handoff returned synthesis_ready
 research-os freeze
+
+# Export to the research-packs archive
+research-os pack publish \
+  --to <research-packs>/packages/<name>
 ```
 
-**Per un esempio pratico**, consultare il pacchetto di test interno in `research-os-packs/research-os-spec/` — ogni artefatto, ogni ricevuta, ogni decisione, ogni "impronta" della fase di "freeze", tutto memorizzato su disco in registri che consentono solo l'aggiunta di dati. Questo pacchetto ha generato il file `docs/dogfood-proof.md`.
+**Per un esempio pratico**, consultare il pacchetto di test `research-os-packs/research-os-spec/`, che contiene tutti gli elementi, le ricevute, le valutazioni, le "impronte digitali" e le registrazioni, tutti memorizzati in registri immutabili. Questo pacchetto ha generato la documentazione `docs/dogfood-proof.md`.
 
-**Richiede [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) in esecuzione localmente** per l'estrazione, la classificazione, la revisione e la scoperta tramite modelli linguistici di grandi dimensioni (LLM). Il modello predefinito è `hermes3:8b`; è possibile specificarne uno diverso con la variabile d'ambiente `OLLAMA_INTERN_MODEL=<modello>`. Impostare la variabile `OLLAMA_HOST` se Ollama non è in esecuzione sull'indirizzo predefinito `localhost:11434`.
+**Richiede [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) in esecuzione localmente** per l'estrazione, la classificazione, la revisione e la scoperta tramite LLM. Il modello predefinito è `hermes3:8b`; è possibile sovrascriverlo impostando la variabile d'ambiente `OLLAMA_INTERN_MODEL=<modello>`. Impostare la variabile `OLLAMA_HOST` se Ollama non è in esecuzione sull'indirizzo predefinito `localhost:11434`.
 
-## Terminologia
+## Le 16 regole fondamentali
+
+| # | Regola |
+|---|-----|
+| 1 | Nessuna sintesi prima della verifica delle fonti. |
+| 2 | La raccolta di dati è una prova; l'estrazione è un'interpretazione. |
+| 3 | I modelli possono interpretare porzioni di testo originale, ma non possono creare nuove prove. |
+| 4 | L'estrazione può produrre un eccesso di dati; la sintesi non deve necessariamente includere tutti i dati estratti. |
+| 5 | La mappatura delle contraddizioni evidenzia le discrepanze, ma non le risolve, non le sintetizza e non determina quale affermazione sia corretta. |
+| 6 | I "gate" decidono se una sezione è idonea per la sintesi. Non eseguono la sintesi né nascondono i fallimenti. |
+| 7 | La revisione critica valuta l'integrità della ricerca. Non esegue la sintesi né riscrive le fonti originali. |
+| 8 | L'indicizzazione rende la ricerca di informazioni più semplice. Non crea nuove informazioni e non diventa la fonte ufficiale. |
+| 9 | Il trasferimento di informazioni a Cowork traduce le istruzioni operative a partire dalle informazioni verificate. Non crea nuove informazioni e non aggira i "gate". |
+| 10 | L'area di lavoro per la sintesi organizza le informazioni verificate per Cowork. Non esegue la sintesi e non aggira la modalità di trasferimento. |
+| 11 | L'audit del pacchetto raccoglie le informazioni verificate esistenti. Non crea nuove informazioni e non nasconde le prove a livello di sezione. |
+| 12 | La scoperta propone nuove piste di ricerca; solo la raccolta di dati produce prove. |
+| 13 | Un revisore non è considerato affidabile finché non vengono dimostrate delle lacune e la sua capacità di rilevarle. |
+| 14 | L'abbondanza di affermazioni non equivale a qualità della ricerca. Le affermazioni devono essere valutate prima di poter essere considerate per la sintesi. |
+| 15 | La funzione "freeze" blocca la ricerca completata e valida. Non completa la ricerca incompleta né trasforma uno stato di "in riparazione" in una prova. |
+| 16 | Le eccezioni (waivers) allentano i vincoli sulle fonti; non possono essere utilizzate per fabbricare prove. |
+
+**Legge 3** — il modello linguistico (LLM) non genera mai il testo delle prove. Il sistema "research-os" crea un registro deterministico degli estratti (con ID stabili come `ex_<id_esadecimale_della_fonte>_001`); l'LLM seleziona gli ID degli estratti; "research-os" copia il testo letterale. La classe di errore "parafrasi come citazione" è strutturalmente impossibile.
+
+**Legge 14** — tra l'estrazione e la revisione, "research-os claim triage" elimina le duplicazioni, limita il contributo per fonte e mette in attesa le candidature meno promettenti. Il triage NON modifica il file `claims.jsonl`; le affermazioni messe in attesa rimangono nel registro principale.
+
+## La catena di flusso di lavoro v0.1
+
+```
+discover
+→ gather
+→ claim extract
+→ claim audit-density
+→ claim triage
+→ contradict map
+→ contradict resolve
+→ review
+→ review-promote
+→ gate
+→ section report
+→ audit
+→ index build
+→ cowork handoff
+→ synth workspace
+→ freeze
+```
+
+Ogni passaggio è un comando della riga di comando (CLI). Ogni passaggio scrive su file che possono essere solo aggiunti (append-only). Nessun passaggio sintetizza, risolve o crea nuove verità; questi vincoli sono applicati, non affidati. La revisione accetta, rifiuta o richiede una correzione delle affermazioni candidate; il "gate" utilizza queste decisioni di revisione per calcolare l'"idoneità alla sintesi"; la funzione "freeze" è il blocco finale di integrità che rifiuta di contrassegnare un pacchetto come completato a meno che tutti i livelli non siano d'accordo. Consultare [docs/dogfood-proof.md](docs/dogfood-proof.md) per la prova della catena v0.1, che ne garantisce la coerenza end-to-end.
+
+Questa è l'alternativa strutturale a *ricerca → riepilogo → report dettagliato*. La catena è il prodotto.
+
+## Vocabolario
 
 | Termine | Significato |
 |------|---------|
-| `research-os` | Il piano di controllo / la riga di comando / le fasi di controllo / la legge di orchestrazione (questo repository) |
-| `research-pack` | L'artefatto del repository generato per uno specifico progetto di ricerca |
+| `research-os` | Il piano di controllo / CLI / gate / legge di orchestrazione (questo repository) |
+| `research-pack` | L'artefatto del repository generato per uno sforzo di ricerca |
 | `research section` | Un'unità di indagine delimitata all'interno di un pacchetto |
-| `research receipt` | Dimostra che una sezione ha superato i controlli di origine/affermazione/fase di controllo |
+| `research receipt` | Prova che una sezione ha superato i controlli di fonte/affermazione/gate |
 
 ## Sicurezza
 
-`research-os` è uno strumento da riga di comando che opera principalmente localmente. Legge e scrive file all'interno della directory del pacchetto di ricerca specificata e, quando si utilizza il comando `gather`, invia richieste HTTP in uscita per recuperare gli URL di origine forniti. Non esegue un server, non accetta connessioni in entrata, non memorizza credenziali e non invia dati di telemetria. Nessun segreto viene scritto negli artefatti del pacchetto. Consultare il file [SECURITY.md](SECURITY.md) per le informazioni sulla segnalazione di vulnerabilità.
+`research-os` è un'interfaccia a riga di comando (CLI) locale. Legge e scrive file all'interno della directory del pacchetto di ricerca a cui la si indica e, quando si utilizza la funzione "gather", effettua richieste HTTP in uscita per recuperare gli URL delle fonti fornite. Non esegue un server, non accetta connessioni in entrata, non memorizza credenziali né invia dati di telemetria. Nessun segreto viene scritto negli artefatti del pacchetto. Consultare [SECURITY.md](SECURITY.md) per la politica di segnalazione delle vulnerabilità.
 
 ## Stato
 
-**v0.1.0** — bloccato il 2026-05-08. Il pacchetto di test interno in `research-os-packs/research-os-spec/` (repository correlato) ha raggiunto la fase di blocco con 296 affermazioni accettate in 8 sezioni, 17 considerate complete, 30 modificate dagli operatori, 0 blocchi di riparazione attivi, 0 contraddizioni irrisolte e tutti i controlli con `synthesis_eligible=true`. 463 test su 463 superati. Sedici regole fondamentali implementate. Consultare il file [`docs/dogfood-proof.md`](docs/dogfood-proof.md) per i sette risultati e le "impronte" delle ricevute della fase di blocco.
+**v0.3.1** — pubblicato su npm come `@mcptoolshop/research-os@0.3.1`, 9 maggio 2026. Include eccezioni specifiche per sezione per le fonti (`primary_source_waiver.section_waivers[]`) e un'approvazione da parte del revisore, in modo che una scoperta di "monopolio del cluster di fonti" a livello di sezione diventi un avvertimento visibile anziché indirizzare automaticamente tutte le affermazioni a "needs_source_repair". Ottenuto con l'esperimento 3 del pacchetto XRPL, sessione 2 — le sezioni relative al protocollo canonico (catene con una singola base, specifiche API a "giardino chiuso", documentazione di organismi di standardizzazione) hanno invertito l'assunzione che la diversità degli editori sia un indicatore della qualità della verità. 540/540 test vitest superati. Consultare [CHANGELOG.md](CHANGELOG.md) e [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
 
-### Cosa la versione 0.1 non è
+**Eccezioni specifiche per sezione per le fonti** — Utilizzarle quando la diversità degli editori è strutturalmente incompatibile con la fonte di verità della sezione, non quando una sezione semplicemente non è riuscita a trovare abbastanza fonti. Schema con `reason` (motivo) e `compensating_controls[]` (controlli compensativi) obbligatori. La policy del pacchetto `primary_source_waiver_allowed: false` blocca sia le eccezioni a livello di pacchetto che quelle specifiche per sezione. Il workaround precedente alla v0.3.1, `min_independent_publishers: 0`, è ora obsoleto; i pacchetti "frozen" esistenti rimangono validi con le ricevute esistenti. Consultare [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) e il [manuale operativo dei pacchetti di ricerca](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md).
 
-- Non è stata testata da utenti esterni. Il singolo test interno ha rilevato sette bug.
-- Non è ancora disponibile su npm. Installare dal codice sorgente fino a quando non verrà eseguita la pubblicazione su npm.
-- Non è uno strumento per la generazione automatica di codice. Il comando `synth workspace` genera l'ambiente di lavoro strutturato; gli utenti (o Cowork) scrivono il testo in base agli ID delle affermazioni accettate.
-- Non ha una stabilità dell'API conforme alla versione semantica. La versione 1.0.0 è uno stato da raggiungere, non una data specifica; consultare il file [`docs/roadmap.md`](docs/roadmap.md) per i cinque esperimenti che colmano questa lacuna.
+**v0.3.0** — pubblicata il 2026-05-09. È stato introdotto il flag `--detector <auto|heuristic|ollama-intern>` in `contradict map` (correzione F-09 del blocco della catena proveniente dalla Sessione 1 dell'Esperimento 3, pacchetto XRPL). 527 test vitest superati. La selezione del rilevatore è ora una scelta esplicita da parte dell'operatore, invece di una dipendenza dallo stato e da variabili d'ambiente; la modalità viene visualizzata in modo chiaro ad ogni esecuzione. Consultare [`docs/contradict-map.md`](docs/contradict-map.md).
+
+**v0.2.0** — pubblicata il 2026-05-09. Sono stati distribuiti il pacchetto `research-os pack publish` (Esperimento 2) e la correzione del predicato di prontezza del Pattern 2. 515 test vitest superati. Consultare [CHANGELOG.md](CHANGELOG.md). I pacchetti con stato finale vengono esportati nell'archivio canonico `research-packs` con un singolo comando; l'accordo contrattuale viene applicato tramite codice, non tramite una checklist. Consultare [`docs/pack-publish.md`](docs/pack-publish.md).
+
+**v0.1.0** — pacchetto di test interno bloccato l'8 maggio 2026. Il pacchetto in `research-os-packs/research-os-spec/` (repository correlato) ha raggiunto lo stato finale con 296 affermazioni accettate in 8 sezioni, 17 risolte, 30 sovrascritte dall'operatore, 0 blocchi di riparazione attivi, 0 contraddizioni irrisolte, con tutte le condizioni (`synthesis_eligible=true`) soddisfatte. Sono state implementate sedici leggi fondamentali. Consultare [`docs/dogfood-proof.md`](docs/dogfood-proof.md) per i sette risultati e le informazioni sull'identificazione dello stato finale.
+
+**Archivio monorepo dei pacchetti di ricerca** — disponibile su [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) con due pacchetti disponibili fin dal primo giorno. `comfyui-workflow-durability` (Esperimento 1, 302 affermazioni accettate, 8 sezioni) e `research-os-self-dogfood` (backfill v0.1 per i test interni, 296 affermazioni accettate, 8 sezioni). Entrambi i pacchetti superano il test `verify-pack.mjs`.
+
+**Esperimento 1 (Durabilità del flusso di lavoro ComfyUI)** — CHIUSO il 9 maggio 2026. Tutte le 8 sezioni in Terminal A, pacchetto bloccato, archivio disponibile. Consultare [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) e [`docs/roadmap.md`](docs/roadmap.md).
+
+### Cosa la versione 0.3 non è
+
+- Non è stata testata da utenti esterni. Due cicli di test interni sono stati completati: uno auto-referenziale e uno con un dominio esterno. L'Esperimento 3 (stabilità dell'API sotto pressione esterna) è in corso: il pacchetto #1 di 3 (durabilità dei token creati per XRPL) ha ottenuto sia il flag `--detector` della versione 0.3.0 sia le eccezioni specifiche per la sezione della versione 0.3.1. Sono necessari altri due pacchetti con dominio esterno per completare l'Esperimento 3.
+- Non è uno strumento di generazione di codice. Il comando `synth workspace` genera l'ambiente di lavoro strutturato; gli operatori (o Cowork) scrivono il testo in base agli ID delle affermazioni accettate.
+- Non è stabile a livello di API secondo le convenzioni di versione semantiche. La versione 1.0.0 è uno stato raggiunto, non una data specifica; consultare [`docs/roadmap.md`](docs/roadmap.md) per i sei esperimenti che colmano questa lacuna.
 
 ### Limitazioni note
 
-- **L'origine dell'estrazione non è visibile nella cucitura del gateway.** Una sezione può superare la soglia accettabile, facendo affidamento su meccanismi di fallback euristici, quando l'estrazione calibrata (Ollama con il modello configurato) non è disponibile. Questo è stato registrato come una vulnerabilità nota; le future implementazioni di sicurezza segnaleranno le richieste accettate dall'estrazione e richiederanno un numero di richieste accettate pari alla soglia, provenienti dal percorso calibrato.
-- **La selezione del modello di revisione, al di là della baseline calibrata `hermes-two-pass`, non è ancora risolta.** Il ciclo di test interno ha validato una configurazione di revisore; altri modelli devono essere sottoposti a una calibrazione specifica per scenari di errore simulati prima di poter essere considerati affidabili.
-- **Il pacchetto di test interno ha utilizzato `mistral-nemo:12b` per l'estrazione (l'impostazione predefinita standard è `hermes3:8b`).** Il sistema ha generato risultati errati per nomi di sezioni che facevano riferimento a domini non corretti; questo è stato corretto tramite una disciplina di precisione delle query (vedere il manuale) e tramite l'utilizzo di URL preconfigurati dagli operatori per argomenti ambigui.
+- **L'origine dei dati estratti non è visibile al livello di connessione.** Una sezione può superare la soglia delle affermazioni accettate facendo affidamento su affermazioni basate su euristiche quando l'estrazione calibrata (Ollama con il modello configurato) non è disponibile. Questo è stato registrato come Esperimento 4 nella roadmap; le future ottimizzazioni mostreranno le affermazioni accettate per ogni strumento di estrazione e richiederanno il numero di affermazioni accettate derivanti dal percorso calibrato.
+- **La selezione del modello di revisione oltre al modello di riferimento calibrato `hermes-two-pass` non è ancora risolta.** Il ciclo di test interni ha validato una configurazione del revisore; modelli alternativi devono essere sottoposti a una calibrazione specifica per la rilevazione di errori prima di poter essere considerati affidabili. Questo è l'Esperimento 5 nella roadmap.
+- **Il pacchetto di test interni v0.1 ha utilizzato `mistral-nemo:12b` per l'estrazione (il valore predefinito canonico è `hermes3:8b`).** `hermes3:8b` non era disponibile su questo sistema durante il ciclo v0.1. Questa dichiarazione di sostituzione rimane valida fino a quando non viene generato un risultato basato su hermes3; questo è l'Esperimento 6 nella roadmap. Per gli operatori che utilizzano sistemi senza `hermes3:8b`, impostare la variabile `OLLAMA_INTERN_MODEL` su un modello disponibile; le URL pre-configurate per l'operatore e la disciplina nella precisione delle query (vedere il manuale) mitigano le allucinazioni nella scoperta di argomenti ambigui.
 
 ## Roadmap per la versione 1.0
 
-La versione 1.0 è uno stato da raggiungere, non una data di rilascio. Cinque esperimenti sono ancora in corso tra la versione 0.1 e la versione 1.0: stabilità dell'API sotto pressione esterna, un pacchetto di test interno che non faccia riferimento a se stesso, la risoluzione del problema della visibilità dell'origine dell'estrazione, la generalizzazione della calibrazione del revisore al di là di `hermes-two-pass` e un test di base pulito su `hermes3:8b`. Il piano completo è disponibile in [`docs/roadmap.md`](docs/roadmap.md). L'architettura rimane stabile; la versione 1.0 approfondisce ciò che la versione 0.1 ha dimostrato, piuttosto che riaprire vecchie problematiche.
+La versione 1.0 è uno stato raggiunto attraverso il lavoro svolto, non una data di rilascio. Tra la versione 0.1 e la 1.0 ci sono sei esperimenti in corso: un sistema di test interno non auto-referenziale (attualmente in fase di sviluppo come il pacchetto "ComfyUI workflow durability"), un comando `research-os pack publish` che automatizza l'esportazione nel repository centrale `research-packs` (Esperimento 2, limitato e dipendente dal completamento dell'Esperimento 1), stabilità dell'API sotto pressione esterna, colmare il divario sulla provenienza dei dati estratti, estendere la calibrazione dei revisori oltre il sistema `hermes-two-pass` e un test di base pulito su `hermes3:8b`. L'Esperimento 1 non è completato al momento del "congelamento" del pacchetto; si conclude quando il pacchetto "congelato" viene distribuito come il primo pacchetto nel repository centrale `research-packs`, insieme al pacchetto di test interno della versione 0.1. Il piano completo è disponibile in [`docs/roadmap.md`](docs/roadmap.md). L'architettura rimane invariata; la versione 1.0 approfondisce ciò che la versione 0.1 ha dimostrato, piuttosto che riaprire vecchie questioni.
 
 ## Licenza
 

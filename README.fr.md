@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/version-0.1.0-blue" alt="version 0.1.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -24,7 +24,67 @@ Un outil en ligne de commande qui transforme un sujet ouvert en un **ensemble de
 
 Ce n'est pas un générateur de rapports. Ce n'est pas un framework d'orchestration de modèles de langage (LLM). Il ne rédige pas la synthèse pour vous. Il impose les conditions dans lesquelles la synthèse peut commencer.
 
-**La version 0.1 a été utilisée une seule fois : par elle-même, sur elle-même.** Cette seule utilisation a révélé sept lacunes de correction dans `research-os`, chacune étant corrigée avant cette version. La traçabilité des modifications — sept sessions, deux modèles d'intégration, 463 cas de tests `vitest`, un ensemble de ressources structuré — se trouve dans [`docs/dogfood-proof.md`](docs/dogfood-proof.md). Manuel d'utilisation : <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+Les paquets figés sont archivés dans [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) — et sont disponibles, avec deux paquets de la première version. Consultez [`docs/roadmap.md`](docs/roadmap.md) pour connaître la feuille de route de la version 1.0.
+
+La version 0.1 a été soumise à des tests intensifs lors de deux phases de test interne. La première — où "research-os" étudiait sa propre spécification — a révélé sept erreurs avant la version 0.1.0, chacune nécessitant une correction de code et donnant lieu à une règle ou un modèle d'intégration. La deuxième (v1 Experiment 1 : durabilité du flux de travail ComfyUI, 11 sessions, un domaine sans chevauchement de vocabulaire avec "research-os") a été finalisée le 2026-05-09 : le paquet a été figé, l'archive est en ligne, et l'application du modèle 2 a été achevée via le commit `22b5dba`. Les preuves de la version 0.1 sont disponibles dans [`docs/dogfood-proof.md`](docs/dogfood-proof.md) ; les preuves de l'Expérimentation 1 sont disponibles dans [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md). Le manuel est disponible à l'adresse suivante : <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+
+## Installation
+
+**Prérequis :** Node.js ≥ 20.
+
+```bash
+npm install -g @mcptoolshop/research-os
+```
+
+Pour les contributeurs qui construisent à partir du code source :
+
+```bash
+git clone https://github.com/mcp-tool-shop-org/research-os.git
+cd research-os
+npm install
+npm run build
+npm link
+```
+
+## Démarrage rapide
+
+```bash
+# Create a new research-pack
+research-os init "How should X be structured?"
+
+# Add a section
+research-os section add 01-landscape --purpose "Map the current landscape"
+
+# Discover and approve sources, then gather
+research-os discover run 01-landscape
+research-os discover approve 01-landscape --top 8
+research-os gather 01-landscape --approved
+
+# Run the per-section chain
+research-os claim extract 01-landscape
+research-os claim audit-density 01-landscape
+research-os claim triage 01-landscape
+research-os contradict map 01-landscape --triaged-only
+research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
+research-os review-promote 01-landscape --profile hermes-two-pass
+research-os gate 01-landscape
+research-os section report 01-landscape
+
+# Pack-level finish
+research-os audit
+research-os index build --all
+research-os cowork handoff
+research-os synth workspace   # only if handoff returned synthesis_ready
+research-os freeze
+
+# Export to the research-packs archive
+research-os pack publish \
+  --to <research-packs>/packages/<name>
+```
+
+**Pour un exemple concret**, consultez l'ensemble de données "dogfood" situé dans `research-os-packs/research-os-spec/` : chaque fichier, chaque enregistrement, chaque disposition, chaque empreinte de "gel", le tout est stocké sur disque dans des fichiers qui ne peuvent être modifiés qu'en ajoutant des informations. Cet ensemble de données a généré le fichier `docs/dogfood-proof.md`.
+
+**Nécessite [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) en cours d'exécution localement** pour l'extraction, le tri, la revue et la découverte des modèles de langage. Le modèle par défaut est `hermes3:8b`; vous pouvez le modifier en utilisant la variable d'environnement `OLLAMA_INTERN_MODEL=<modèle>`. Définissez la variable d'environnement `OLLAMA_HOST` si Ollama n'est pas exécuté sur l'adresse par défaut `localhost:11434`.
 
 ## Les 16 lois fondamentales
 
@@ -76,55 +136,6 @@ Chaque étape est une commande en ligne de commande. Chaque étape écrit des do
 
 Ceci est une alternative structurée à *recherche → résumé → rapport détaillé*. La chaîne est le produit.
 
-## Installation
-
-**Prérequis :** Node.js ≥ 20.
-
-```bash
-# From source (v0.1.0 is not yet published to npm)
-git clone https://github.com/mcp-tool-shop-org/research-os.git
-cd research-os
-npm install
-npm run build
-npm link   # makes `research-os` available on your PATH
-```
-
-## Démarrage rapide
-
-```bash
-# Create a new research-pack
-research-os init "How should X be structured?"
-
-# Add a section
-research-os section add 01-landscape --purpose "Map the current landscape"
-
-# Discover and approve sources, then gather
-research-os discover run 01-landscape
-research-os discover approve 01-landscape --top 8
-research-os gather 01-landscape --approved
-
-# Run the per-section chain
-research-os claim extract 01-landscape
-research-os claim audit-density 01-landscape
-research-os claim triage 01-landscape
-research-os contradict map 01-landscape --triaged-only
-research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
-research-os review-promote 01-landscape --profile hermes-two-pass
-research-os gate 01-landscape
-research-os section report 01-landscape
-
-# Pack-level finish
-research-os audit
-research-os index build --all
-research-os cowork handoff
-research-os synth workspace   # only if handoff returned synthesis_ready
-research-os freeze
-```
-
-**Pour un exemple concret**, consultez l'ensemble de données "dogfood" situé dans `research-os-packs/research-os-spec/` : chaque fichier, chaque enregistrement, chaque disposition, chaque empreinte de "gel", le tout est stocké sur disque dans des fichiers qui ne peuvent être modifiés qu'en ajoutant des informations. Cet ensemble de données a généré le fichier `docs/dogfood-proof.md`.
-
-**Nécessite [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) en cours d'exécution localement** pour l'extraction, le tri, la revue et la découverte des modèles de langage. Le modèle par défaut est `hermes3:8b`; vous pouvez le modifier en utilisant la variable d'environnement `OLLAMA_INTERN_MODEL=<modèle>`. Définissez la variable d'environnement `OLLAMA_HOST` si Ollama n'est pas exécuté sur l'adresse par défaut `localhost:11434`.
-
 ## Vocabulaire
 
 | Terme | Signification |
@@ -140,20 +151,35 @@ research-os freeze
 
 ## Statut
 
+**v0.3.1** — publié sur npm en tant que `@mcptoolshop/research-os@0.3.1`, le 2026-05-09. Inclut des clauses de non-responsabilité spécifiques aux sections (`primary_source_waiver.section_waivers[]`) et une reconnaissance de la part des examinateurs, de sorte qu'une constatation de "monopole de la source" à l'échelle d'une section, qui aurait normalement redirigé toutes les demandes vers "needs_source_repair", devient une mise en garde visible. Ceci a été obtenu lors de la session 2 de l'Expérimentation 3 avec le paquet XRPL — les sections relatives au protocole canonique (chaînes à fondation unique, spécifications d'API en "bac à sable", documents des organismes de normalisation) ont inversé l'hypothèse selon laquelle la diversité des éditeurs est un indicateur de la qualité de l'information. 540/540 tests vitest réussis. Consultez [CHANGELOG.md](CHANGELOG.md) et [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
+
+**Clauses de non-responsabilité spécifiques aux sections** — Utilisez-les lorsque la diversité des éditeurs est structurellement incompatible avec la source d'information de la section, et non lorsque la section n'a simplement pas trouvé suffisamment de sources. Elles sont soumises à un schéma et incluent un champ "reason" (raison) et un tableau "compensating_controls" (contrôles compensatoires) non vide. La politique du paquet `primary_source_waiver_allowed: false` bloque à la fois les clauses de non-responsabilité au niveau du paquet et celles spécifiques aux sections. La solution de contournement `min_independent_publishers: 0` au niveau du paquet, valable avant la version 0.3.1, est maintenant obsolète ; les paquets figés existants restent valides avec leurs reçus existants. Consultez [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) et le [guide d'utilisation de l'opérateur pour research-packs](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md).
+
+**v0.3.0** — publié le 2026-05-09. Introduit le paramètre `--detector <auto|heuristic|ollama-intern>` pour la commande `contradict map` (correction F-09 du blocage de la chaîne de l'Expérimentation 3, session 1, paquet XRPL). 527/527 tests vitest réussis. La sélection du détecteur est maintenant un choix explicite de l'opérateur, au lieu d'une danse complexe avec les variables d'environnement ; le mode est annoncé clairement à chaque exécution. Consultez [`docs/contradict-map.md`](docs/contradict-map.md).
+
+**v0.2.0** — publié le 2026-05-09. Introduit `research-os pack publish` (Expérimentation 2) et la correction de la condition de préparation pour le modèle 2. 515/515 tests vitest réussis. Consultez [CHANGELOG.md](CHANGELOG.md). Les paquets figés sont exportés vers l'archive canonique `research-packs` avec une seule commande ; le contrat d'admission est appliqué par le code, et non par une liste de contrôle. Consultez [`docs/pack-publish.md`](docs/pack-publish.md).
+
 **v0.1.0** — gelée le 2026-05-08. L'ensemble de données "dogfood" situé dans `research-os-packs/research-os-spec/` (dépôt frère) a atteint l'état de "gel" avec 296 propositions acceptées réparties sur 8 sections, 17 dispositions, 30 propositions corrigées par l'utilisateur, 0 blocage de correction actif, 0 contradiction non résolue, toutes les étapes de validation indiquant `synthesis_eligible=true`. 463/463 tests Vitest réussis. Seize règles fondamentales cumulées. Consultez le fichier [`docs/dogfood-proof.md`](docs/dogfood-proof.md) pour connaître les sept découvertes et les empreintes des enregistrements de "gel".
+
+**Archive monorepo research-packs** — disponible à [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) avec deux paquets de la première version. `comfyui-workflow-durability` (Expérimentation 1, 302 demandes acceptées, 8 sections) et `research-os-self-dogfood` (rétro-intégration du test interne v0.1, 296 demandes acceptées, 8 sections). Les deux paquets passent le test `verify-pack.mjs`.
+
+**Expérimentation 1 (durabilité du flux de travail ComfyUI)** — CLOSÉE le 2026-05-09. Toutes les 8 sections à Terminal A, paquet figé, archive en ligne. Consultez [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) et [`docs/roadmap.md`](docs/roadmap.md).
 
 ### Ce que la version 0.1 n'est pas
 
-- Non testée en conditions réelles par des utilisateurs externes. La seule exécution "dogfood" a révélé sept bogues.
-- Pas encore disponible sur npm. Installez à partir du code source jusqu'à ce que la publication `npm publish` ait lieu.
-- Pas un générateur de code. La commande `synth workspace` génère l'espace de travail structuré ; les humains (ou Cowork) écrivent le texte en fonction des identifiants des propositions acceptées.
-- Pas une API stable selon les règles de compatibilité sémantique. La version 1.0.0 sera publiée après que des utilisateurs externes auront validé l'interface au fil du temps.
+- Non testé par des utilisateurs externes. Deux cycles de tests internes ont été terminés : un cycle centré sur le produit lui-même, un autre sur un domaine externe. L'expérience 3 (stabilité de l'API sous pression externe) est en cours : le lot n°1 sur 3 (durabilité des jetons créateurs XRPL) a permis d'obtenir à la fois le drapeau `--detector` de la version v0.3.0 et les exemptions de portée de section de la version v0.3.1. Deux lots supplémentaires liés à un domaine externe sont nécessaires pour la finalisation de l'expérience 3.
+- Ne génère pas de contenu. La commande `synth workspace` crée l'environnement de travail structuré ; les rédacteurs (ou Cowork) écrivent le contenu en se basant sur les identifiants de revendications approuvés.
+- La stabilité de l'API n'est pas garantie selon le système de versionnage sémantique. La version v1.0.0 est un objectif à atteindre, et non une date fixe ; consultez le fichier [`docs/roadmap.md`](docs/roadmap.md) pour connaître les six expériences qui permettent d'atteindre cet objectif.
 
 ### Limitations connues
 
-- **L'origine de l'extracteur n'est pas visible au niveau de la jointure.** Une section peut passer le seuil de validité tout en s'appuyant sur des mécanismes de repli heuristiques lorsque l'extracteur calibré (Ollama avec le modèle configuré) n'est pas disponible. Ceci est enregistré comme une faiblesse connue ; les améliorations futures indiqueront les affirmations acceptées par l'extracteur et exigeront un nombre d'affirmations acceptées égal au seuil à partir du chemin calibré.
-- **Le choix du modèle de réviseur, au-delà de la base de référence calibrée `hermes-two-pass`, n'est pas encore résolu.** L'environnement de test interne a validé une configuration de réviseur ; les modèles alternatifs doivent être calibrés avec des tests de défaillance simulées avant de pouvoir être utilisés.
-- **Le pack de test interne a utilisé `mistral-nemo:12b` pour l'extraction (la valeur par défaut est `hermes3:8b`).** Le système a généré des résultats incorrects pour des noms de sections auto-référentielles, ce qui a été corrigé grâce à une discipline de précision des requêtes (voir le manuel) et à des URL pré-configurées par les opérateurs pour les sujets ambigus.
+- **L'origine de l'extracteur n'est pas visible au niveau de la jointure.** Une section peut passer les tests en se basant sur des revendications heuristiques lorsque l'extracteur calibré (Ollama avec le modèle configuré) n'est pas disponible. Cela a été enregistré comme l'expérience 4 dans la feuille de route ; les améliorations futures indiqueront les revendications approuvées par l'extracteur et exigeront un nombre suffisant de revendications approuvées provenant du chemin calibré.
+- **Le choix du modèle de relecture, au-delà de la configuration de base calibrée `hermes-two-pass`, n'est pas encore résolu.** Le cycle de tests internes a validé une configuration de relecture ; les modèles alternatifs doivent être calibrés avec des tests de défaillance simulés avant de pouvoir être utilisés. C'est l'expérience 5 dans la feuille de route.
+- **Le lot de tests internes v0.1 a utilisé `mistral-nemo:12b` pour l'extraction (la valeur par défaut est `hermes3:8b`).** `hermes3:8b` n'était pas disponible sur cette configuration matérielle pendant le cycle v0.1. Cette information concernant le remplacement est valable jusqu'à ce qu'une version utilisant `hermes3` soit disponible. C'est l'expérience 6 dans la feuille de route. Pour les utilisateurs sur des configurations matérielles sans `hermes3:8b`, définissez la variable `OLLAMA_INTERN_MODEL` sur un modèle disponible ; les URL préconfigurées par l'administrateur et le respect des règles de précision des requêtes (voir le manuel) permettent de réduire les hallucinations sur des sujets ambigus.
+
+## Feuille de route vers la version 1.0
+
+La version 1.0 est un objectif à atteindre, et non une date de sortie. Six expériences sont en cours entre la version v0.1 et la version v1.0 : des tests internes non centrés sur le produit lui-même (actuellement en cours avec le lot de durabilité du flux de travail ComfyUI), une commande `research-os pack publish` qui automatise l'exportation vers le dépôt monolithique `research-packs` (expérience 2, qui est conditionnée à la finalisation manuelle de l'expérience 1), la stabilité de l'API sous pression externe, la résolution du problème de traçabilité de l'extracteur, l'amélioration de la calibration des relecteurs au-delà de `hermes-two-pass`, et une exécution de base propre sur `hermes3:8b`. L'expérience 1 n'est pas terminée au moment de la finalisation du lot ; elle est finalisée lorsque le lot finalisé est publié comme le premier package dans le dépôt monolithique `research-packs`, en complément du lot de tests internes v0.1. Le plan complet est disponible dans le fichier [`docs/roadmap.md`](docs/roadmap.md). L'architecture est verrouillée tout au long du processus ; la version 1.0 approfondit ce que la version 0.1 a démontré, plutôt que de repartir de zéro.
 
 ## Licence
 

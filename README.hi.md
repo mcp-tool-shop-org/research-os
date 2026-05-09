@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/version-0.1.0-blue" alt="version 0.1.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -24,7 +24,67 @@
 
 यह कोई रिपोर्ट जनरेटर नहीं है। यह कोई एलएलएम (LLM) प्रबंधन प्रणाली भी नहीं है। यह आपके लिए संश्लेषण (सिंथेसिस) नहीं लिखता है। यह उन शर्तों को लागू करता है जिनके तहत संश्लेषण शुरू किया जा सकता है।
 
-**v0.1 का उपयोग केवल एक बार किया गया है: अकेले, अपने आप में।** इस एक उपयोग में, `research-os` में सात त्रुटियाँ पाई गईं, जिन्हें इस संस्करण के जारी होने से पहले ठीक कर दिया गया था। इस परीक्षण प्रक्रिया से संबंधित जानकारी—सात सत्र, दो एकीकरण पैटर्न, 463 विटेस्ट परीक्षण मामले, और एक स्थिर पैकेज—[`docs/dogfood-proof.md`](docs/dogfood-proof.md) में उपलब्ध है। लाइव हैंडबुक: <https://mcp-tool-shop-org.github.io/research-os/handbook/>।
+फ़्रोज़न पैकेजों को [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) में संग्रहीत किया गया है - जो लाइव हैं, और इसमें दो शुरुआती पैकेज शामिल हैं। v1.0 के लिए मार्गदर्शिका [`docs/roadmap.md`](docs/roadmap.md) में देखें।
+
+v0.1 को दो परीक्षणों में जांचा गया। पहले परीक्षण में, "रिसर्च-ओएस" ने अपनी ही विशिष्टताओं का अध्ययन किया, जिसके परिणामस्वरूप v0.1.0 जारी होने से पहले सात त्रुटियां पाई गईं, जिनमें से प्रत्येक को ठीक करने की आवश्यकता थी और जिसके परिणामस्वरूप एक नियम या एकीकरण पैटर्न लागू हुआ। दूसरे परीक्षण (v1 प्रयोग 1: कॉमफयूआई वर्कफ़्लो की स्थिरता, 11 सत्र, एक ऐसा डोमेन जिसमें "रिसर्च-ओएस" के साथ कोई शब्दावली समानता नहीं है) को 2026-05-09 को पूरा किया गया: पैकेज को फ़्रोज़न कर दिया गया, संग्रह लाइव है, और पैटर्न 2 को कमिट `22b5dba` के माध्यम से लागू किया गया। v0.1 के परीक्षणों का विवरण [`docs/dogfood-proof.md`](docs/dogfood-proof.md) में है; प्रयोग 1 के परीक्षणों का विवरण [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) में है। लाइव हैंडबुक: <https://mcp-tool-shop-org.github.io/research-os/handbook/>।
+
+## स्थापना
+
+**आवश्यकताएँ:** Node.js ≥ 20।
+
+```bash
+npm install -g @mcptoolshop/research-os
+```
+
+उन योगदानकर्ताओं के लिए जो स्रोत कोड से निर्माण कर रहे हैं:
+
+```bash
+git clone https://github.com/mcp-tool-shop-org/research-os.git
+cd research-os
+npm install
+npm run build
+npm link
+```
+
+## शुरुआत
+
+```bash
+# Create a new research-pack
+research-os init "How should X be structured?"
+
+# Add a section
+research-os section add 01-landscape --purpose "Map the current landscape"
+
+# Discover and approve sources, then gather
+research-os discover run 01-landscape
+research-os discover approve 01-landscape --top 8
+research-os gather 01-landscape --approved
+
+# Run the per-section chain
+research-os claim extract 01-landscape
+research-os claim audit-density 01-landscape
+research-os claim triage 01-landscape
+research-os contradict map 01-landscape --triaged-only
+research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
+research-os review-promote 01-landscape --profile hermes-two-pass
+research-os gate 01-landscape
+research-os section report 01-landscape
+
+# Pack-level finish
+research-os audit
+research-os index build --all
+research-os cowork handoff
+research-os synth workspace   # only if handoff returned synthesis_ready
+research-os freeze
+
+# Export to the research-packs archive
+research-os pack publish \
+  --to <research-packs>/packages/<name>
+```
+
+**एक वास्तविक उदाहरण के लिए**, `research-os-packs/research-os-spec/` पर मौजूद 'डॉगफूड' पैकेज देखें - प्रत्येक फ़ाइल, प्रत्येक रिकॉर्ड, प्रत्येक स्थिति, प्रत्येक 'फ्रीज' फ़िंगरप्रिंट, सभी केवल अपेंड करने योग्य लॉग फ़ाइलों में मौजूद हैं। इसी पैकेज ने `docs/dogfood-proof.md` बनाया है।
+
+**स्थानीय रूप से चलने वाले [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) की आवश्यकता है** एलएलएम (LLM) निष्कर्षण, वर्गीकरण, समीक्षा और खोज के लिए। डिफ़ॉल्ट मॉडल `hermes3:8b` है; `OLLAMA_INTERN_MODEL=<model>` के साथ इसे बदला जा सकता है। यदि ओलामा डिफ़ॉल्ट `localhost:11434` पर नहीं चल रहा है, तो `OLLAMA_HOST` सेट करें।
 
 ## 16 भार-वाहक नियम।
 
@@ -76,55 +136,6 @@ discover
 
 यह *खोज → सारांश → सुंदर रिपोर्ट* का एक संरचनात्मक विकल्प है। यह श्रृंखला ही उत्पाद है।
 
-## स्थापना
-
-**आवश्यकताएँ:** Node.js ≥ 20।
-
-```bash
-# From source (v0.1.0 is not yet published to npm)
-git clone https://github.com/mcp-tool-shop-org/research-os.git
-cd research-os
-npm install
-npm run build
-npm link   # makes `research-os` available on your PATH
-```
-
-## शुरुआत
-
-```bash
-# Create a new research-pack
-research-os init "How should X be structured?"
-
-# Add a section
-research-os section add 01-landscape --purpose "Map the current landscape"
-
-# Discover and approve sources, then gather
-research-os discover run 01-landscape
-research-os discover approve 01-landscape --top 8
-research-os gather 01-landscape --approved
-
-# Run the per-section chain
-research-os claim extract 01-landscape
-research-os claim audit-density 01-landscape
-research-os claim triage 01-landscape
-research-os contradict map 01-landscape --triaged-only
-research-os review 01-landscape --triaged-only --preset hermes-two-pass --profile hermes-two-pass
-research-os review-promote 01-landscape --profile hermes-two-pass
-research-os gate 01-landscape
-research-os section report 01-landscape
-
-# Pack-level finish
-research-os audit
-research-os index build --all
-research-os cowork handoff
-research-os synth workspace   # only if handoff returned synthesis_ready
-research-os freeze
-```
-
-**एक वास्तविक उदाहरण के लिए**, `research-os-packs/research-os-spec/` पर मौजूद 'डॉगफूड' पैकेज देखें - प्रत्येक फ़ाइल, प्रत्येक रिकॉर्ड, प्रत्येक स्थिति, प्रत्येक 'फ्रीज' फ़िंगरप्रिंट, सभी केवल अपेंड करने योग्य लॉग फ़ाइलों में मौजूद हैं। इसी पैकेज ने `docs/dogfood-proof.md` बनाया है।
-
-**स्थानीय रूप से चलने वाले [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) की आवश्यकता है** एलएलएम (LLM) निष्कर्षण, वर्गीकरण, समीक्षा और खोज के लिए। डिफ़ॉल्ट मॉडल `hermes3:8b` है; `OLLAMA_INTERN_MODEL=<model>` के साथ इसे बदला जा सकता है। यदि ओलामा डिफ़ॉल्ट `localhost:11434` पर नहीं चल रहा है, तो `OLLAMA_HOST` सेट करें।
-
 ## शब्दावली
 
 | पद | अर्थ |
@@ -140,24 +151,35 @@ research-os freeze
 
 ## स्थिति
 
+**v0.3.1** — 2026-05-09 को `@mcptoolshop/research-os@0.3.1` के रूप में npm पर प्रकाशित। इसमें सेक्शन-स्कोप वाले स्रोत छूट (`primary_source_waiver.section_waivers[]`) शामिल हैं, साथ ही समीक्षक-पक्षीय स्वीकृति भी है, ताकि किसी भी सेक्शन में `source_cluster_monopoly` की छूट एक दृश्य चेतावनी बन जाए, बजाय इसके कि सभी दावों को स्वचालित रूप से `needs_source_repair` में भेजा जाए। यह छूट प्रयोग 3 के XRPL पैकेज के सत्र 2 से प्राप्त हुई है - जिसमें "कैनोनिकल-प्रोटोकॉल" अनुभागों (सिंगल-फाउंडेशन चेन, दीवार-बगीचे API विशिष्टताएँ, मानकों-निकाय दस्तावेज़) में यह धारणा उलट दी गई कि प्रकाशक की विविधता सत्य की गुणवत्ता का प्रतिनिधित्व करती है। 540/540 vitest पास हुए। [CHANGELOG.md](CHANGELOG.md) और [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) देखें।
+
+**सेक्शन-स्कोप वाली स्रोत छूट** — इनका उपयोग तब करें जब प्रकाशक की विविधता सेक्शन के सत्य स्रोत के साथ संरचनात्मक रूप से असंगत हो, न कि केवल इसलिए कि किसी सेक्शन में पर्याप्त स्रोत नहीं मिले। इसमें स्कीमा-सक्षम `reason` और गैर-खाली `compensating_controls[]` शामिल हैं। पैकेज नीति `primary_source_waiver_allowed: false` पैकेज-स्तर और सेक्शन-स्कोप दोनों छूटों को अवरुद्ध करती है। v0.3.1 से पहले के पैकेज-स्तर पर `min_independent_publishers: 0` का उपयोग एक अस्थायी समाधान था; मौजूदा फ़्रोज़न पैकेज अपने मौजूदा प्रमाणों के तहत मान्य रहेंगे। [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) और [रिसर्च-पैक्स ऑपरेटर प्लेबुक](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md) देखें।
+
+**v0.3.0** — 2026-05-09 को प्रकाशित। `--detector <auto|heuristic|ollama-intern>` ध्वज को `contradict map` (प्रयोग 3 के सत्र 1, XRPL पैकेज से F-09 चेन-ब्लॉकर फिक्स) पर जोड़ा गया। 527/527 vitest पास हुए। डिटेक्टर का चयन अब एक स्पष्ट ऑपरेटर विकल्प है, न कि राज्य-निर्भर पर्यावरण चर का उपयोग; मोड हर रन पर स्पष्ट रूप से प्रदर्शित होता है। [`docs/contradict-map.md`](docs/contradict-map.md) देखें।
+
+**v0.2.0** — 2026-05-09 को प्रकाशित। `research-os pack publish` (प्रयोग 2) और पैटर्न 2 की तत्परता सत्यापन फिक्स को जोड़ा गया। 515/515 vitest पास हुए। [CHANGELOG.md](CHANGELOG.md) देखें। फ़्रोज़न पैकेज को एक ही कमांड के साथ "कैनोनिकल" `research-packs` संग्रह में निर्यात किया जाता है; प्रवेश अनुबंध कोड द्वारा लागू किया जाता है, न कि चेकलिस्ट द्वारा। [`docs/pack-publish.md`](docs/pack-publish.md) देखें।
+
 **v0.1.0** — 2026-05-08 को 'फ्रीज' किया गया। `research-os-packs/research-os-spec/` (संबंधित रिपॉजिटरी) पर मौजूद 'डॉगफूड' पैकेज में 8 अनुभागों में से 296 दावों को स्वीकार किया गया, 17 को स्थिति दी गई, 30 को ऑपरेटर द्वारा बदला गया, 0 सक्रिय सुधार अवरोधक हैं, कोई अनसुलझा विरोधाभास नहीं है, सभी गेट `synthesis_eligible=true` हैं। 463/463 'विटेस्ट' पास हो गए। कुल 16 महत्वपूर्ण नियम लागू हैं। 'फ्रीज' रसीद फ़िंगरप्रिंट और अन्य जानकारी के लिए [`docs/dogfood-proof.md`](docs/dogfood-proof.md) देखें।
+
+**रिसर्च-पैक्स संग्रह मोनोरिपो** — [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) पर लाइव है, जिसमें दो शुरुआती पैकेज हैं। `comfyui-workflow-durability` (प्रयोग 1, 302 स्वीकृत दावे, 8 अनुभाग) और `research-os-self-dogfood` (v0.1 डॉगफूड बैकफिल, 296 स्वीकृत दावे, 8 अनुभाग)। दोनों पैकेज `verify-pack.mjs` पास करते हैं।
+
+**v1 प्रयोग 1 (कॉमफयूआई वर्कफ़्लो की स्थिरता)** — 2026-05-09 को समाप्त। टर्मिनल ए पर सभी 8 अनुभाग, पैकेज फ़्रोज़न, संग्रह लाइव। [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) और [`docs/roadmap.md`](docs/roadmap.md) देखें।
 
 ### v0.1 क्या नहीं है
 
-- बाहरी उपयोगकर्ताओं द्वारा परीक्षण नहीं किया गया है। एकल 'डॉगफूड' रन में सात बग पाए गए।
-- अभी npm पर उपलब्ध नहीं है। `npm publish` होने तक स्रोत कोड से स्थापित करें।
-- संश्लेषण लिखने वाला उपकरण नहीं है। `synth workspace` कमांड संरचित कार्यक्षेत्र बनाता है; स्वीकृत दावा आईडी के विरुद्ध मानव (या Cowork) द्वारा सामग्री लिखी जाती है।
-- semver के तहत एपीआई स्थिर नहीं है। v1.0.0 एक अर्जित स्थिति है, कोई कैलेंडर तिथि नहीं - अंतर को भरने वाले पांच प्रयोगों के लिए [`docs/roadmap.md`](docs/roadmap.md) देखें।
+- बाहरी उपयोगकर्ताओं द्वारा इसका परीक्षण नहीं किया गया है। दो आंतरिक परीक्षण चरण समाप्त हो चुके हैं—एक स्व-संदर्भित, एक बाहरी डोमेन वाला—और प्रयोग 3 (बाहरी दबाव में एपीआई की स्थिरता) जारी है: 3 में से पहले भाग (XRPL क्रिएटर-टोकन की स्थायित्व) को v0.3.0 का `--detector` फ़्लैग और v0.3.1 का सेक्शन-स्कोप वाला स्रोत छूट मिला। प्रयोग 3 को पूरा करने के लिए दो और बाहरी डोमेन वाले भाग आवश्यक हैं।
+- यह संश्लेषण लेखक नहीं है। `synth workspace` कमांड संरचित कार्यक्षेत्र बनाता है; मनुष्य (या Cowork) स्वीकृत दावा आईडी के विरुद्ध सामग्री लिखते हैं।
+- यह semver के तहत एपीआई-स्थिर नहीं है। v1.0.0 एक अर्जित स्थिति है, कोई कैलेंडर तिथि नहीं—इस अंतर को भरने वाले छह प्रयोगों के बारे में जानकारी के लिए [`docs/roadmap.md`](docs/roadmap.md) देखें।
 
 ### ज्ञात सीमाएँ
 
-- **एक्सट्रैक्टर की उत्पत्ति गेट सीम पर दिखाई नहीं देती है।** एक सेक्शन, कैलिब्रेटेड एक्सट्रैक्टर (कॉन्फ़िगर किए गए मॉडल के साथ ओलामा) अनुपलब्ध होने पर, अनुमानित-बैकअप दावों पर निर्भर करते हुए, स्वीकृत-दावा स्तर को पार कर सकता है। इसे एक ज्ञात कमजोरी के रूप में दर्ज किया गया है; भविष्य में, सुरक्षा बढ़ाने के लिए, एक्सट्रैक्टर द्वारा स्वीकृत दावों की रिपोर्ट की जाएगी और कैलिब्रेटेड पथ से स्वीकृत दावों की अपेक्षित संख्या की आवश्यकता होगी।
-- **कैलिब्रेटेड `hermes-two-pass` बेसलाइन से परे, समीक्षक मॉडल का चयन अभी भी अनसुलझा है।** "डॉगफूड" परीक्षण में एक समीक्षक कॉन्फ़िगरेशन को मान्य किया गया था; अन्य मॉडलों को विश्वसनीय होने से पहले, उन्हें अपने स्वयं के "सीडेड-विफलता" रिकॉल कैलिब्रेशन की आवश्यकता होगी।
-- **"डॉगफूड" पैकेज ने निष्कर्षण के लिए `mistral-nemo:12b` का उपयोग किया (मानक डिफ़ॉल्ट `hermes3:8b` है)।** खोज ने स्व-संदर्भित सेक्शन नामों के लिए गलत डोमेन परिणाम उत्पन्न किए - जिन्हें क्वेरी-सटीकता अनुशासन (देखें हैंडबुक) और अस्पष्ट विषयों के लिए ऑपरेटर द्वारा पहले से तैयार किए गए यूआरएल के माध्यम से ठीक किया गया।
+- **एक्सट्रैक्टर का स्रोत गेट सीम पर दिखाई नहीं देता है।** एक सेक्शन, कैलिब्रेटेड एक्सट्रैक्टर (कॉन्फ़िगर किए गए मॉडल के साथ Ollama) अनुपलब्ध होने पर, अनुमानित-बैकअप दावों पर निर्भर करते हुए, स्वीकृत दावों की न्यूनतम सीमा को पार कर सकता है। इसे रोडमैप में प्रयोग 4 के रूप में दर्ज किया गया है; भविष्य में, यह एक्सट्रैक्टर द्वारा स्वीकृत दावों की रिपोर्ट करेगा और कैलिब्रेटेड पथ से स्वीकृत दावों की न्यूनतम सीमा की आवश्यकता होगी।
+- **कैलिब्रेटेड `hermes-two-pass` बेसलाइन से परे समीक्षक मॉडल का चयन अभी भी अनसुलझा है।** आंतरिक परीक्षण चरण ने एक समीक्षक कॉन्फ़िगरेशन को मान्य किया; वैकल्पिक मॉडलों को विश्वसनीय होने से पहले उनके अपने सीडेड-विफलता रिकॉल कैलिब्रेशन की आवश्यकता होती है। यह रोडमैप में प्रयोग 5 है।
+- **v0.1 के आंतरिक परीक्षण चरण में निष्कर्षण के लिए `mistral-nemo:12b` का उपयोग किया गया था (मानक डिफ़ॉल्ट `hermes3:8b` है)।** v0.1 के चरण के दौरान यह `hermes3:8b` इस सिस्टम पर उपलब्ध नहीं था। यह प्रतिस्थापन खुलासा तब तक मान्य रहेगा जब तक कि hermes3-आधारित प्रमाण नहीं बनाया जाता—यह रोडमैप में प्रयोग 6 है। `hermes3:8b` के बिना सिस्टम पर काम करने वाले ऑपरेटरों के लिए, `OLLAMA_INTERN_MODEL` को किसी उपलब्ध मॉडल पर सेट करें; ऑपरेटर-पूर्व-स्टेज किए गए यूआरएल और क्वेरी-सटीकता अनुशासन (हाथबुक देखें) अस्पष्ट विषयों पर गलत जानकारी को कम करते हैं।
 
 ## v1.0 के लिए रोडमैप
 
-v1.0 एक अर्जित स्थिति है, कोई रिलीज की तारीख नहीं। v0.1 और v1.0 के बीच पांच खुले प्रयोग हैं - बाहरी दबाव के तहत एपीआई स्थिरता, एक गैर-स्व-संदर्भित "डॉगफूड" पैकेज, एक्सट्रैक्टर-उत्पत्ति अंतर को भरना, `hermes-two-pass` से परे समीक्षक कैलिब्रेशन को सामान्य बनाना, और `hermes3:8b` पर एक स्वच्छ बेसलाइन रन। पूर्ण योजना [`docs/roadmap.md`](docs/roadmap.md) में है। आर्किटेक्चर लॉक पूरे समय बना रहेगा; v1.0, v0.1 द्वारा सिद्ध किए गए पहलुओं को गहरा करता है, न कि उन्हें फिर से खोलता है।
+v1.0 एक अर्जित स्थिति है, कोई रिलीज़ तिथि नहीं। v0.1 और v1.0 के बीच छह खुले प्रयोग हैं—गैर-स्व-संदर्भित आंतरिक परीक्षण (वर्तमान में ComfyUI वर्कफ़्लो स्थायित्व पैकेज के रूप में प्रगति पर है), एक `research-os pack publish` कमांड जो निर्यात को मानक `research-packs` मोनोरेपो में स्वचालित करता है (प्रयोग 2, प्रयोग 1 के मैनुअल समापन के पीछे स्कोप किया गया), बाहरी दबाव में एपीआई की स्थिरता, एक्सट्रैक्टर-स्रोत अंतर को भरना, `hermes-two-pass` से परे समीक्षक कैलिब्रेशन को सामान्य बनाना, और `hermes3:8b` पर एक स्वच्छ बेसलाइन रन। प्रयोग 1, पैकेज को स्थिर करने के समय पूरा नहीं होता है—यह तब पूरा होता है जब स्थिर पैकेज को `research-packs` मोनोरेपो में पहले पैकेज के रूप में जारी किया जाता है, साथ में v0.1 के आंतरिक परीक्षण चरण का बैकफिल। पूरी योजना [`docs/roadmap.md`](docs/roadmap.md) में उपलब्ध है। आर्किटेक्चर लॉक पूरे समय लागू रहता है; v1.0, v0.1 द्वारा सिद्ध किए गए पहलुओं को गहरा करता है, न कि उन्हें फिर से खोलता है।
 
 ## लाइसेंस
 
