@@ -58,21 +58,38 @@ The command copies the frozen pack into the package layout, generates `pack.mani
 
 ## 3. API stability under external pressure
 
-**Status: IN PROGRESS.** Pack #1 of 3 — XRPL creator-token durability — parked at Section 01 contradict map after F-09 (chain blocker) surfaced. F-09 fix shipped in **v0.3.0** (`--detector` flag on `contradict map`); chain unblocked. Two more external-domain packs required for closure.
+**Status: IN PROGRESS.** Pack #1 of 3 — XRPL creator-token durability — has earned two v0.3.x releases so far. F-09 fix shipped in **v0.3.0** (`--detector` flag on `contradict map`); section-scoped source waivers + reviewer acknowledgement shipped in **v0.3.1**. Two more external-domain packs required for closure.
 
-**Progress (2026-05-09):** F-09 chain blocker resolved in v0.3.0. The earlier
-"clear `OLLAMA_INTERN_MODEL` to force heuristic" workaround was state-dependent
-and silently broke once `hermes3:8b` was installed (the default model takes
-over and the LLM detector saturates the Jaccard prefilter on narrow-topic
-documentation sections). The new `--detector <auto|heuristic|ollama-intern>`
-flag makes heuristic mode a first-class operator choice that is
-environment-independent. Earned by the XRPL pack, ships as v0.3.0, generalizes
-to every future external-domain pack. Other Experiment 3 frictions cataloged
-as v0.3.x candidates (F-01 init version-stamp, F-02 packs-dir docs, F-05
-discover --query example, F-08 Windows process recovery) ship as their own
-scoped releases. XRPL Session 2 resumes against the npm-published v0.3.0 —
-the released CLI is the operator surface. Resuming from local source would
-invalidate the API-stability test.
+**Progress (2026-05-09):** Two API-stability findings shipped from the XRPL pack so far:
+
+- **v0.3.0** — F-09 chain blocker resolved. The earlier "clear `OLLAMA_INTERN_MODEL`
+  to force heuristic" workaround was state-dependent and silently broke once
+  `hermes3:8b` was installed (the default model takes over and the LLM detector
+  saturates the Jaccard prefilter on narrow-topic documentation sections). The
+  new `--detector <auto|heuristic|ollama-intern>` flag makes heuristic mode a
+  first-class operator choice that is environment-independent.
+
+- **v0.3.1** — Section-scoped source waivers + reviewer-side acknowledgement.
+  XRPL Section 01 found that the publisher-diversity floor (`min_independent_publishers: 4`)
+  inverts on canonical-protocol sections where source diversity is structurally
+  low — the XRPL Foundation owns the specification, the implementation, and the
+  documentation by design. Pre-v0.3.1, the only mitigation was a pack-level
+  `min_independent_publishers: 0` workaround that weakened the global guard
+  across every section. v0.3.1 ships `primary_source_waiver.section_waivers[]`
+  for relaxing the floor only where truth is structurally single-publisher,
+  with explicit `reason` + `compensating_controls[]` preserved in the audit
+  trail. The calibrated reviewer's section-wide `source_cluster_monopoly`
+  finding is visibly preserved in the findings ledger but no longer routes
+  claims to `needs_source_repair` solely on its own when a matching waiver is
+  active. Earned by the XRPL pack, ships as v0.3.1, generalizes to every future
+  canonical-protocol pack (single-foundation chains, walled-garden APIs, single-vendor specs).
+
+Both fixes earned by the XRPL pack (Experiment 3 #2 of 3). Other Experiment 3 frictions cataloged as
+v0.3.x candidates (F-01 init version-stamp, F-02 packs-dir docs, F-05 discover --query example,
+F-08 Windows process recovery, F-16 unused SectionSchema fields, F-17 sections/<id>/gates.yaml
+runtime wiring) ship as their own scoped releases. XRPL Session 3 resumes against the npm-published
+v0.3.1 — the released CLI is the operator surface. Resuming from local source would invalidate the
+API-stability test.
 
 **The question.** Where do the CLI surface, schema files, and ledger formats break when packs we didn't write run through them?
 

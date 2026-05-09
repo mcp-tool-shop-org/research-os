@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/version-0.3.0-blue" alt="version 0.3.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,9 +151,11 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ## Status
 
-**v0.3.0** — published to npm as `@mcptoolshop/research-os@0.3.0`, 2026-05-09. Ships the `--detector <auto|heuristic|ollama-intern>` flag on `contradict map` (F-09 chain-blocker fix from Experiment 3 Session 1, XRPL pack). 527/527 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/contradict-map.md`](docs/contradict-map.md).
+**v0.3.1** — published to npm as `@mcptoolshop/research-os@0.3.1`, 2026-05-09. Ships section-scoped source-floor waivers (`primary_source_waiver.section_waivers[]`) plus reviewer-side acknowledgement so a waived section-wide `source_cluster_monopoly` finding becomes a visible caveat rather than auto-routing all claims to `needs_source_repair`. Earned by Experiment 3 XRPL pack Session 2 — canonical-protocol sections (single-foundation chains, walled-garden API specs, standards-body docs) inverted the assumption that publisher diversity is a proxy for truth quality. 540/540 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
 
-**`contradict map --detector`** — Detector selection is now an explicit operator choice instead of a state-dependent env-var dance. `auto` (default) preserves prior behavior; `heuristic` always works without LLM and completes quickly on narrow-topic documentation sections; `ollama-intern` requires the configured model and exits visibly if unavailable. Mode is announced visibly on every run. The earlier "clear `OLLAMA_INTERN_MODEL` to force heuristic" workaround is superseded by `--detector heuristic` as the canonical operator surface; see the [research-packs operator playbook](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md) and the [handbook contradict-map page](https://mcp-tool-shop-org.github.io/research-os/handbook/contradict-map/).
+**Section-scoped source waivers** — Use them when publisher diversity is structurally incompatible with the section's truth source, not when a section merely failed to find enough sources. Schema-enforced `reason` + non-empty `compensating_controls[]`. Pack policy `primary_source_waiver_allowed: false` blocks both pack-level and section-scoped waivers. The pre-v0.3.1 pack-level `min_independent_publishers: 0` workaround is now deprecated; existing frozen packs remain valid under their existing receipts. See [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) and the [research-packs operator playbook](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md).
+
+**v0.3.0** — published 2026-05-09. Shipped the `--detector <auto|heuristic|ollama-intern>` flag on `contradict map` (F-09 chain-blocker fix from Experiment 3 Session 1, XRPL pack). 527/527 vitest then. Detector selection is now an explicit operator choice instead of a state-dependent env-var dance; mode is announced visibly on every run. See [`docs/contradict-map.md`](docs/contradict-map.md).
 
 **v0.2.0** — published 2026-05-09. Shipped `research-os pack publish` (Experiment 2) and the Pattern 2 readiness predicate fix. 515/515 vitest passing then. See [CHANGELOG.md](CHANGELOG.md). Frozen packs export to the canonical `research-packs` archive with a single command; admission contract is enforced by code, not checklist. See [`docs/pack-publish.md`](docs/pack-publish.md).
 
@@ -165,7 +167,7 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ### What v0.3 is not
 
-- Not battle-tested by external users. Two dogfood arcs have closed — one self-referential, one external-domain — and Experiment 3 (API stability under external pressure) is in progress: pack #1 of 3 (XRPL creator-token durability) earned the v0.3.0 `--detector` flag. Two more external-domain packs required for Experiment 3 closure.
+- Not battle-tested by external users. Two dogfood arcs have closed — one self-referential, one external-domain — and Experiment 3 (API stability under external pressure) is in progress: pack #1 of 3 (XRPL creator-token durability) earned both the v0.3.0 `--detector` flag and the v0.3.1 section-scoped source waivers. Two more external-domain packs required for Experiment 3 closure.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
 - Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the six experiments that close the gap.
 

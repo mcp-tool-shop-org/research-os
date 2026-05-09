@@ -33,7 +33,7 @@ The claim "save the JSON and you're durable" is **not supported** by the evidenc
 
 4. **The ollama-intern contradiction detector never completed in this arc.** 5/5 consecutive stalls on narrow-topic documentation sections (Sections 01–05). The Jaccard prefilter at 0.25 passes most pairs when all claims share tokens like "workflow," "json," "schema." Heuristic fallback (clear `OLLAMA_INTERN_MODEL` before `contradict map`) completed in seconds and found 0 contradictions — correct for sections where claims describe orthogonal aspects of the same phenomenon.
 
-5. **Publisher extraction is non-deterministic.** The same domain (`docs.comfy.org`) returned `publisher: "docs.comfy.org"` in some sessions and `publisher: null` in others, with no stable pattern across 10 sessions. Setting `min_independent_publishers: 0` in pack gate config is the correct workaround for packs where the field cannot be trusted.
+5. **Publisher extraction is non-deterministic.** The same domain (`docs.comfy.org`) returned `publisher: "docs.comfy.org"` in some sessions and `publisher: null` in others, with no stable pattern across 10 sessions. Setting `min_independent_publishers: 0` in pack gate config is the correct workaround for packs where the field cannot be trusted. *(Updated 2026-05-09 for v0.3.1: this pack-level workaround was correct at v0.1 / v0.2 time and remains valid in this pack's frozen receipt. New packs facing structurally single-publisher sections should use the section-scoped waiver pattern shipped in v0.3.1 instead — see [docs/section-scoped-waivers.md](section-scoped-waivers.md).)*
 
 6. **Pattern 2 was completed mid-arc by the calibrated reviewer.** The v0.1 dogfood arc used the heuristic reviewer exclusively (output: only `accepted_for_synthesis` and `rejected`). The calibrated hermes3:8b two-pass reviewer produces `needs_scope_repair`, `needs_source_repair`, and `needs_human_review` decisions. The existing `determineMode` and `buildReadinessSummary` predicates counted these as active blockers instead of settled state, causing both to report `repair_required` on a synthesis-ready pack. Fix: commit `22b5dba` — active-blocker semantics in both predicates. Tests: 463 → 467.
 
@@ -67,7 +67,7 @@ Four new tests cover the calibrated-reviewer path explicitly. The heuristic-revi
 | LLM discover hallucination | Pre-stage URLs via `urls.operator-staged.txt`, bypass discover |
 | ollama-intern stall on narrow topics | Clear `OLLAMA_INTERN_MODEL` before `contradict map` |
 | `OLLAMA_INTERN_MODEL` not in background processes | Set via `$env:OLLAMA_INTERN_MODEL` in PowerShell before each command |
-| Publisher null is non-deterministic | Set `min_independent_publishers: 0`; do not use `publisher: null` as quality signal |
+| Publisher null is non-deterministic | Set `min_independent_publishers: 0`; do not use `publisher: null` as quality signal *(v0.3.1 forward note: prefer section-scoped waivers for new packs — see [docs/section-scoped-waivers.md](section-scoped-waivers.md); the pack-level workaround stays valid for this frozen receipt)* |
 | `llms.txt` source_dominance expected | Accept and rely on triage capping |
 | Large-page extraction abort (>500 KB) | Avoid single large-page sources; prefer per-page URLs |
 

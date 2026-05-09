@@ -2,6 +2,122 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.3.1] — 2026-05-09
+
+Tight release. One real, tested, dogfooded improvement: section-scoped
+source-floor waivers + reviewer-side acknowledgement. Earned by Experiment 3
+XRPL pack Session 2 — canonical-protocol sections (XRPL XLS standards,
+single-foundation chain documentation, walled-garden API specs) inverted
+the assumption that publisher diversity is a proxy for truth quality. No
+other v0.3.x candidates shipped — F-01 (init version-stamp), F-02
+(packs-dir docs), F-05 (discover --query example), F-08 (Windows process
+recovery), F-16 (unused SectionSchema fields), F-17 (sections/<id>/gates.yaml
+runtime wiring) are deferred to their own scoped releases.
+
+### Added
+
+- **`primary_source_waiver.section_waivers[]`** — section-scoped source-floor
+  waivers. Each entry carries `section_id`, `scope` (`min_independent_publishers`
+  or `primary_sources_required`), `reason` (non-empty), and
+  `compensating_controls[]` (at least one entry). Schema enforcement: empty
+  `reason` or empty `compensating_controls[]` fail validation. Pack policy
+  `gates.source_floor.primary_source_waiver_allowed: false` blocks both
+  pack-level and section-scoped waivers — operators cannot smuggle a waiver
+  past pack policy by rerouting it to section scope.
+
+  Multiple entries can target different sections, or the same section with
+  different scopes. Pack-level `primary_source_waiver` semantics unchanged;
+  the new `section_waivers[]` is additive and defaults to `[]` for backward
+  compatibility. Existing packs unaffected. Full reference:
+  [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
+
+- **Reviewer-side acknowledgement** — when a section has a matching
+  `min_independent_publishers` waiver in effect, the calibrated reviewer's
+  section-wide `source_cluster_monopoly` finding remains visible in the
+  findings ledger but does NOT, by itself, route claims to
+  `needs_source_repair`. The finding is annotated as
+  `(severity, waived)` in the claim-review's reason string so operators
+  reading the ledger can see the finding is present but neutralised. Other
+  source-quality findings (per-claim `source_quality_problem`,
+  `scope_widening`, `overgeneralized_claim`, etc.) continue to drive their
+  own routing normally.
+
+- **Audit-side disclosure** — `weak-sources.{json,md}` and
+  `source-diversity-gaps.{json,md}` rollups annotate waived rows with
+  `waived: true` and `waiver_reason: <verbatim>` when a matching section
+  waiver is active. Rows are NOT removed (Law 16: waivers do not hide
+  evidence). The publisher-monopoly fact is still surfaced in the rollup;
+  it's disclosed as deliberately accepted rather than as an open blocker.
+
+- **13 new tests** in `test/section-scoped-waivers.test.ts` covering
+  schema validation (valid shape, missing reason, empty compensating
+  controls, invalid scope enum, bad section_id regex), gate-side
+  conversion (section_id match, section_id mismatch, primary_sources_required
+  scope, pack-level regression, pack-policy refusal, multiple sections,
+  multiple scopes for same section, disclosure in WaiverApplication),
+  reviewer-side acknowledgement (waived monopoly → accepted, per-claim
+  quality still routes, regression without waiver), and audit-side
+  annotation.
+
+- **`docs/section-scoped-waivers.md`** — full operator reference: schema,
+  behavior contract, valid-cases / invalid-cases enumeration, required
+  operator discipline (synthesis-time disclosure beyond the schema), and
+  the release thesis. Opens with the canonical phrasing:
+  *"Use section-scoped source waivers when publisher diversity is
+  structurally incompatible with the section's truth source, not when a
+  section merely failed to find enough sources."*
+
+- **Handbook page** at `/handbook/section-scoped-waivers` — condensed
+  reference matching the docs page.
+
+### Changed
+
+- **Pack-level `min_independent_publishers: 0` workaround DEPRECATED**
+  in the canonical `research-packs/docs/operator-playbook.md` and the
+  research-os handbook mirror. The pack-level pattern remains valid for
+  already-frozen packs (e.g., `packages/comfyui-workflow-durability/`)
+  whose freeze receipts are unchanged; new packs should prefer the
+  section-scoped pattern. Forward notes added to
+  [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) at the
+  references to the deprecated workaround — historical content
+  preserved, not rewritten.
+
+### Documentation
+
+- README status block updated to v0.3.1; version badge updated.
+- `docs/roadmap.md` Experiment 3 progress: section-scoped source waivers
+  shipped in v0.3.1; pack #2 of 3 (XRPL) earned both v0.3.0 and v0.3.1
+  fixes. Two more external-domain packs required for closure.
+- **Cross-repo:** `research-packs/docs/operator-playbook.md` updated in
+  the same release window. Adds the section-scoped waiver pattern as the
+  canonical guidance with the same anti-misuse framing as the research-os
+  docs page (public guidance is consistent across the surface by design).
+  Deprecates the `min_independent_publishers: 0` pack-level workaround.
+
+### Tests
+
+- **540 total** (527 at v0.3.0 → 540 at v0.3.1, +13 from
+  `test/section-scoped-waivers.test.ts`).
+
+### Migration notes
+
+No code-level migration required. Existing packs continue to work
+unchanged — `section_waivers` defaults to `[]`. Frozen packs' freeze
+receipts remain valid (the schema addition is additive).
+
+For new canonical-protocol packs: prefer section-scoped waivers over the
+deprecated pack-level `min_independent_publishers: 0` workaround. The
+section-scoped pattern preserves the publisher-diversity floor on every
+section that doesn't waive it explicitly.
+
+For operators with packs already using the deprecated pack-level
+workaround: the pattern remains valid; no migration is required. If you
+want to tighten the global default and waive specific sections instead,
+that's a clean per-section migration — set
+`min_independent_publishers` back to its non-zero pack default and add
+section_waivers entries for the sections that need them, with
+`reason` and `compensating_controls[]` documented.
+
 ## [0.3.0] — 2026-05-09
 
 Tight release. One real, tested, dogfooded improvement: `--detector` flag on

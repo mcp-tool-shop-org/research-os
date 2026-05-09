@@ -120,7 +120,11 @@ The `publisher` field in research-os source cards is populated by an extraction 
 
 **Do not use `publisher: null` as a quality signal.** A source card with `publisher: null` may be a high-quality primary source from the canonical maintainer.
 
-**Workaround for the gate:** Set `min_independent_publishers: 0` in the pack gate config when publisher extraction is unreliable. This prevents the gate from failing on publisher diversity when the field cannot be trusted. The admitted sources are still evaluated on accepted claim count and source diversity.
+**Pack-level workaround (DEPRECATED as of research-os v0.3.1):** Set `min_independent_publishers: 0` in the pack gate config when publisher extraction is unreliable. This prevents the gate from failing on publisher diversity when the field cannot be trusted. The admitted sources are still evaluated on accepted claim count and source diversity.
+
+> **Deprecated as of research-os v0.3.1.** The pack-level `min_independent_publishers: 0` workaround applies a global guard relaxation across every section in the pack — including sections where multi-publisher diversity is genuinely useful. Use **[section-scoped source waivers](/research-os/handbook/section-scoped-waivers/)** instead, which apply only to the section that needs them and disclose the rationale + compensating controls in the audit trail. The historical pack-level pattern remains valid for already-frozen packs (e.g., `packages/comfyui-workflow-durability/`) — its freeze receipt is unchanged. New packs should prefer the section-scoped pattern.
+
+**Use section-scoped source waivers when publisher diversity is structurally incompatible with the section's truth source, not when a section merely failed to find enough sources.** See [section-scoped waivers](/research-os/handbook/section-scoped-waivers/) for the full schema, behavior contract, and valid/invalid use-case enumeration. The same canonical phrasing appears in the [research-packs operator-playbook](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md) — public guidance is consistent across the surface by design.
 
 ---
 
