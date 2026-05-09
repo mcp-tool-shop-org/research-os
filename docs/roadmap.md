@@ -10,6 +10,8 @@ The order below reflects a natural sequence — prove the chain holds off-self, 
 
 ## 1. Non-self-referential dogfood
 
+**Status: CLOSED 2026-05-09.** ComfyUI workflow durability pack frozen 2026-05-09T08:30:02.276Z. Public archive at <https://github.com/mcp-tool-shop-org/research-packs> (`packages/comfyui-workflow-durability/`). Proof: [`docs/experiment-1-proof.md`](experiment-1-proof.md). Operator playbook: [`research-packs/docs/operator-playbook.md`](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md). Pattern 2 enforcement completed via commit `22b5dba`.
+
 **The question.** Did the chain hold because it's correct, or because the dogfood pack happened to share vocabulary with `research-os` itself?
 
 **Done looks like.** A pack on a topic with no overlap with `research-os` internals reaches freeze with claim-traceable synthesis. Candidates: a tax-law pack, a clinical-evidence pack, a hardware-design pack, a historical-research pack. The reviewer's seeded-failure recall holds. The gate doesn't gate-block on metadata coincidence. Discovery doesn't hallucinate the topic into the wrong domain at first attempt.

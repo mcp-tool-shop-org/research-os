@@ -24,9 +24,9 @@ Local-first CLI that turns an open-ended topic into a gated **research-pack** �
 
 It is not a report generator. It is not an LLM-orchestration framework. It does not write your synthesis for you. It enforces the conditions under which synthesis can begin.
 
-Frozen packs are archived in the planned `research-packs` monorepo (`mcp-tool-shop-org/research-packs`), a public monorepo where every package is a freeze-receipt-verifiable research artifact. The first packages will land at v1 Experiment 1 closeout, as specified in [`docs/roadmap.md`](docs/roadmap.md).
+Frozen packs are archived in [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) — live, with two day-one packages. See [`docs/roadmap.md`](docs/roadmap.md) for the v1.0 path.
 
-v0.1 has been pressure-tested in two dogfood arcs. The first — research-os researching its own spec — found seven correctness gaps before the v0.1.0 release, each requiring a real code fix and earning a law or integration pattern. The second (v1 Experiment 1: ComfyUI workflow durability, a domain that shares no vocabulary with research-os itself) closed its section phase on 2026-05-09 with all 8 sections at Terminal A; the pack is synthesis-ready ahead of authoring and freeze. The v0.1 proof trail — seven sessions, two integration patterns earned, 463 vitest cases, one frozen pack — lives in [`docs/dogfood-proof.md`](docs/dogfood-proof.md). Live handbook: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
+v0.1 has been pressure-tested in two dogfood arcs. The first — research-os researching its own spec — found seven correctness gaps before the v0.1.0 release, each requiring a real code fix and earning a law or integration pattern. The second (v1 Experiment 1: ComfyUI workflow durability, 11 sessions, a domain with no vocabulary overlap with research-os) closed 2026-05-09: pack frozen, archive live, Pattern 2 enforcement completed via commit `22b5dba`. The v0.1 proof trail lives in [`docs/dogfood-proof.md`](docs/dogfood-proof.md); the Experiment 1 proof lives in [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md). Live handbook: <https://mcp-tool-shop-org.github.io/research-os/handbook/>.
 
 ## Install
 
