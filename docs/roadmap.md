@@ -58,9 +58,9 @@ The command copies the frozen pack into the package layout, generates `pack.mani
 
 ## 3. API stability under external pressure
 
-**Status: IN PROGRESS.** Pack #1 of 3 — XRPL creator-token durability — has earned two v0.3.x releases so far. F-09 fix shipped in **v0.3.0** (`--detector` flag on `contradict map`); section-scoped source waivers + reviewer acknowledgement shipped in **v0.3.1**. Two more external-domain packs required for closure.
+**Status: IN PROGRESS.** Pack #2 of 3 — XRPL creator-token durability — is frozen with 251 accepted claims across 7 sections and has earned three v0.3.x releases. F-09 fix shipped in **v0.3.0** (`--detector` flag on `contradict map`); section-scoped source waivers + reviewer acknowledgement shipped in **v0.3.1**; normalized accepted-claim accounting for `pack publish` admission shipped in **v0.3.2**. Pack publish admission against npm v0.3.2 resumes pack-2 closeout; one more external-domain pack (pack #3 of 3) required for closure.
 
-**Progress (2026-05-09):** Two API-stability findings shipped from the XRPL pack so far:
+**Progress (2026-05-09):** Three API-stability findings shipped from the XRPL pack so far:
 
 - **v0.3.0** — F-09 chain blocker resolved. The earlier "clear `OLLAMA_INTERN_MODEL`
   to force heuristic" workaround was state-dependent and silently broke once
@@ -84,12 +84,33 @@ The command copies the frozen pack into the package layout, generates `pack.mani
   active. Earned by the XRPL pack, ships as v0.3.1, generalizes to every future
   canonical-protocol pack (single-foundation chains, walled-garden APIs, single-vendor specs).
 
-Both fixes earned by the XRPL pack (Experiment 3 #2 of 3). Other Experiment 3 frictions cataloged as
-v0.3.x candidates (F-01 init version-stamp, F-02 packs-dir docs, F-05 discover --query example,
-F-08 Windows process recovery, F-16 unused SectionSchema fields, F-17 sections/<id>/gates.yaml
-runtime wiring) ship as their own scoped releases. XRPL Session 3 resumes against the npm-published
-v0.3.1 — the released CLI is the operator surface. Resuming from local source would invalidate the
-API-stability test.
+- **v0.3.2** — Normalized accepted-claim accounting for `pack publish` admission
+  (F-36). XRPL pack publish refused on a real closure-ledger seam disagreement:
+  Section 07 had 24 raw `accepted_for_synthesis` rows in `claim-reviews.jsonl`
+  but only 19 unique `claim_id`s, because `claim-reviews.jsonl` is append-only
+  by design and reviewer windows can overlap. The pre-v0.3.2 admission contract
+  used strict equality between the raw row count and the legacy
+  `pack-audit.json::accepted_claims` count, which overcounted duplicates as a
+  refusal trigger. v0.3.2 ships a single canonical "effective accepted set"
+  definition (unique `claim_id`s whose latest canonical review decision is
+  `accepted_for_synthesis`, latest-decision-wins per `claim_id`) via the new
+  helper `getEffectiveAcceptedClaimIds`. Pack publish now warns rather than
+  refuses when the legacy audit count differs from the effective set; the
+  legacy audit file is preserved verbatim (Law 15) while the archive manifest
+  reflects the normalized count. Refusal stays hard for phantom claim_ids,
+  incompatible duplicate decisions, and non-synthesis-eligible gates. Earned
+  by the XRPL pack, ships as v0.3.2, generalizes to every future pack whose
+  reviewer pipeline produces overlapping decision windows.
+
+All three fixes earned by the XRPL pack (Experiment 3 pack #2 of 3). Other Experiment 3 frictions
+cataloged as v0.3.x candidates (F-01 init version-stamp, F-02 packs-dir docs, F-05 discover --query
+example, F-08 Windows process recovery, F-16 unused SectionSchema fields, F-17 sections/<id>/gates.yaml
+runtime wiring, F-21 URL verification ergonomics, F-22 LLM nondeterminism documentation, F-23/F-26/F-31
+source-card type audit + operator guidance, F-27 source-card operator-override preservation,
+F-28/F-30 extractor / source-shape refinements, F-35 cross-section-map waiver-dependency mismatch)
+ship as their own scoped releases. XRPL pack publish admission resumes against the npm-published
+v0.3.2 — the released CLI is the operator surface. Resuming from local source would invalidate
+the API-stability test.
 
 **The question.** Where do the CLI surface, schema files, and ledger formats break when packs we didn't write run through them?
 

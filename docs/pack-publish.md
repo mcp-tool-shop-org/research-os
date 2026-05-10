@@ -142,8 +142,46 @@ Every published package must carry exactly five files. `pack publish` enforces t
 | Target directory non-empty and `--force` not given | `force` |
 | `audits/<section>-gate.json` missing for any section | `gate.json` |
 | `research.yaml.frozen_at` is null | `frozen` |
-| `accepted_claims` mismatch between `claim-reviews.jsonl` and `pack-audit.json` | `mismatch` |
+| Section gate result is not `synthesis_eligible` | `synthesis_eligible` |
+| Accepted `claim_id` cited in `claim-reviews.jsonl` but absent from `claims.jsonl` (phantom claim) | `phantom` |
+| Same `claim_id` + same `created_at` carries incompatible decision values (e.g., one `accepted_for_synthesis`, one `rejected`) | `incompatible decisions` |
 | Unresolved contradictions remain in `contradiction-resolutions.jsonl` | `unresolved` |
+
+### Soft warnings (admission proceeds, surfaced in stdout)
+
+| Condition | Warning shape |
+|-----------|---------------|
+| Legacy `pack-audit.json::accepted_claims` count differs from the effective accepted set (latest-decision-wins per `claim_id`) | `legacy pack-audit.json accepted_claims (N) differs from effective accepted set (M). Using effective count (M) in manifest.` |
+| `claims.jsonl` absent — phantom-claim integrity check skipped | `claims.jsonl absent for section <id>; skipping phantom-claim integrity check` |
+
+### Normalized accepted-claim accounting (v0.3.2)
+
+`pack publish` derives the per-section `accepted_claims` count using the
+**effective accepted set** — unique `claim_id`s whose latest canonical
+review decision is `accepted_for_synthesis`. Latest-decision-wins
+precedence per `claim_id` (ISO-8601 timestamps compare
+lexicographically). Helper module:
+[`src/closure-ledger/effective-accepted.ts`](../src/closure-ledger/effective-accepted.ts).
+
+This matters because `claim-reviews.jsonl` is append-only and reviewer
+windows can overlap, so the same `claim_id` can legitimately receive
+multiple `accepted_for_synthesis` records. Counting raw rows
+overcounts; counting unique-claim-ids-ever-accepted ignores later
+override decisions. The effective accepted set is the single canonical
+definition every `pack publish` consumer uses.
+
+**When the legacy `pack-audit.json::accepted_claims` count differs
+from the effective set, admission proceeds with a warning** rather
+than refusing. The legacy audit count is preserved verbatim inside
+`pack/audits/pack-audit.json` (Law 15: freeze artifacts are
+immutable). The archive manifest's `sections[].accepted_claims`
+reflects the effective count. The warning is surfaced once per
+mismatched section. This is **not** a publish failure.
+
+The contract still hard-refuses on real integrity problems: phantom
+`claim_id`s (accepted but absent from `claims.jsonl`), incompatible
+duplicate decisions at the same timestamp, and section gates that
+aren't `synthesis_eligible`.
 
 ### Post-write verification refusals
 
@@ -209,5 +247,8 @@ Both day-one packages in `research-packs` were re-derived via `pack publish` and
 ## Implementation
 
 Source: `src/pack/publish/` — 7 modules (schema, types, copy, manifest, readme, how-to-read, verify, index).
-Tests: `test/pack-publish/` — 48 tests covering all 8 behaviors and all refusal cases.
-Ships in: `@mcptoolshop/research-os@0.2.0`.
+Helper: `src/closure-ledger/effective-accepted.ts` — pure-function module exporting
+`getEffectiveDecisionMap`, `getEffectiveAcceptedClaimIds`, and `findIncompatibleDecisions`.
+Tests: `test/pack-publish/` and `test/closure-ledger/` — covering all 8 behaviors,
+all refusal cases, and the F-36 normalization paths.
+Ships in: `@mcptoolshop/research-os@0.2.0` (initial), `@mcptoolshop/research-os@0.3.2` (F-36 admission contract).

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/version-0.3.2-blue" alt="version 0.3.2"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,6 +151,8 @@ discover
 
 ## 状态
 
+**v0.3.2** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.3.2`，发布日期为 2026年5月9日。该版本对已接受的声明进行了标准化处理，考虑了 `pack publish` 的准入情况。 严格的 `claim-reviews.jsonl` 文件与 `pack-audit.json::accepted_claims` 之间的相等性检查已被替换为集合比较——已接受的声明是具有唯一 `claim_id`，且其最新的规范审查决定为 `accepted_for_synthesis`（每个 `claim_id`，最新决定优先）。 对于那些其历史审计计数与集合比较结果不同的已冻结的包，现在会发出警告而不是拒绝； 原始的审计文件将被完整保留（第15条），而归档清单会反映标准化后的计数。 对于虚构的 `claim_id`、不兼容的重复决策以及不符合合成条件的场景，仍然会拒绝。 这是通过实验 3 XRPL pack Session K 获得的，该实验在实际的账本边界不一致时，`pack publish` 被拒绝（第07部分有24行原始的 `accepted_for_synthesis` 数据，但由于审查员窗口的重叠，只有19个唯一的 `claim_id`）。 558/558 个 vitest 测试通过。 详情请参阅 [CHANGELOG.md](CHANGELOG.md) 和 [`docs/pack-publish.md`](docs/pack-publish.md)。
+
 **v0.3.1** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.3.1`，发布日期：2026-05-09。 包含按章节划分的来源豁免 (`primary_source_waiver.section_waivers[]`)，以及审查人员的确认，因此，如果某个章节的“来源垄断”被豁免，则该豁免会成为一个可见的提示，而不是自动将所有主张都标记为“需要修复来源”。 这是通过实验 3 XRPL 包的第二阶段实现的——针对“标准协议”部分的分析（包括单链、封闭式 API 规范和标准机构文档）推翻了“发布者多样性是衡量真理质量的指标”的假设。 540/540 个 vitest 测试通过。 请参阅 [CHANGELOG.md](CHANGELOG.md) 和 [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)。
 
 **按章节划分的来源豁免**：当发布者多样性与该章节的真理来源结构上不兼容时，才使用这些豁免，而不是仅仅因为某个章节未能找到足够的来源。 豁免必须包含经过模式验证的 `reason`（原因）以及非空 `compensating_controls[]`（补偿控制）。 包策略 `primary_source_waiver_allowed: false` 会阻止包级别和章节级别的豁免。 之前的 v0.3.1 版本中，包级别的 `min_independent_publishers: 0` 是一种解决方法，现在已弃用；现有的已冻结的包仍然在现有记录下有效。 请参阅 [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) 和 [research-packs 操作手册](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md)。
@@ -167,9 +169,9 @@ discover
 
 ### v0.3 的局限性
 
-- 尚未经过外部用户的严格测试。 两个内部测试阶段已结束——一个自指，一个外部领域——Experiment 3（外部压力下的 API 稳定性）正在进行：第 1 个软件包（XRPL 创建令牌的稳定性）获得了 v0.3.0 的 `--detector` 标志以及 v0.3.1 的部分范围源豁免。 为了完成 Experiment 3，还需要两个外部领域的软件包。
-- 并非合成器。 `synth workspace` 命令生成结构化的工作区； 人员（或 Cowork）根据已接受的声明 ID 编写文本。
-- 并非在语义版本控制下具有 API 稳定性。 v1.0.0 是一个通过努力获得的里程碑，而不是一个日历日期——参见 [`docs/roadmap.md`](docs/roadmap.md)，了解完成此目标的六个实验。
+- 尚未经过外部用户的实际测试。 两个内部测试阶段已结束，一个为自指代，一个为外部领域，实验 3（在外部压力下的 API 稳定性）正在进行中：3个包中的第2个包（XRPL 创建者令牌的持久性）已冻结，包含来自 7 个部分的总计 251 个已接受的声明，等待通过 npm v0.3.2 的 `pack publish` 准入。 该阶段已经获得了 v0.3.0 的 `--detector` 标志（F-09 链阻塞器）、v0.3.1 的部分范围的源代码豁免（F-10/F-11 规范协议压力）以及 v0.3.2 的标准化已接受声明处理（F-36 账本边界）。 还需要一个外部领域的包才能完成实验 3。
+- 不是合成内容生成器。 `synth workspace` 命令用于生成结构化的工作空间； 人类（或 Cowork）根据已接受的声明 ID 编写内容。
+- 在语义版本控制下，API 稳定性尚未实现。 v1.0.0 是一个需要实现的阶段，而不是一个日历日期； 详情请参阅 [`docs/roadmap.md`](docs/roadmap.md)，其中列出了用于弥补差距的六个实验。
 
 ### 已知的局限性
 

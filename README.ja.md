@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.1"><img src="https://img.shields.io/badge/version-0.3.1-blue" alt="version 0.3.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/version-0.3.2-blue" alt="version 0.3.2"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -24,9 +24,9 @@
 
 これはレポート生成ツールではありません。また、LLMのオーケストレーションのフレームワークでもありません。あなたの統合作業を自動化するものでもありません。`research-os`は、統合作業を開始するための条件を強制します。
 
-Frozen packs（凍結されたパッケージ）は、[`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) にアーカイブされており、公開されており、初期の2つのパッケージが含まれています。v1.0のロードマップについては、[`docs/roadmap.md`](docs/roadmap.md) を参照してください。
+Frozen packs（凍結されたパッケージ）は、[`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)にアーカイブされており、ライブで公開されています。最初の2つのパッケージが含まれています。v1.0のロードマップについては、[`docs/roadmap.md`](docs/roadmap.md)を参照してください。
 
-v0.1は、2つの内部テスト（dogfood）で検証されました。最初のテストでは、research-osが自身の仕様を調査する中で、v0.1.0 リリース前に7つの問題（正当性の欠如）が発見され、それぞれにコードの修正が必要となり、関連するルールまたは統合パターンが確立されました。2番目のテスト（v1 Experiment 1: ComfyUIワークフローの安定性、11セッション、research-osとの語彙の重複がない環境）は、2026年5月9日に完了し、パッケージが凍結され、アーカイブが公開され、Pattern 2の適用がコミット `22b5dba` によって完了しました。v0.1の検証結果は、[`docs/dogfood-proof.md`](docs/dogfood-proof.md) に、Experiment 1の検証結果は、[`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) に記載されています。ハンドブックは、<https://mcp-tool-shop-org.github.io/research-os/handbook/> で確認できます。
+v0.1は、2つの内部テスト（dogfood）で検証されました。最初のテストでは、research-os自体の仕様を調査した結果、v0.1.0のリリース前に7つの問題点が発見され、それぞれにコード修正が必要となり、新たなルールや統合パターンが導入されました。2番目のテスト（v1 Experiment 1：ComfyUIワークフローの安定性、11セッション、research-osとの語彙の重複がない環境）は、2026年5月9日に完了し、パッケージが凍結され、アーカイブが公開され、パターン2の適用がコミット`22b5dba`によって完了しました。v0.1の検証結果は、[`docs/dogfood-proof.md`](docs/dogfood-proof.md)に、Experiment 1の検証結果は、[`docs/experiment-1-proof.md`](docs/experiment-1-proof.md)に記載されています。ハンドブックは、<https://mcp-tool-shop-org.github.io/research-os/handbook/>で確認できます。
 
 ## インストール
 
@@ -36,7 +36,7 @@ v0.1は、2つの内部テスト（dogfood）で検証されました。最初�
 npm install -g @mcptoolshop/research-os
 ```
 
-ソースコードからビルドする開発者の皆様へ：
+ソースコードからビルドする場合：
 
 ```bash
 git clone https://github.com/mcp-tool-shop-org/research-os.git
@@ -151,35 +151,37 @@ discover
 
 ## ステータス
 
-**v0.3.1** — 2026年5月9日に、npmで `@mcptoolshop/research-os@0.3.1` として公開されました。セクションごとに適用されるソースコードの免責条項 (`primary_source_waiver.section_waivers[]`) と、レビュアーによる承認が含まれています。これにより、セクション全体で `source_cluster_monopoly` の問題が発見された場合でも、それが明示的な注意点として表示され、すべての問題を `needs_source_repair` に自動的に振り分けることはありません。これは、Experiment 3 XRPL パッケージの Session 2 で得られた成果です。この成果により、パブリッシャーの多様性が真の品質の指標であるという前提が覆されました。540/540 の vitest が合格しました。詳細については、[CHANGELOG.md](CHANGELOG.md) および [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) を参照してください。
+**v0.3.2** — 2026年5月9日に、`@mcptoolshop/research-os@0.3.2`としてnpmに公開されました。`pack publish`の許可に関する、正規化された承認処理が実装されました。`claim-reviews.jsonl`と`pack-audit.json::accepted_claims`の厳密な一致チェックは、効果的な集合比較に置き換えられました。承認されたクレームは、最新の正当なレビュー結果が`accepted_for_synthesis`である一意の`claim_id`の集合です（`claim_id`ごとに最新の決定が優先されます）。以前の監査数が効果的な集合と異なる凍結されたパッケージは、拒否する代わりに警告を表示します。古い監査ファイルは変更せずに保持されます（ルール15）、ただし、アーカイブのマニフェストには正規化された数が反映されます。フェイクの`claim_id`、互換性のない重複した決定、および合成対象外の条件に対する拒否は引き続き適用されます。Experiment 3 XRPLパッケージのSession Kで、実際のクロージャー・レジャーの不一致により、パッケージの公開が拒否されました（セクション07には24件の`accepted_for_synthesis`の行がありましたが、重複するレビュー担当者によるため、一意の`claim_id`は19件のみでした）。558/558のvitestが成功しました。詳細については、[CHANGELOG.md](CHANGELOG.md)と[`docs/pack-publish.md`](docs/pack-publish.md)を参照してください。
 
-**セクションごとのソースコード免責条項** — これは、パブリッシャーの多様性がセクションの真のソースと構造的に相容れない場合にのみ使用します。単にセクションが十分なソースを見つけられなかった場合に適用するものではありません。スキーマによって強制される `reason` と、空でない `compensating_controls[]` が必要です。パッケージポリシー `primary_source_waiver_allowed: false` は、パッケージレベルおよびセクションごとの免責条項の両方をブロックします。v0.3.1以前のパッケージレベルの `min_independent_publishers: 0` という回避策は、現在は非推奨です。既存の凍結されたパッケージは、既存の条件で引き続き有効です。詳細については、[`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) および [research-packs オペレータープレイブック](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md) を参照してください。
+**v0.3.1** — 2026年5月9日に、`@mcptoolshop/research-os@0.3.1`としてnpmに公開されました。セクションごとに適用されるソースコードの免除（`primary_source_waiver.section_waivers[]`）と、レビュー担当者による確認機能が追加されました。これにより、セクション全体で`source_cluster_monopoly`の違反が検出された場合でも、自動的にすべてのクレームを`needs_source_repair`に振り分けるのではなく、注意点として表示されるようになりました。Experiment 3 XRPLパッケージのSession 2で、canonical-protocolセクション（単一の基盤チェーン、クローズドなAPI仕様、標準化団体のドキュメント）において、パブリッシャーの多様性が真の品質の指標であるという前提が覆されました。当時、540/540のvitestが成功しました。詳細については、[`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)を参照してください。
 
-**v0.3.0** — 2026年5月9日に公開されました。`contradict map` コマンドに、`--detector <auto|heuristic|ollama-intern>` フラグが追加されました（Experiment 3 Session 1 の XRPL パッケージからの F-09 チェーンブロッカーの修正）。この時点で、527/527 の vitest が合格しました。検出器の選択は、以前の状態依存の環境変数設定ではなく、オペレーターが明示的に選択するようになりました。モードは、実行ごとに可視化されます。詳細については、[`docs/contradict-map.md`](docs/contradict-map.md) を参照してください。
+**セクションごとのソースコード免除** — パブリッシャーの多様性がセクションの真のソースと構造的に互換性がない場合にのみ使用します。セクションが単に十分なソースを見つけられなかった場合ではありません。スキーマによって強制される`reason`と、空でない`compensating_controls[]`が必要です。パッケージポリシー`primary_source_waiver_allowed: false`は、パッケージレベルおよびセクションごとの免除の両方をブロックします。v0.3.1以前のパッケージレベルの`min_independent_publishers: 0`の回避策は、現在非推奨です。既存の凍結されたパッケージは、既存のレシートに基づいて有効です。詳細については、[`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)と、[research-packsオペレータープレイブック](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md)を参照してください。
 
-**v0.2.0** — 2026年5月9日に公開されました。`research-os pack publish` コマンド（Experiment 2）と、Pattern 2 の準備状態に関する修正が追加されました。この時点で、515/515 の vitest が合格しました。詳細については、[CHANGELOG.md](CHANGELOG.md) を参照してください。凍結されたパッケージは、単一のコマンドで、標準の `research-packs` アーカイブにエクスポートされます。承認プロセスは、チェックリストではなく、コードによって強制されます。詳細については、[`docs/pack-publish.md`](docs/pack-publish.md) を参照してください。
+**v0.3.0** — 2026年5月9日に公開されました。`contradict map`に、`--detector <auto|heuristic|ollama-intern>`フラグが追加されました（Experiment 3 Session 1、XRPLパッケージのF-09チェーンブロッカーの修正）。当時、527/527のvitestが成功しました。検出器の選択は、以前の状態に依存する環境変数ではなく、オペレーターが明示的に選択するようになりました。モードは、実行ごとに可視化されます。詳細については、[`docs/contradict-map.md`](docs/contradict-map.md)を参照してください。
+
+**v0.2.0** — 2026年5月9日に公開。`research-os pack publish` (実験2) と、Pattern 2 の準備状態に関する問題を修正しました。515件中515件の vitest テストが合格しました。詳細は [CHANGELOG.md](CHANGELOG.md) を参照してください。パッケージの公開は、単一のコマンドで標準の `research-packs` アーカイブにエクスポートされます。契約の遵守は、チェックリストではなくコードによって強制されます。詳細は [`docs/pack-publish.md`](docs/pack-publish.md) を参照してください。
 
 **v0.1.0** — 2026年5月8日に固定されました。`research-os-packs/research-os-spec/` (関連リポジトリ) にある「dogfood」パッケージでは、8つのセクションで296件の主張が承認され、17件が処理され、30件がオペレーターによって修正され、未解決の矛盾は0件、すべてのゲートで `synthesis_eligible=true` となりました。463件中463件のvitestテストが合格しました。16個の重要なルールが実装されています。詳細については、[docs/dogfood-proof.md](docs/dogfood-proof.md) を参照してください。このドキュメントには、7つの発見事項と、固定状態のフィンガープリントが記載されています。
 
-**research-packs アーカイブモノレポ** — [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) で公開されており、初期の2つのパッケージが含まれています。`comfyui-workflow-durability`（Experiment 1、302件のクレームが承認、8セクション）と、`research-os-self-dogfood`（v0.1 の内部テストの補完、296件のクレームが承認、8セクション）。両方のパッケージは、`verify-pack.mjs` に合格しています。
+**research-packs アーカイブ (モノレポ)** — [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) で公開されており、リリース時に2つのパッケージが提供されています。`comfyui-workflow-durability` (実験1、302件の承認済みクレーム、8セクション) と `research-os-self-dogfood` (v0.1 のドッグフード版、296件の承認済みクレーム、8セクション)。どちらのパッケージも `verify-pack.mjs` をパスしています。
 
-**v1 Experiment 1 (ComfyUIワークフローの安定性)** — 2026年5月9日に完了しました。Terminal A のすべての8セクションで検証され、パッケージが凍結され、アーカイブが公開されました。詳細については、[`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) および [`docs/roadmap.md`](docs/roadmap.md) を参照してください。
+**v1 実験1 (ComfyUI ワークフローの安定性)** — 2026年5月9日に終了。8つのセクションすべてが Terminal A で完了し、パッケージは凍結され、アーカイブは公開されました。詳細は [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) と [`docs/roadmap.md`](docs/roadmap.md) を参照してください。
 
 ### v0.1の制限事項
 
-- 外部ユーザーによる実証テストはまだ実施されていません。2つの内部テストフェーズが完了しました。1つは自己参照型、もう1つは外部ドメイン型です。また、実験3（外部からのプレッシャー下でのAPIの安定性）は進行中です。3つ目のパック（XRPLクリエイタートークンの耐久性）は、v0.3.0の`--detector`フラグとv0.3.1のセクションスコープ付きソース免除の条件を満たしました。実験3を完了するには、さらに2つの外部ドメインのパックが必要です。
-- これは、コンテンツ生成AIではありません。`synth workspace`コマンドは、構造化された作業環境を生成します。人間（またはCowork）が、承認されたクレームIDに基づいて文章を作成します。
-- APIは、セマンティックバージョニング（semver）に基づいて安定していません。v1.0.0は、特定の期日ではなく、達成すべき状態です。詳細については、[`docs/roadmap.md`](docs/roadmap.md)を参照してください。このドキュメントには、v1.0.0を達成するために必要な6つの実験が記載されています。
+- 外部ユーザーによる実証テストはまだ行われていません。2つのドッグフードテストが完了しました。1つは自己参照型、もう1つは外部ドメイン型です。実験3 (外部からのプレッシャー下での API の安定性) は現在進行中です。パッケージ #2 (XRPL クリエイタートークンの安定性) が251件の承認済みクレーム（7セクション）で凍結されており、npm v0.3.2 に対するパッケージ公開の承認を待っています。このテストでは、v0.3.0 の `--detector` フラグ (F-09 チェーンブロッカー)、v0.3.1 のセクションスコープのソースに関する免責事項 (F-10/F-11 カンニングプロトコルに関するプレッシャー)、および v0.3.2 の標準化された承認済みクレームの会計処理 (F-36 クローズジャーレッジシーム) が完了しました。実験3を完了するには、外部ドメインのパッケージがさらに1つ必要です。
+- 文章生成機能はありません。`synth workspace` コマンドは構造化されたワークスペースを生成しますが、文章は人間（または Cowork）が、承認済みクレームの ID に基づいて記述します。
+- セマンティックバージョニング (semver) に基づく API の安定性はありません。v1.0.0 は、カレンダーの日付ではなく、達成された状態です。詳細は [`docs/roadmap.md`](docs/roadmap.md) に記載されている、そのギャップを埋める6つの実験を参照してください。
 
 ### 既知の制限事項
 
-- **抽出元の情報が、ゲートの接合部分では表示されません。** セクションは、キャリブレーションされた抽出器（設定されたモデルを使用したOllama）が利用できない場合でも、ヒューリスティックに基づく代替クレームを利用して、承認されたクレームの基準を満たすことができます。これは、ロードマップの実験4として記録されており、今後の改善により、抽出器ごとに承認されたクレームが報告され、基準を満たす数の承認されたクレームが、キャリブレーションされたパスから取得されるようになります。
-- **キャリブレーションされた`hermes-two-pass`を基準とする、レビューモデルの選択に関する問題は未解決です。** 内部テストフェーズでは、1つのレビュー設定が検証されました。代替モデルは、信頼できるようになる前に、独自のシードされた失敗の再現キャリブレーションが必要です。これは、ロードマップの実験5です。
-- **v0.1の内部テストで使用されたのは、`mistral-nemo:12b`という抽出モデルです（標準のデフォルトは`hermes3:8b`）。** v0.1のテスト期間中、この環境では`hermes3:8b`が利用できませんでした。この代替モデルの使用については、`hermes3`ベースのモデルが利用可能になるまで、その旨が明記されます。`hermes3:8b`が利用できない環境では、`OLLAMA_INTERN_MODEL`を、利用可能なモデルに設定してください。オペレーターが事前に設定したURLを使用し、クエリの精度に注意することで、曖昧なトピックに関する誤った情報の生成を抑制できます（詳細は、ハンドブックを参照）。
+- **抽出元の情報が、ゲートシームでは表示されません。** セクションは、キャリブレーションされた抽出器 (Ollama と設定されたモデル) が利用できない場合に、ヒューリスティックに基づく代替クレームに依存して、承認済みクレームの基準を満たすことができます。これは、ロードマップの実験4として記録されています。今後の改善により、承認済みクレームは抽出器ごとに報告され、基準を満たす数の承認済みクレームが、キャリブレーションされたパスから取得されるようになります。
+- **キャリブレーションされた `hermes-two-pass` を基準とする、レビューモデルの選択は未解決です。** ドッグフードテストでは、1つのレビュー設定が検証されました。代替モデルは、信頼できるようになる前に、独自のシードされた失敗の再現キャリブレーションが必要です。これは、ロードマップの実験5です。
+- **v0.1 の自己ドッグフードパッケージでは、抽出に `mistral-nemo:12b` が使用されました (標準のデフォルトは `hermes3:8b`)。** v0.1 のテスト期間中、この環境では `hermes3:8b` が利用できませんでした。この代替の使用に関する情報は、`hermes3` ベースの記録が作成されるまで有効です。`hermes3:8b` が利用できない環境では、`OLLAMA_INTERN_MODEL` を利用可能なモデルに設定してください。オペレーターが事前に設定した URL と、クエリの精度に関するルール (ハンドブックを参照) を使用することで、あいまいなトピックに関する誤った情報の検出を軽減できます。
 
-## v1.0へのロードマップ
+## v1.0 へのロードマップ
 
-v1.0は、リリース日ではなく、達成すべき状態です。v0.1からv1.0までの間に、6つの実験が残されています。これには、自己参照ではない内部テスト（現在、ComfyUIワークフローの耐久性に関するパックとして進行中）、`research-os pack publish`コマンド（これは、`research-packs`という単一リポジトリへのエクスポートを自動化します。実験2であり、実験1の手動での完了の後に実施されます）、外部からのプレッシャー下でのAPIの安定性、抽出元の情報の可視化、`hermes-two-pass`を超えるレビューのキャリブレーションの一般化、そして`hermes3:8b`を使用したクリーンなベースラインの実行が含まれます。実験1は、パックが凍結される時点では完了していません。これは、凍結されたパックが、`research-packs`という単一リポジトリで、v0.1の内部テストパックと一緒に最初のパッケージとしてリリースされたときに完了します。詳細な計画については、[`docs/roadmap.md`](docs/roadmap.md)を参照してください。アーキテクチャのロックは、このプロセス全体を通して維持されます。v1.0は、v0.1で証明された内容をさらに深めるものであり、以前の内容を再検討するものではありません。
+v1.0は、単なるリリース日ではなく、達成される状態です。v0.1からv1.0までの間に、6つの実験段階があります。これには、自己参照を含まない内部テスト（現在はComfyUIワークフローの安定性向上パックとして進行中）、`research-os pack publish`コマンドによる、標準的な`research-packs`モノレポへの自動エクスポート（実験2。実験1の手動での完了処理の後に行われる）、外部からのプレッシャーに対するAPIの安定性、抽出元の追跡機能の確立、`hermes-two-pass`を超えるレビューアの調整の一般化、そして`hermes3:8b`上でのクリーンなベースラインの実行が含まれます。実験1は、パッケージの最終版が作成される前に完了しません。これは、v0.1の内部テストが完了し、`research-packs`モノレポの最初のパッケージとしてリリースされる際に終了します。詳細な計画は、[`docs/roadmap.md`](docs/roadmap.md)に記載されています。アーキテクチャの設計は一貫して維持され、v1.0は、v0.1で検証された内容をさらに深めるものであり、以前の段階を再検討するものではありません。
 
 ## ライセンス
 

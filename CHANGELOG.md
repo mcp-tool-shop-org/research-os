@@ -2,6 +2,104 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.3.2] — 2026-05-09
+
+Tight release. One real, tested, dogfooded improvement: normalized
+accepted-claim accounting for `pack publish` admission. Earned by
+Experiment 3 XRPL pack Session K — frozen-pack admission refused on
+a closure-ledger seam disagreement (Section 07 had 24 raw
+`accepted_for_synthesis` rows but only 19 unique `claim_id`s due to
+overlapping reviewer windows). The strict equality check between
+`claim-reviews.jsonl` count and `pack-audit.json::accepted_claims`
+was overcounting duplicates as a refusal trigger. Fix is structural:
+a single canonical "effective accepted set" definition, applied at
+admission, with the legacy audit count preserved (Law 15) but
+demoted from refusal to soft warn when it disagrees with the
+effective set. F-35 (cross-section-map waiver-dependency mismatch)
+deferred to its own scoped release; the helper's normalization
+shape doesn't naturally generalize to operator-authored waiver
+entries.
+
+### Added
+
+- **`getEffectiveAcceptedClaimIds(reviews)` helper** at
+  [`src/closure-ledger/effective-accepted.ts`](src/closure-ledger/effective-accepted.ts)
+  — pure-function module. Also exports `getEffectiveDecisionMap` and
+  `findIncompatibleDecisions` for downstream consumers that need the
+  latest decision per `claim_id` or want to detect incompatible
+  duplicate decisions at the same timestamp. The product rule
+  (advisor-locked): *Accepted claims = unique `claim_id`s whose
+  latest canonical review decision is `accepted_for_synthesis`.*
+  Latest-decision-wins precedence per `claim_id` (ISO-8601
+  timestamps compare lexicographically). Pattern mirrors
+  `cowork/derive.ts`'s active-blocker derivation (Pattern 2:
+  latest-status-wins).
+
+### Fixed
+
+- **Pack publish admission contract: normalized accepted-claim
+  accounting (F-36).** When `claim-reviews.jsonl` contains
+  overlapping reviewer windows, the same `claim_id` can legitimately
+  receive multiple `accepted_for_synthesis` records. Pack publish
+  admission now derives the effective accepted set per section using
+  latest-decision-wins precedence per `claim_id`, instead of strict
+  equality against the legacy `pack-audit.json::accepted_claims` raw
+  count. Frozen packs whose legacy audit count differs from the
+  effective set now admit with a warning rather than refusing — the
+  legacy audit file is preserved (Law 15 immutability) while the
+  archive manifest reflects the normalized count. Refusal cases kept
+  hard: phantom `claim_id` (accepted but absent from `claims.jsonl`),
+  incompatible duplicate decisions (same `claim_id` + same
+  `created_at` with different decision values), and section gate not
+  synthesis-eligible.
+
+  The new soft-warn line:
+
+  ```
+  section <id>: legacy pack-audit.json accepted_claims (...) differs
+  from effective accepted set (...). Using effective count in
+  manifest. Legacy audit count preserved in pack/audits/pack-audit.json
+  (immutable per Law 15).
+  ```
+
+  This is **not** a publish failure when the effective accepted set
+  is valid. It means pack publish is preserving the frozen audit
+  file while normalizing the archive manifest.
+
+### Tests
+
+- 540 → **558 passing** (+18). All 57 test files green; lint clean;
+  typecheck clean; build clean.
+- 9 helper unit tests at
+  `test/closure-ledger/effective-accepted.test.ts` covering empty
+  input, duplicate-row dedup, latest-wins precedence in both
+  directions, out-of-order resolution, decision-map exposure,
+  incompatible-decision detection (with and without timestamp
+  collisions), and identical-timestamp agreement.
+- 9 admission integration tests at
+  `test/pack-publish/f36-admission.test.ts` covering duplicate
+  accepted dedup, soft-warn (not refuse) on legacy mismatch,
+  effective-count manifest write, phantom-claim refusal,
+  incompatible-decision refusal, non-synthesis-eligible-gate
+  refusal, claims.jsonl-absent warn, repair-then-accept resolution,
+  later-rejected removal from accepted set, and tiny-fixture
+  regression.
+
+### Validated against frozen packs
+
+- **XRPL creator-token durability** (Experiment 3 pack #2 of 3):
+  smoke test admits cleanly. Section 07 surfaces the expected single
+  warning (legacy=24, effective=19). Total
+  `accepted_claims = 251`. `verify-pack` PASS.
+- **ComfyUI workflow durability** (Experiment 1 pack):
+  regression PASS, sha256 fingerprint stable.
+- **research-os self-dogfood** (Experiment 0 pack):
+  regression PASS, sha256 fingerprint stable.
+
+The fix is a strict superset of prior admission discipline. Packs
+whose effective count already matched legacy admit identically.
+Only XRPL hits the new soft-warn path.
+
 ## [0.3.1] — 2026-05-09
 
 Tight release. One real, tested, dogfooded improvement: section-scoped
