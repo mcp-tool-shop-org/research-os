@@ -15,6 +15,7 @@ import {
   buildCard,
   writeSourceCard,
 } from './cards.js';
+import { readOverrides } from './source-card-overrides.js';
 import type { GatherOptions, GatherSummary, Extractor } from './types.js';
 
 export async function gather(options: GatherOptions): Promise<GatherSummary> {
@@ -28,6 +29,11 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
 
   const extractorList: Extractor[] = options.extractors ?? defaultExtractors();
   const extractor = await pickExtractor(extractorList);
+
+  // Load override ledger once before the fetch loop (Component A, v0.4).
+  // F-27 closure: overrides are applied at card-write time so re-gather of an
+  // existing source_id cannot silently revert an operator correction.
+  const overrides = await readOverrides(packPath);
 
   const summary: GatherSummary = {
     sectionId: options.sectionId,
@@ -66,7 +72,7 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
           extraction_extractor: extractor.name,
           extraction_error: null,
         };
-        const card = buildCard({ receipt: receiptToWrite, extraction: result, extractedBy: extractor.name });
+        const card = buildCard({ receipt: receiptToWrite, extraction: result, extractedBy: extractor.name, overrides });
         await writeSourceCard(packPath, card);
         await appendSectionSourceId(packPath, options.sectionId, card.source_id);
         summary.cardsWritten += 1;

@@ -5,23 +5,45 @@ import { join } from 'node:path';
 import { SourceCardSchema, type FetchReceipt, type SourceCard } from './schema.js';
 import type { ExtractionResult, ExtractorName } from './types.js';
 import { classifySourceType } from './source-type-classifier.js';
+import { getEffectiveSourceType, getEffectivePublisher } from './effective-card.js';
+import type { SourceCardOverride } from './source-card-overrides-schema.js';
 
 export function buildCard(args: {
   receipt: FetchReceipt;
   extraction: Extract<ExtractionResult, { ok: true }>;
   extractedBy: ExtractorName;
+  /**
+   * Override entries loaded from evidence/source-card-overrides.jsonl.
+   * Component A (v0.4): when present, effective source_type and publisher are
+   * computed via the L1 override layer before the card is persisted.
+   * Omit (or pass []) to skip override application — e.g. in test environments
+   * that do not supply a pack path.
+   */
+  overrides?: SourceCardOverride[];
 }): SourceCard {
   const { receipt, extraction, extractedBy } = args;
+  const overrides = args.overrides ?? [];
 
   // Run the URL-pattern classifier (Component B, v0.4). When a rule matches
   // (rule_hint !== 'no-rule-match'), the classifier result is authoritative for
   // source_type. When no rule matches, we preserve the extractor's heuristic
   // result (e.g. 'benchmark' for paperswithcode.com, 'primary' for arxiv.org).
   const classification = classifySourceType({ url: receipt.requested_url });
-  const resolvedSourceType =
+  const classifiedSourceType =
     classification.rule_hint === 'no-rule-match'
       ? extraction.source_type
       : classification.source_type;
+
+  // Apply L1 override layer (Component A, v0.4). Effective values dominate
+  // classifier + extractor output. rule_hint and precedence_level are preserved
+  // from the classifier — they record evidence, NOT override status.
+  const baseForEffective = {
+    source_id: receipt.source_id,
+    source_type: classifiedSourceType,
+    publisher: extraction.publisher,
+  };
+  const resolvedSourceType = getEffectiveSourceType(baseForEffective, overrides);
+  const resolvedPublisher = getEffectivePublisher(baseForEffective, overrides);
 
   const card = SourceCardSchema.parse({
     source_id: receipt.source_id,
@@ -30,7 +52,7 @@ export function buildCard(args: {
     url: receipt.requested_url,
     final_url: receipt.final_url,
     fetched_at: receipt.fetched_at,
-    publisher: extraction.publisher,
+    publisher: resolvedPublisher,
     published_at: extraction.published_at,
     title: extraction.title,
     source_type: resolvedSourceType,

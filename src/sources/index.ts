@@ -15,6 +15,16 @@ export {
 export { normalizeOllamaHost } from './extractors/ollama-intern.js';
 export { buildCard, writeSourceCard, appendFetchLog, appendSectionSourceId } from './cards.js';
 export {
+  readOverrides,
+  appendOverride,
+  type SourceCardOverride,
+} from './source-card-overrides.js';
+export {
+  SourceCardOverrideSchema,
+  validateSourceCardOverride,
+} from './source-card-overrides-schema.js';
+export { getEffectiveSourceType, getEffectivePublisher } from './effective-card.js';
+export {
   FetchReceiptSchema,
   SourceCardSchema,
   SourceTypeSchema,
