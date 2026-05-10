@@ -10,7 +10,7 @@
 // Usage:
 //   OLLAMA_HOST=http://127.0.0.1:11435 \
 //   OLLAMA_INTERN_MODEL=hermes3:8b \
-//   node scripts/reviewer-calibration.mjs [pack-out-dir] [--model <name>] [--two-pass] [--profile <name>] [--mode comparison-only]
+//   node scripts/reviewer-calibration.mjs [pack-out-dir] [--model <name>] [--two-pass] [--profile <name>] [--mode comparison-only] [--runs <n>]
 //
 // --profile <name>   Profile name used for receipt path and record lineage.
 //                    If omitted, inferred from --model + --two-pass flag.
@@ -23,6 +23,13 @@
 // --mode comparison-only   Force status = comparison_only regardless of bars.
 //                          Use for architectural side-runs not intended for
 //                          production admission.
+//
+// --runs <n>         Run calibration N times. When n=1 (default), writes the
+//                    existing single-run seeded-v1.{json,md} directly.
+//                    When n>1, writes per-run receipts under
+//                    calibration/reviewer-profiles/<profile>/runs/run-NNN.json
+//                    and an aggregate seeded-v1.{json,md} at the profile root.
+//                    The fixture is rebuilt from scratch each run (per-run isolation).
 //
 // The fixture pack is rebuilt on every run — it is purely a calibration
 // surface, not research truth.
@@ -50,6 +57,11 @@ import {
 
 import { CalibrationReceiptSchema } from '../dist/calibration/receipt-schema.js';
 
+import {
+  aggregateReceipts,
+  buildAggregateReceiptMarkdown,
+} from '../dist/calibration/aggregate.js';
+
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
 const RESEARCH_OS_VERSION = pkg.version;
@@ -68,6 +80,8 @@ const modelOverride = modelIdx >= 0 ? args[modelIdx + 1] : undefined;
 const profileIdx = args.indexOf('--profile');
 const profileArg = profileIdx >= 0 ? args[profileIdx + 1] : undefined;
 const isComparisonOnly = args.includes('--mode') && args[args.indexOf('--mode') + 1] === 'comparison-only';
+const runsIdx = args.indexOf('--runs');
+const runsCount = runsIdx >= 0 ? Math.max(1, parseInt(args[runsIdx + 1], 10) || 1) : 1;
 
 // Profile name inference: model family (before ':'), strip trailing digits,
 // append architecture suffix. hermes3:8b + two-pass -> hermes-two-pass.
@@ -696,18 +710,69 @@ async function persistReceipt(receipt) {
 }
 
 (async () => {
-  const startMs = Date.now();
-  console.log(`Building fixture at: ${outDir}`);
-  console.log(`Mode: ${mode} | Profile: ${profileName} | Model: ${modelForInference}`);
+  console.log(`Mode: ${mode} | Profile: ${profileName} | Model: ${modelForInference} | Runs: ${runsCount}`);
   if (isComparisonOnly) console.log(`Status override: comparison-only`);
 
-  const packPath = await buildFixturePack();
-  console.log(`Fixture built. Running paged LLM review (${mode})...`);
-  const summary = await runCalibration(packPath, mode, modelOverride);
-  const runtimeMs = Date.now() - startMs;
+  if (runsCount === 1) {
+    // Single-run mode — existing behavior, no runs/ subdirectory.
+    const startMs = Date.now();
+    console.log(`Building fixture at: ${outDir}`);
+    const packPath = await buildFixturePack();
+    console.log(`Fixture built. Running paged LLM review (${mode})...`);
+    const summary = await runCalibration(packPath, mode, modelOverride);
+    const runtimeMs = Date.now() - startMs;
+    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
+    await persistReceipt(receipt);
+    return;
+  }
 
-  const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
-  await persistReceipt(receipt);
+  // Multi-run mode — rebuild fixture per run (isolation), collect per-run receipts,
+  // then aggregate and write seeded-v1.{json,md} with aggregate shape.
+  const runReceipts = [];
+  const profileDir = join(REPO_ROOT, 'calibration', 'reviewer-profiles', profileName);
+  const runsDir = join(profileDir, 'runs');
+  await mkdir(runsDir, { recursive: true });
+
+  for (let i = 0; i < runsCount; i++) {
+    const runNum = i + 1;
+    console.log(`\n=== Run ${runNum} of ${runsCount} ===`);
+    console.log(`Building fixture at: ${outDir} (fresh rebuild for isolation)`);
+    const runStartMs = Date.now();
+    const packPath = await buildFixturePack();
+    console.log(`Fixture built. Running paged LLM review (${mode})...`);
+    const summary = await runCalibration(packPath, mode, modelOverride);
+    const runtimeMs = Date.now() - runStartMs;
+
+    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
+
+    const runFile = join(runsDir, `run-${String(runNum).padStart(3, '0')}.json`);
+    await writeFile(runFile, JSON.stringify(receipt, null, 2), 'utf8');
+    console.log(`  Per-run receipt: ${runFile}`);
+    runReceipts.push(receipt);
+  }
+
+  console.log(`\n=== Aggregating ${runsCount} runs ===`);
+  const runFiles = runReceipts.map((_, i) =>
+    `runs/run-${String(i + 1).padStart(3, '0')}.json`,
+  );
+  const aggregate = aggregateReceipts(runReceipts, {
+    runFiles,
+    modeOverride: isComparisonOnly ? 'comparison_only' : undefined,
+  });
+
+  await mkdir(profileDir, { recursive: true });
+  const jsonPath = join(profileDir, 'seeded-v1.json');
+  const mdPath = join(profileDir, 'seeded-v1.md');
+  await writeFile(jsonPath, JSON.stringify(aggregate, null, 2), 'utf8');
+  await writeFile(mdPath, buildAggregateReceiptMarkdown(aggregate), 'utf8');
+
+  console.log(`\n=== aggregate receipt persisted ===`);
+  console.log(`  Status:   ${aggregate.status}`);
+  console.log(`  Runs:     ${aggregate.runs_count}`);
+  console.log(`  Overall:  ${aggregate.pass_fail.overall}`);
+  console.log(`  Recurring failures: ${aggregate.recurring_bar_failures.join(', ') || 'none'}`);
+  console.log(`  JSON: ${jsonPath}`);
+  console.log(`  MD:   ${mdPath}`);
 })().catch((err) => {
   console.error(err);
   process.exit(1);

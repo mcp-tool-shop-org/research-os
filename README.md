@@ -163,12 +163,21 @@ is unreachable from `seeded-v1`). See [CHANGELOG.md](CHANGELOG.md) for the
 v0.5.0 candidate entry and the Session 4 receipt status note.
 
 ```bash
-# Calibrate a reviewer profile against seeded-v1 fixture
+# Single-run calibration (quick local check)
 node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
 
 # Promote a section's review — auto-populates calibration_summary from pack-relative receipt
 research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 ```
+
+When `--runs <n>` is used, per-run receipts are written to `<profile>/runs/run-NNN.json`
+and an aggregate receipt (with median-based bars and recurring-failure detection) is written
+to `<profile>/seeded-v1.{json,md}`. The aggregate receipt carries `receipt_kind: 'aggregate'`
+to discriminate from single-run receipts. Single-run mode (`--runs 1` or omitted) preserves
+the existing direct-write behavior.
 
 ## Status
 

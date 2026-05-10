@@ -6,6 +6,8 @@ export default defineConfig({
     cli: 'src/cli.ts',
     'calibration/receipt': 'src/calibration/receipt.ts',
     'calibration/receipt-schema': 'src/calibration/receipt-schema.ts',
+    'calibration/aggregate-receipt-schema': 'src/calibration/aggregate-receipt-schema.ts',
+    'calibration/aggregate': 'src/calibration/aggregate.ts',
   },
   format: ['esm'],
   dts: true,

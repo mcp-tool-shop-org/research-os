@@ -4,6 +4,44 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased] — v0.5.0 candidate — reviewer trust as inspectable contract
 
+### F-50 stabilization (Session 5)
+
+- **Multi-run calibration:** `--runs <n>` flag on the calibration harness. Per-run
+  receipts persist under `<profile>/runs/run-NNN.json`; aggregate receipts at
+  `<profile>/seeded-v1.{json,md}` use median-based PASS/FAIL rules.
+- **Median aggregation rules:** FP ceiling (median ≤1 AND max ≤2), any-flag
+  recall (median ≥65%), per-category any-flag (median ≥50% per category with
+  total ≥2), strict recall (median ≥20%), decision vocab (architecture-aware
+  median ≥3 for two-pass / ≥4 for single-pass), latency hard (every run ≤20 min,
+  enforced via max), empty/malformed (every run =0, enforced via max).
+- **Recurring-failure demotion:** a profile passes median rules but FAILed the
+  same bar in ≥⌈N/2⌉ individual runs → demoted from `trusted_baseline` to
+  `conditional_pass`. Prevents one lucky median from masking systemic bar weakness.
+- **Single-run mode preserved:** harness without `--runs` (or `--runs 1`) writes
+  the existing single-run receipt directly. `comparison_only` profiles stay single-run.
+- **New source files:** `src/calibration/aggregate-receipt-schema.ts` (aggregate Zod schema
+  with `receipt_kind: 'aggregate'` discriminator) and `src/calibration/aggregate.ts`
+  (pure helpers: `median`, `aggregateMetric`, `aggregatePerCategoryRecall`,
+  `aggregateDecisionVocabulary`, `computeAggregatePassFail`, `computeRecurringBarFailures`,
+  `computeAggregateStatusLabel`, `aggregateReceipts`, `buildAggregateReceiptMarkdown`).
+
+### Frictions closed (Session 5)
+
+- **F-50** — Per-category any-flag floor was statistically unreliable at N=2–3
+  seeds per category (one missed claim drops a category from 67% to 33%). Median
+  aggregation across 3 runs absorbs single-run variance without lowering the bar.
+
+### Canonical receipt statuses (Session 5)
+
+- `hermes-two-pass` (aggregate, 3 runs): **`failed`** — escalation. Run 1 PASS (FP=0,
+  any-flag=85%, decisions=3/6); runs 2–3 FAIL (any-flag 62%/46%, decisions=2/6).
+  Recurring failures: `any_flag_recall_floor`, `per_category_any_flag_floor`,
+  `decision_vocab_completeness`. Thesis NOT proven at N=3. Advisor decides path.
+- `mistral-nemo-two-pass` (aggregate, 3 runs): **`conditional_pass`** — aggregate PASS
+  (median FP=1, max=2 at ceiling; median any-flag=69%; no recurring failures).
+  Run 1 FAIL (FP=2/5); runs 2–3 PASS.
+- `hermes-single-pass` (single-run): **`comparison_only`** — auto-assigned.
+
 v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
 it ran; it is trusted because seeded failures prove its recall, false-positive
 rate, decision coverage, and limits.

@@ -36,17 +36,39 @@ The receipt records:
 From the `research-os` repo root:
 
 ```bash
-# Two-pass (general → narrow_critic) — canonical for admission
+# Quick single-run (local check — backward-compat behavior)
 node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
 
-# Single-pass — for architectural comparison only
+# Canonical 3-run aggregate (production evidence — use this for admission decisions)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Single-pass — architectural comparison only
 node scripts/reviewer-calibration.mjs --model hermes3:8b --profile hermes-single-pass --mode comparison-only
 
-# Different model, two-pass
-node scripts/reviewer-calibration.mjs --model mistral-nemo:12b --two-pass --profile mistral-nemo-two-pass
+# Different model, two-pass, 3-run aggregate
+node scripts/reviewer-calibration.mjs --model mistral-nemo:12b --two-pass --profile mistral-nemo-two-pass --runs 3
 ```
 
-The harness always writes to `calibration/reviewer-profiles/<profile-name>/seeded-v1.{json,md}`.
+When `--runs <n>` is specified (n ≥ 2), the harness:
+
+1. Rebuilds the fixture from scratch on each run (per-run isolation).
+2. Writes per-run receipts to `<profile>/runs/run-001.json` … `run-00N.json`.
+3. Aggregates across runs using median-based PASS/FAIL bars.
+4. Writes the aggregate receipt to `<profile>/seeded-v1.{json,md}`.
+
+When `--runs 1` (or omitted), the harness writes the single-run receipt directly
+to `<profile>/seeded-v1.{json,md}` — no `runs/` subdirectory is created.
+
+### When to use single-run vs multi-run
+
+| Mode | When to use |
+|---|---|
+| `--runs 1` (default) | Quick local check; iterating on a new profile; comparison experiments |
+| `--runs 3+` | Canonical admission evidence; any receipt you plan to ship or commit |
+
+**The per-category any-flag floor (≥50% per category) is unreliable at N=1** because
+1–2 seeds per category makes a single missed claim determinative. Multi-run median
+aggregation absorbs this variance without lowering the bar (F-50 stabilization).
 
 ---
 
@@ -54,16 +76,35 @@ The harness always writes to `calibration/reviewer-profiles/<profile-name>/seede
 
 | Label | Meaning |
 |---|---|
-| `trusted_baseline` | Canonical Hermes two-pass + all bars PASS + 0 FP. The reference profile. |
-| `conditional_pass` | Passes recalibrated bars but carries explicit caution. Eligible, not the reference. |
-| `failed` | Any hard bar fails. Not admitted. |
+| `trusted_baseline` | Canonical Hermes two-pass + aggregate PASS + median FP = 0 + no recurring bar failures. The reference profile. |
+| `conditional_pass` | Aggregate passes all bars but carries explicit caution (FP at ceiling, non-Hermes model, or recurring-failure demotion). |
+| `failed` | Any hard aggregate bar fails. Not admitted. |
 | `comparison_only` | Explicit `--mode comparison-only`, or single-pass Hermes (auto-assigned). Architectural comparison only — does NOT vouch for production. |
 
 **`trusted_baseline` ≠ `conditional_pass`.** Do not treat them as interchangeable.
 
 **Mistral (`mistral-nemo-two-pass`) is NOT promoted to `trusted_baseline`** regardless
-of whether it passes bars in a given run. It carries `conditional_pass` as the
-honest state for a non-reference model that may have FP at ceiling.
+of aggregate outcome. It carries `conditional_pass` as the honest ceiling for a
+non-reference model.
+
+### Recurring-failure demotion
+
+An aggregate receipt may carry a `recurring_bar_failures` list. If any hard bar
+FAILed in ≥ ⌈N/2⌉ individual runs, that bar appears in this list — even if the
+median across all runs happened to pass.
+
+A non-empty `recurring_bar_failures` demotes a Hermes two-pass result from
+`trusted_baseline` to `conditional_pass`. The intent: one lucky median cannot mask
+a bar that was systematically unreliable across most runs.
+
+Example: 3 runs where `decision_vocab_completeness` FAILed in runs 1 and 2 but
+PASSed in run 3 (median = PASS). The recurring-failure check catches this as
+2/3 ≥ ⌈3/2⌉ = 2 — the bar goes into `recurring_bar_failures` and the profile is
+`conditional_pass`, not `trusted_baseline`.
+
+**When `recurring_bar_failures` is non-empty:** inspect the per-run receipts in
+`runs/` to see which runs caused the failures, and whether it is a fixture-scale
+sampling issue or a genuine model reliability problem.
 
 ---
 
@@ -95,8 +136,8 @@ Three receipts ship with v0.5.0 under `calibration/reviewer-profiles/`:
 
 | Profile | Model | Architecture | Status |
 |---|---|---|---|
-| `hermes-two-pass` | hermes3:8b | two-pass | see CHANGELOG Session 4 note |
-| `mistral-nemo-two-pass` | mistral-nemo:12b | two-pass | see CHANGELOG Session 4 note |
+| `hermes-two-pass` | hermes3:8b | two-pass | `failed` (aggregate, 3 runs) — see CHANGELOG |
+| `mistral-nemo-two-pass` | mistral-nemo:12b | two-pass | `conditional_pass` (aggregate, 3 runs) |
 | `hermes-single-pass` | hermes3:8b | single-pass | `comparison_only` |
 
 The `hermes-single-pass` receipt is `comparison_only` (auto-assigned via `--mode comparison-only`).
