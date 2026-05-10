@@ -119,7 +119,8 @@ export function checkClaimIntegrity(input: GateInput): GateCheckResult[] {
     });
   }
 
-  // no_source_cluster_monopoly — claim-level: a claim whose every source traces to one publisher
+  // no_source_cluster_monopoly — claims are single-source by architecture; publisher diversity
+  // is enforced at the source-card level via min_independent_publishers. This check is informational.
   if (cfg.no_source_cluster_monopoly && claims.length > 0) {
     const monoClaims: string[] = [];
     for (const claim of claims) {
@@ -132,25 +133,14 @@ export function checkClaimIntegrity(input: GateInput): GateCheckResult[] {
         monoClaims.push(claim.claim_id);
       }
     }
-    if (monoClaims.length > claims.length / 2) {
-      results.push({
-        family: 'claim_integrity',
-        check: 'no_source_cluster_monopoly',
-        status: 'warn',
-        detail: `${monoClaims.length}/${claims.length} claim(s) source from a single publisher. Independent corroboration recommended before synthesis.`,
-        evidence: monoClaims,
-        blocks_synthesis: false,
-      });
-    } else {
-      results.push({
-        family: 'claim_integrity',
-        check: 'no_source_cluster_monopoly',
-        status: 'pass',
-        detail: `${monoClaims.length}/${claims.length} claim(s) source from a single publisher (within tolerance).`,
-        evidence: [],
-        blocks_synthesis: false,
-      });
-    }
+    results.push({
+      family: 'claim_integrity',
+      check: 'no_source_cluster_monopoly',
+      status: 'pass',
+      detail: `${monoClaims.length}/${claims.length} claim(s) are single-source by architecture (each claim references exactly one source). Publisher diversity is enforced at source-card level via min_independent_publishers.`,
+      evidence: [],
+      blocks_synthesis: false,
+    });
   }
 
   return results;

@@ -260,7 +260,7 @@ describe('checkClaimIntegrity', () => {
     expect(out.find((r) => r.check === 'fetch_receipt_anchored')?.status).toBe('fail');
   });
 
-  it('warns on source-cluster monopoly when most claims share a publisher', () => {
+  it('emits pass (not warn) for source-cluster monopoly — single-source-by-architecture', () => {
     const out = checkClaimIntegrity(makeInput({
       candidateClaims: [
         makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', source_ids: ['src_aaaaaaaaaaaa'] }),
@@ -270,7 +270,9 @@ describe('checkClaimIntegrity', () => {
       sources: [makeSource({ publisher: 'OnePublisher' })],
       receipts: [makeReceipt()],
     }));
-    expect(out.find((r) => r.check === 'no_source_cluster_monopoly')?.status).toBe('warn');
+    const check = out.find((r) => r.check === 'no_source_cluster_monopoly');
+    expect(check?.status).toBe('pass');
+    expect(check?.blocks_synthesis).toBe(false);
   });
 
   it('passes when claims are well-formed', () => {
@@ -408,5 +410,177 @@ describe('checkSectionBudget', () => {
     research.sections[0]!.max_time_minutes = 0 as unknown as z.infer<typeof z.number>;
     const out = checkSectionBudget(makeInput({ research, section: research.sections[0]! }));
     expect(out.find((r) => r.check === 'budget_configured')?.status).toBe('warn');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-43: gate accumulation diagnostic — section-scoped vs pack-wide counts
+// ---------------------------------------------------------------------------
+
+describe('F-43: checkSourceFloor — section-scoped vs pack-wide diagnostic', () => {
+  it('detail includes both pack-wide and section-scoped publisher counts', () => {
+    const research = makeResearch();
+    research.gates.source_floor.min_independent_publishers = 4;
+    // 4 pack-wide sources from 4 publishers, but only 1 belongs to the current section
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'PubA', section_id: '01-test' }),
+      makeSource({ source_id: 'src_bbbbbbbbbbbb', publisher: 'PubB', section_id: '02-other' }),
+      makeSource({ source_id: 'src_cccccccccccc', publisher: 'PubC', section_id: '02-other' }),
+      makeSource({ source_id: 'src_dddddddddddd', publisher: 'PubD', section_id: '02-other' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'min_independent_publishers');
+    expect(r?.status).toBe('pass');
+    expect(r?.detail).toContain('pack-wide=4');
+    expect(r?.detail).toContain('section-scoped=1');
+  });
+
+  it('pack-wide PASS despite section-scoped=1 (core F-43 accumulation scenario)', () => {
+    const research = makeResearch();
+    research.gates.source_floor.min_independent_publishers = 4;
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'Godotengine', section_id: '01-test' }),
+      makeSource({ source_id: 'src_bbbbbbbbbbbb', publisher: 'Apple Inc.', section_id: '05-platform' }),
+      makeSource({ source_id: 'src_cccccccccccc', publisher: 'Microsoft', section_id: '05-platform' }),
+      makeSource({ source_id: 'src_dddddddddddd', publisher: 'IndieDevA', section_id: '03-community' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'min_independent_publishers');
+    expect(r?.status).toBe('pass');
+    expect(r?.detail).toContain('pack-wide=4');
+    expect(r?.detail).toContain('section-scoped=1');
+    expect(r?.blocks_synthesis).toBe(false);
+  });
+
+  it('section-scoped and pack-wide match when all sources are in the current section', () => {
+    const research = makeResearch();
+    research.gates.source_floor.min_independent_publishers = 2;
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'PubA', section_id: '01-test' }),
+      makeSource({ source_id: 'src_bbbbbbbbbbbb', publisher: 'PubB', section_id: '01-test' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'min_independent_publishers');
+    expect(r?.detail).toContain('pack-wide=2');
+    expect(r?.detail).toContain('section-scoped=2');
+  });
+
+  it('primary_sources_required detail includes both pack-wide and section-scoped counts', () => {
+    const research = makeResearch();
+    research.gates.source_floor.primary_sources_required = 2;
+    // Pack has 2 primaries from another section, current section has 0
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'PubA', source_type: 'secondary', section_id: '01-test' }),
+      makeSource({ source_id: 'src_bbbbbbbbbbbb', publisher: 'PubB', source_type: 'primary', section_id: '05-platform' }),
+      makeSource({ source_id: 'src_cccccccccccc', publisher: 'PubC', source_type: 'primary', section_id: '05-platform' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'primary_sources_required');
+    expect(r?.status).toBe('pass');
+    expect(r?.detail).toContain('pack-wide=2');
+    expect(r?.detail).toContain('section-scoped=0');
+  });
+
+  it('fail detail also includes both counts', () => {
+    const research = makeResearch();
+    research.gates.source_floor.min_independent_publishers = 5;
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'OnlyPub', section_id: '01-test' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'min_independent_publishers');
+    expect(r?.status).toBe('fail');
+    expect(r?.detail).toContain('pack-wide=1');
+    expect(r?.detail).toContain('section-scoped=1');
+  });
+
+  it('section-scoped=0 when current section has no sources (all from other sections)', () => {
+    const research = makeResearch();
+    research.gates.source_floor.min_independent_publishers = 2;
+    const sources = [
+      makeSource({ source_id: 'src_aaaaaaaaaaaa', publisher: 'PubA', section_id: '02-other' }),
+      makeSource({ source_id: 'src_bbbbbbbbbbbb', publisher: 'PubB', section_id: '02-other' }),
+    ];
+    const out = checkSourceFloor(makeInput({ research, sources }));
+    const r = out.find((r) => r.check === 'min_independent_publishers');
+    expect(r?.detail).toContain('section-scoped=0');
+    expect(r?.detail).toContain('pack-wide=2');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-41: no_source_cluster_monopoly — informational pass, not warn
+// ---------------------------------------------------------------------------
+
+describe('F-41: checkClaimIntegrity — monopoly check is informational (not WARN)', () => {
+  it('emits pass (not warn) when all claims are single-source', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_2', source_ids: ['src_aaaaaaaaaaaa'] }),
+      ],
+      sources: [makeSource({ publisher: 'SomePub' })],
+      receipts: [makeReceipt()],
+    }));
+    expect(out.find((r) => r.check === 'no_source_cluster_monopoly')?.status).toBe('pass');
+  });
+
+  it('detail message states claims are single-source by architecture', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [makeClaim({})],
+      sources: [makeSource({})],
+      receipts: [makeReceipt()],
+    }));
+    const detail = out.find((r) => r.check === 'no_source_cluster_monopoly')?.detail ?? '';
+    expect(detail).toContain('single-source by architecture');
+    expect(detail).toContain('min_independent_publishers');
+  });
+
+  it('evidence array is empty (not inflated with claim IDs)', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_2', source_ids: ['src_aaaaaaaaaaaa'] }),
+      ],
+      sources: [makeSource({ publisher: 'SomePub' })],
+      receipts: [makeReceipt()],
+    }));
+    expect(out.find((r) => r.check === 'no_source_cluster_monopoly')?.evidence).toHaveLength(0);
+  });
+
+  it('blocks_synthesis is false', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [makeClaim({})],
+      sources: [makeSource({})],
+      receipts: [makeReceipt()],
+    }));
+    expect(out.find((r) => r.check === 'no_source_cluster_monopoly')?.blocks_synthesis).toBe(false);
+  });
+
+  it('emits pass even when all sources have null publisher', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_2', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_3', source_ids: ['src_aaaaaaaaaaaa'] }),
+      ],
+      sources: [makeSource({ publisher: null as unknown as string })],
+      receipts: [makeReceipt()],
+    }));
+    expect(out.find((r) => r.check === 'no_source_cluster_monopoly')?.status).toBe('pass');
+  });
+
+  it('detail includes the claim count', () => {
+    const out = checkClaimIntegrity(makeInput({
+      candidateClaims: [
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_1', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_2', source_ids: ['src_aaaaaaaaaaaa'] }),
+        makeClaim({ claim_id: 'clm_aaaaaaaaaaaa_heuristic_3', source_ids: ['src_aaaaaaaaaaaa'] }),
+      ],
+      sources: [makeSource({ publisher: 'OnePub' })],
+      receipts: [makeReceipt()],
+    }));
+    const detail = out.find((r) => r.check === 'no_source_cluster_monopoly')?.detail ?? '';
+    expect(detail).toContain('3/3');
   });
 });

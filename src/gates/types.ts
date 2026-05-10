@@ -63,6 +63,8 @@ export interface SourceCounts {
   unknown: number;
   independent_publishers: number;
   failed_fetches: number;
+  section_primary: number;
+  section_independent_publishers: number;
 }
 
 export interface ContradictionCounts {

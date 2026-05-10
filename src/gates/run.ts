@@ -84,9 +84,13 @@ function summarizeClaimCounts(input: GateInput): ClaimCounts {
 
 function summarizeSourceCounts(input: GateInput): SourceCounts {
   const cards = input.sources;
+  const sectionCards = cards.filter((c) => c.section_id === input.section.id);
   const failed = input.receipts.filter((r) => r.fetch_outcome !== 'ok').length;
   const publishers = new Set(
     cards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
+  );
+  const sectionPublishers = new Set(
+    sectionCards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
   );
   return {
     total: cards.length,
@@ -98,6 +102,8 @@ function summarizeSourceCounts(input: GateInput): SourceCounts {
     unknown: cards.filter((c) => c.source_type === 'unknown').length,
     independent_publishers: publishers.size,
     failed_fetches: failed,
+    section_primary: sectionCards.filter((c) => c.source_type === 'primary').length,
+    section_independent_publishers: sectionPublishers.size,
   };
 }
 

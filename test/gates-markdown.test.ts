@@ -23,7 +23,7 @@ const baseResult = SectionGateResultSchema.parse({
   waivers_applied: [],
   blocking_reasons: [],
   claim_counts: { total: 4, candidate: 4, with_evidence_excerpt: 4, with_source_hashes: 4, with_scope: 3, with_not: 2, universal_scope_null: 1, orphans: 0 },
-  source_counts: { total: 4, primary: 1, secondary: 3, forum: 0, benchmark: 0, docs: 0, unknown: 0, independent_publishers: 4, failed_fetches: 0 },
+  source_counts: { total: 4, primary: 1, secondary: 3, forum: 0, benchmark: 0, docs: 0, unknown: 0, independent_publishers: 4, failed_fetches: 0, section_primary: 1, section_independent_publishers: 4 },
   contradiction_counts: { total: 0, unresolved: 0, blocking: 0, by_type: {} },
   freshness_summary: { policy_required: false, max_source_age_months: null, stale_source_policy: 'warn', stale_count: 0, unknown_date_count: 0 },
   scope_integrity_summary: { universal_claims: 1, scoped_claims: 3, with_not_constraint: 2, overgen_risks_total: 0, overgen_risks_blocking: 0 },
