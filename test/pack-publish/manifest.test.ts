@@ -80,16 +80,12 @@ describe('deriveManifest', () => {
     expect(() => deriveManifest(packDir, 'test-package')).toThrow(/gate\.json/);
   });
 
-  it('refuses if accepted_claims mismatch between claim-reviews and pack-audit', () => {
-    const { packDir } = createTinyPack(tmpDir);
-    // Inject a mismatch by adding an extra accepted review
-    const { appendFileSync } = require('node:fs');
-    appendFileSync(
-      join(packDir, 'sections/01-test/claim-reviews.jsonl'),
-      '{"claim_id":"clm_9999","decision":"accepted_for_synthesis","reason":"extra","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T12:00:00.000Z"}\n',
-    );
-    expect(() => deriveManifest(packDir, 'test-package')).toThrow(/mismatch/);
-  });
+  // F-36: legacy accepted_claims mismatch between claim-reviews and pack-audit
+  // is now a soft warn, not a refusal — the effective accepted set is canonical
+  // and pack-audit's count is preserved as legacy. Tests for the new behavior
+  // live in test/pack-publish/f36-admission.test.ts. The mismatch case here
+  // also requires the new claim_id to exist in claims.jsonl (phantom check),
+  // so we add it to both files.
 
   it('refuses if unresolved contradictions remain', () => {
     const { packDir } = createTinyPack(tmpDir);

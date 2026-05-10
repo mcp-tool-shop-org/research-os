@@ -51,8 +51,10 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     }
   }
 
-  // 4. Derive manifest early — fail fast on bad pack state before writing anything
-  const manifest = deriveManifest(fromDir, packageName, input.operatorNotes ?? '');
+  // 4. Derive manifest early — fail fast on bad pack state before writing anything.
+  //    Manifest derivation surfaces F-36 legacy-mismatch warnings via the
+  //    shared warnings array; refusals throw.
+  const manifest = deriveManifest(fromDir, packageName, input.operatorNotes ?? '', warnings);
 
   // 5. Dry-run: print plan without writing
   if (input.dryRun) {

@@ -52,14 +52,29 @@ sections:
     status: "frozen"
 `;
 
+  // Use schema-conformant claim_id values (fictional but pattern-valid).
+  // ClaimReviewSchema regex: ^clm_[a-f0-9]{12}_(heuristic|ollama_intern)_\d+$
+  const C1 = 'clm_aaaaaaaa0001_heuristic_1';
+  const C2 = 'clm_aaaaaaaa0001_heuristic_2';
+  const C3 = 'clm_aaaaaaaa0001_heuristic_3';
+  const C4 = 'clm_aaaaaaaa0001_heuristic_4';
+
   const claimReviews = [
-    '{"claim_id":"clm_0001","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:01:00.000Z"}',
-    '{"claim_id":"clm_0002","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:02:00.000Z"}',
-    '{"claim_id":"clm_0003","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:03:00.000Z"}',
+    `{"claim_id":"${C1}","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:01:00.000Z"}`,
+    `{"claim_id":"${C2}","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:02:00.000Z"}`,
+    `{"claim_id":"${C3}","decision":"accepted_for_synthesis","reason":"test","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:03:00.000Z"}`,
+  ].join('\n') + '\n';
+
+  // Minimal claims.jsonl — only claim_id is required for the F-36 phantom check.
+  const claims = [
+    `{"claim_id":"${C1}","section_id":"01-test","source_ids":["src_aaaaaaaaaaaa"],"asserts":"test claim 1","extractor":"heuristic"}`,
+    `{"claim_id":"${C2}","section_id":"01-test","source_ids":["src_aaaaaaaaaaaa"],"asserts":"test claim 2","extractor":"heuristic"}`,
+    `{"claim_id":"${C3}","section_id":"01-test","source_ids":["src_aaaaaaaaaaaa"],"asserts":"test claim 3","extractor":"heuristic"}`,
+    `{"claim_id":"${C4}","section_id":"01-test","source_ids":["src_aaaaaaaaaaaa"],"asserts":"test claim 4 (dispositioned)","extractor":"heuristic"}`,
   ].join('\n') + '\n';
 
   const dispositions =
-    '{"claim_id":"clm_0004","status":"parked_not_for_synthesis","reason":"test","created_at":"2026-05-09T11:04:00.000Z"}\n';
+    `{"claim_id":"${C4}","status":"parked_not_for_synthesis","reason":"test","created_at":"2026-05-09T11:04:00.000Z"}\n`;
 
   const contradictionResolutions =
     '{"contradiction_id":"ctr_0001","status":"resolved","reason":"not a real contradiction","resolved_at":"2026-05-09T11:05:00.000Z","resolved_by":"operator"}\n' +
@@ -169,8 +184,8 @@ The bundle thesis holds.
 
 ## Findings
 
-1. Finding one: [claim:clm_0001] supports this finding.
-2. Finding two: [claim:clm_0002] and [claim:clm_0003] together demonstrate the point.
+1. Finding one: [claim:${C1}] supports this finding.
+2. Finding two: [claim:${C2}] and [claim:${C3}] together demonstrate the point.
 `;
 
   const decisionBrief = `# Decision brief
@@ -189,6 +204,7 @@ All 3 accepted claims are available for synthesis. No active blockers.
   // Write artifact files before computing sha256s
   const artifacts: Array<{ relPath: string; content: string }> = [
     { relPath: 'research.yaml', content: researchYaml },
+    { relPath: 'sections/01-test/claims.jsonl', content: claims },
     { relPath: 'sections/01-test/claim-reviews.jsonl', content: claimReviews },
     { relPath: 'sections/01-test/claim-synthesis-dispositions.jsonl', content: dispositions },
     { relPath: 'sections/01-test/contradiction-resolutions.jsonl', content: contradictionResolutions },
@@ -228,8 +244,8 @@ All 3 accepted claims are available for synthesis. No active blockers.
       handoff_hash: 'a'.repeat(64),
       synthesis_hashes: synthHashes,
       canonical_artifact_hashes: canonicalHashes,
-      accepted_claim_ids: ['clm_0001', 'clm_0002', 'clm_0003'],
-      cited_claim_ids: ['clm_0001', 'clm_0002', 'clm_0003'],
+      accepted_claim_ids: [C1, C2, C3],
+      cited_claim_ids: [C1, C2, C3],
       uncited_accepted_claim_ids: [],
       unresolved_contradictions: [],
       waivers_disclosed: [],
