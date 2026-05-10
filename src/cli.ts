@@ -33,6 +33,10 @@ import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
 import { invalidateExtraction, invalidateReview } from './invalidate/index.js';
 import { publish as packPublish } from './pack/publish/index.js';
+import {
+  runSourceCardAudit,
+  applySourceCardOverrides,
+} from './sources/source-card-audit.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 
@@ -1157,6 +1161,63 @@ packCmd
         for (const w of result.warnings) process.stdout.write(`  - ${w}\n`);
       }
       if (!result.verifyPassed) process.exitCode = 2;
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const sourceCardCmd = program
+  .command('source-card')
+  .description('Source-card inspection and operator-correction surface');
+
+sourceCardCmd
+  .command('audit')
+  .description(
+    'Audit source cards in a pack: classifier drift, missing publishers, GitHub UI HTML. ' +
+      'Read-only by default; use --apply --from <file> to commit operator corrections.',
+  )
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--json', 'Print the JSON report to stdout in addition to writing the artifact', false)
+  .option('--apply', 'Apply operator-authored overrides from --from <file>', false)
+  .option('--from <file>', 'JSON array file of proposed overrides (required with --apply)')
+  .action(async (opts) => {
+    try {
+      const packPath = opts.pack as string;
+
+      if (opts.apply) {
+        const fromFile = opts.from as string | undefined;
+        if (!fromFile) {
+          process.stderr.write('research-os: --apply requires --from <file>\n');
+          process.exit(1);
+        }
+        const result = await applySourceCardOverrides(packPath, fromFile);
+        process.stdout.write(`source-card overrides applied\n`);
+        process.stdout.write(`  entries applied:     ${result.applied}\n`);
+        process.stdout.write(`  source_ids touched:  ${result.distinctSourceIds}\n`);
+        process.stdout.write(`  ledger:              ${result.ledgerPath}\n`);
+        return;
+      }
+
+      const { report, jsonPath, mdPath } = await runSourceCardAudit(packPath);
+      const t = report.totals;
+      const packName = packPath.replace(/\\/g, '/').split('/').pop() ?? packPath;
+
+      process.stdout.write(`research-os source-card audit — pack: ${packName}\n\n`);
+      process.stdout.write(`Cards scanned:                  ${t.cards_scanned}\n`);
+      process.stdout.write(`Cards with overrides applied:   ${t.cards_with_overrides}\n`);
+      process.stdout.write(`Source-type mismatches:         ${t.source_type_mismatches}\n`);
+      process.stdout.write(`Publisher missing:              ${t.publisher_missing}\n`);
+      process.stdout.write(`GitHub UI HTML candidates:      ${t.github_ui_html}\n`);
+      process.stdout.write(`Classifier-flagged (other):     ${t.classifier_flagged_other}\n`);
+      process.stdout.write(`Clean (no action):              ${t.no_action}\n`);
+      process.stdout.write(`\nReports written:\n`);
+      process.stdout.write(`  ${jsonPath}\n`);
+      process.stdout.write(`  ${mdPath}\n`);
+
+      if (opts.json) {
+        process.stdout.write('\n');
+        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+      }
     } catch (err) {
       reportError(err);
     }
