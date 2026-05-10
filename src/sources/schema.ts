@@ -53,6 +53,10 @@ export const SourceCardSchema = z.object({
   not: z.string().nullable(),
   extracted_by: ExtractorNameSchema,
   extracted_at: z.string(),
+  /** Rule that classified the URL. Added by Component B (v0.4). Optional for back-compat with pre-v0.4 cards. */
+  rule_hint: z.string().optional(),
+  /** Precedence level of the rule that fired (2–6). Optional for back-compat with pre-v0.4 cards. */
+  precedence_level: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
 });
 
 export type FetchReceipt = z.infer<typeof FetchReceiptSchema>;

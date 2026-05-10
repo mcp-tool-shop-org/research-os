@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { SourceCardSchema, type FetchReceipt, type SourceCard } from './schema.js';
 import type { ExtractionResult, ExtractorName } from './types.js';
+import { classifySourceType } from './source-type-classifier.js';
 
 export function buildCard(args: {
   receipt: FetchReceipt;
@@ -11,6 +12,17 @@ export function buildCard(args: {
   extractedBy: ExtractorName;
 }): SourceCard {
   const { receipt, extraction, extractedBy } = args;
+
+  // Run the URL-pattern classifier (Component B, v0.4). When a rule matches
+  // (rule_hint !== 'no-rule-match'), the classifier result is authoritative for
+  // source_type. When no rule matches, we preserve the extractor's heuristic
+  // result (e.g. 'benchmark' for paperswithcode.com, 'primary' for arxiv.org).
+  const classification = classifySourceType({ url: receipt.requested_url });
+  const resolvedSourceType =
+    classification.rule_hint === 'no-rule-match'
+      ? extraction.source_type
+      : classification.source_type;
+
   const card = SourceCardSchema.parse({
     source_id: receipt.source_id,
     receipt_id: receipt.receipt_id,
@@ -21,7 +33,7 @@ export function buildCard(args: {
     publisher: extraction.publisher,
     published_at: extraction.published_at,
     title: extraction.title,
-    source_type: extraction.source_type,
+    source_type: resolvedSourceType,
     relevance: extraction.relevance,
     key_points: extraction.key_points,
     limitations: extraction.limitations,
@@ -30,6 +42,8 @@ export function buildCard(args: {
     not: extraction.not,
     extracted_by: extractedBy,
     extracted_at: new Date().toISOString(),
+    rule_hint: classification.rule_hint,
+    precedence_level: classification.precedence_level,
   });
   return card;
 }
