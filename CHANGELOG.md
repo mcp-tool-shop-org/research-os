@@ -2,6 +2,82 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.4.0] — 2026-05-10 — source-truth discipline
+
+v0.4.0 makes source identity durable. Deterministic source-type rules
+handle the repeatable majority, override ledgers preserve operator
+corrections across re-gather, and `source-card audit` replaces
+scratch-script drift checks with a first-class CLI surface.
+
+### Component B — centralized source-type classifier
+
+- **`classifySourceType(url)`** — deterministic rule-based classifier
+  stored in `source-type-rules.json` (11 canonical vendor entries,
+  precedence-ordered). Returns `{ source_type, rule_hint, precedence_level }`.
+  The `rule_hint` field exposes flagged conditions (`flagged:github-ui-html`,
+  `flagged:*`) and the `no-rule-match` sentinel so callers can distinguish
+  extractor-typed from rule-typed cards.
+- **`CanonicalVendor` registry** — 11 vendors covering GitHub UI HTML,
+  arxiv.org, npm, PyPI, MDN, Apple developer docs, Microsoft docs,
+  Valve/Steam, Godot docs, GDExtension, and ReST-typed documentation sites.
+- **`classify-source` CLI subcommand** — `research-os classify-source <url>`
+  for interactive rule inspection.
+
+### Component A — source-card override ledger
+
+- **`source-card-overrides.jsonl`** — append-only ledger for operator
+  corrections to source-card fields (`new_source_type`, `new_publisher`,
+  `reason`). Lives at `evidence/source-card-overrides.jsonl` inside each pack.
+- **`validateSourceCardOverride`** — strict Zod schema validation for
+  override entries. Used by both the ledger writer and the audit apply path.
+- **`readOverrides` / `appendOverride`** — safe I/O helpers. `readOverrides`
+  returns `[]` when no ledger exists (missing-ledger is not an error).
+- **`getEffectiveSourceType` / `getEffectivePublisher`** — latest-wins
+  effective-view helpers; override ledger takes precedence over raw card fields.
+- **`source-card validate` / `source-card list` CLI subcommands** — inspect and
+  manage the ledger.
+
+### Component D — source-card audit CLI
+
+- **`research-os source-card audit --pack <dir>`** — read-only drift
+  inspection. Reads all source cards, re-runs the classifier per card,
+  assigns exactly one of 7 advisor-locked finding kinds
+  (`github_ui_html`, `classifier_flagged`, `source_type_mismatch`,
+  `publisher_mismatch`, `publisher_missing`, `override_applied`, `no_action`),
+  and writes `audits/source-card-audit.{json,md}`.
+- **`--json` flag** — prints the full JSON report to stdout.
+- **`--apply --from <file>` flag** — applies an operator-authored JSON array
+  of override entries. All-or-nothing validation (all entries validated via
+  `validateSourceCardOverride` before any write). Refuses frozen packs
+  (`audits/freeze-receipt.json` present) — read-only audit still allowed.
+- **7 finding kinds** — precedence-ordered:
+  `github_ui_html` → `classifier_flagged` → `source_type_mismatch` →
+  `publisher_mismatch` → `publisher_missing` → `override_applied` → `no_action`.
+  `source_type_mismatch` guards `rule_hint !== 'no-rule-match'` to prevent false
+  positives on extractor-typed cards. `publisher_mismatch` is forward-compatible
+  (cannot fire today — no publisher_hint in ClassificationResult).
+- **JSON report shape** — `schema_version: 1`, `pack_path`, `audited_at`,
+  `research_os_version`, `totals`, `findings`.
+- See the [source-card audit handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/)
+  for the operator workflow.
+
+### Cosmetic
+
+- **F-46: pack manifests now stamp live binary version.** `pack publish`
+  manifest previously copied `research.research_os_version` — the version
+  frozen into `research.yaml` at pack-init time (was `0.1.0` for packs
+  created under older versions). Manifests now derive the version from the
+  live `RESEARCH_OS_VERSION` constant at publish time.
+
+### Compatibility
+
+- No gate, freeze, or synthesis-law changes.
+- All four frozen packs (`research-os-self-dogfood`,
+  `comfyui-workflow-durability`, `xrpl-creator-token-durability`,
+  `godot-export-runtime-durability`) verify-pack with byte-identical
+  receipt fingerprints under v0.4.0.
+- 570 → 620 vitest tests (50 new tests across Components A, B, D).
+
 ## [0.3.3] — 2026-05-10
 
 Tight release. **Gate-semantics clarity, not behavior change.** Two

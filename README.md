@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.3"><img src="https://img.shields.io/badge/version-0.3.3-blue" alt="version 0.3.3"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -150,6 +150,8 @@ This is the structural alternative to *search → summarize → pretty report*. 
 `research-os` is a local-first CLI. It reads and writes files within the research-pack directory you point it at, and (when using `gather`) issues outbound HTTP requests to fetch source URLs you provide. It does not: run a server, accept inbound connections, store credentials, or send telemetry. No secrets are written to pack artifacts. See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
 ## Status
+
+**v0.4.0** — published to npm as `@mcptoolshop/research-os@0.4.0`, 2026-05-10. v0.4.0 makes source identity durable. Deterministic source-type rules handle the repeatable majority, override ledgers preserve operator corrections across re-gather, and `source-card audit` replaces scratch-script drift checks with a first-class CLI surface. Ships: centralized source-type classifier (Component B — `classifySourceType`, 11 canonical vendors, `source-type-rules.json`); source-card override ledger (Component A — `source-card-overrides.jsonl`, `validate` + `list` subcommands); and source-card audit CLI (Component D — `research-os source-card audit --pack <dir>`, 7 finding kinds, JSON + Markdown artifacts, `--apply --from` apply path). F-46 cosmetic fix: pack manifests now stamp the live binary version rather than the version frozen into `research.yaml` at pack-init. **No gate, freeze, or synthesis-law changes. All four existing frozen packs verify-pack byte-identically.** 620/620 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and the [source-card audit handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/).
 
 **v0.3.3** — published to npm as `@mcptoolshop/research-os@0.3.3`, 2026-05-10. Ships gate-semantics clarity earned by Pack-3 (Godot export/runtime durability, Experiment 3 pack #3 of 3). Gate output now carries section-scoped publisher + primary counts alongside pack-wide counts (F-43); `no_source_cluster_monopoly` reworded from WARN to informational diagnostic (F-41). **Pass/fail behavior unchanged; existing frozen packs verify-pack byte-identically.** 570/570 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
 

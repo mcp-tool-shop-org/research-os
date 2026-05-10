@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.3"><img src="https://img.shields.io/badge/version-0.3.3-blue" alt="version 0.3.3"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -150,6 +150,8 @@ discover
 `research-os` 是一个本地优先的命令行工具。它在您指定的“研究包”目录中读取和写入文件，并在使用 `gather` 命令时，会向外部发送 HTTP 请求以获取您提供的来源 URL。它不会：运行服务器、接受传入连接、存储凭据或发送遥测数据。任何敏感信息都不会写入到包文件中。请参阅 [SECURITY.md](SECURITY.md)，了解漏洞报告政策。
 
 ## 状态
+
+**v0.4.0** 版本已发布到 npm，包名为 `@mcptoolshop/research-os@0.4.0`，发布日期为 2026年5月10日。 v0.4.0 版本增强了源标识的持久性。 确定性的源类型规则处理可重复的大部分情况，覆盖账本保留了操作员的修正，即使在重新收集数据时也能生效，并且 `source-card audit` 命令取代了对临时脚本漂移的检查，提供了一个更完善的命令行界面。 包含内容：集中式的源类型分类器（组件 B，`classifySourceType`，11个标准供应商，`source-type-rules.json`）；源卡覆盖账本（组件 A，`source-card-overrides.jsonl`，`validate` 和 `list` 子命令）；以及源卡审计命令行工具（组件 D，`research-os source-card audit --pack <dir>`，7种检测类型，JSON 和 Markdown 格式的报告，`--apply --from` 参数用于指定应用路径）。 F-46：修复了外观问题，现在打包清单会记录实际的二进制版本，而不是 `research.yaml` 文件中固定的版本。 **没有对安全机制、冻结机制或合成规则进行任何更改。所有四个现有的冻结包都经过了字节级别的完全一致性验证。** 620/620 个 vitest 测试通过。 详情请参考 [CHANGELOG.md](CHANGELOG.md) 文件以及 [源卡审计手册](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/) 页面。
 
 **v0.3.3** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.3.3`，发布日期：2026年5月10日。此版本改进了“门”机制的语义清晰度，这是Pack-3（Godot导出/运行时稳定性，实验3的第3个包）所取得的成果。现在，“门”的输出结果除了包含整个包的计数外，还包含按“门”划分的发布者和主要计数（F-43）；`no_source_cluster_monopoly` 的警告信息已更改为信息性诊断信息（F-41）。**通过/失败的行为未改变；现有的冻结包在字节级别上进行验证。** 570/570 个 vitest 测试通过。请参阅 [CHANGELOG.md](CHANGELOG.md) 和 [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)。
 

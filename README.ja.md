@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.3"><img src="https://img.shields.io/badge/version-0.3.3-blue" alt="version 0.3.3"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,7 +151,9 @@ discover
 
 ## ステータス
 
-**v0.3.3** — npmに `@mcptoolshop/research-os@0.3.3` として公開されました。2026年5月10日。Pack-3（Godotのエクスポート/ランタイムの安定性、実験3のパック#3のうち3つ目）によって獲得された、ゲートセマンティクスの明確化が含まれています。ゲートの出力には、セクションごとの発行者と主要なカウントに加えて、全体的なカウントが表示されるようになりました（F-43）。`no_source_cluster_monopoly` は、警告から情報診断に変更されました（F-41）。**合格/不合格の動作は変更されていません。既存の固定されたパックは、バイト単位で完全に同一であることを検証します。** 570/570 の vitest が合格しました。詳細は [CHANGELOG.md](CHANGELOG.md) および [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md) を参照してください。
+**v0.4.0** — npmに`@mcptoolshop/research-os@0.4.0`として公開。2026年5月10日。v0.4.0では、ソースの同一性を維持できるようになりました。決定論的なソースタイプルールにより、再現可能な多数が処理され、オーバーライドされたレジャーにより、再収集時のオペレーターによる修正が保持され、`source-card audit`コマンドが、従来のスクリプトのずれチェックを置き換え、より使いやすいCLIインターフェースを提供します。同梱内容：集中型のソースタイプ分類器（コンポーネントB — `classifySourceType`、11種類のベンダー、`source-type-rules.json`）、ソースカードのオーバーライドレジャー（コンポーネントA — `source-card-overrides.jsonl`、`validate`および`list`サブコマンド）、およびソースカード監査CLI（コンポーネントD — `research-os source-card audit --pack <dir>`、7種類の検出結果、JSONおよびMarkdown形式のレポート、`--apply --from`による適用パス）。F-46：見た目の修正。パッケージのマニフェストには、`research.yaml`に固定されたバージョンではなく、実行中のバイナリのバージョンが記録されるようになりました。**ゲート、フリーズ、または合成に関する変更はありません。既存のすべてのパッケージは、バイト単位で同一であることを検証済みです。** 620/620のvitestテストが合格しました。詳細は[CHANGELOG.md](CHANGELOG.md)および[ソースカード監査に関するハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/)を参照してください。
+
+**v0.3.3** — npmに`@mcptoolshop/research-os@0.3.3`として公開。2026年5月10日。Pack-3（Godotのエクスポート/ランタイムの安定性、実験3のパッケージ#3）によって得られた、ゲートのセマンティクスに関する明確化が含まれています。ゲートの出力には、セクションごとのパブリッシャー数と主要なカウントに加えて、パッケージ全体のカウントも表示されます（F-43）。`no_source_cluster_monopoly`は、警告から情報診断に変更されました（F-41）。**合格/不合格の動作は変更されていません。既存のパッケージは、バイト単位で同一であることを検証済みです。** 570/570のvitestテストが合格しました。詳細は[CHANGELOG.md](CHANGELOG.md)および[`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)を参照してください。
 
 **v0.3.2** — 2026年5月9日に、`@mcptoolshop/research-os@0.3.2`としてnpmに公開されました。`pack publish`の許可に関する、正規化された承認処理が実装されました。`claim-reviews.jsonl`と`pack-audit.json::accepted_claims`の厳密な一致チェックは、効果的な集合比較に置き換えられました。承認されたクレームは、最新の正当なレビュー結果が`accepted_for_synthesis`である一意の`claim_id`の集合です（`claim_id`ごとに最新の決定が優先されます）。以前の監査数が効果的な集合と異なる凍結されたパッケージは、拒否する代わりに警告を表示します。古い監査ファイルは変更せずに保持されます（ルール15）、ただし、アーカイブのマニフェストには正規化された数が反映されます。フェイクの`claim_id`、互換性のない重複した決定、および合成対象外の条件に対する拒否は引き続き適用されます。Experiment 3 XRPLパッケージのSession Kで、実際のクロージャー・レジャーの不一致により、パッケージの公開が拒否されました（セクション07には24件の`accepted_for_synthesis`の行がありましたが、重複するレビュー担当者によるため、一意の`claim_id`は19件のみでした）。558/558のvitestが成功しました。詳細については、[CHANGELOG.md](CHANGELOG.md)と[`docs/pack-publish.md`](docs/pack-publish.md)を参照してください。
 
@@ -171,9 +173,9 @@ discover
 
 ### v0.1の制限事項
 
-- 外部ユーザーによる実戦テストは行われていません。3つの内部テストフェーズが終了しました。1つは自己参照型、2つは外部ドメイン型です。実験3（外部からのプレッシャー下でのAPIの安定性）は、**2026年5月10日に完了しました**。3つのパック（ComfyUI、XRPL、Godot）は、v0.3.xのCLIインターフェースに変更を加えることなく、安定版に到達しました。このフェーズでは、v0.3.0の`--detector`（F-09）、v0.3.1のセクションごとの免責事項（F-10/F-11）、v0.3.2の標準化された承認済みトランザクション処理（F-36）、およびv0.3.3のゲートセマンティクスの明確化（F-43/F-41）が実現されました。
-- 合成テキストの生成機能はありません。`synth workspace` コマンドは、構造化されたワークスペースを生成します。人間（または Cowork）が、承認されたトランザクションIDに基づいてテキストを作成します。
-- セマンティックバージョニング（semver）に基づくAPIの安定性はありません。v1.0.0 は、予定日ではなく、達成すべき目標です。詳細については、[`docs/roadmap.md`](docs/roadmap.md) を参照してください。このドキュメントには、その目標を達成するための6つの実験が記載されています。
+- 外部ユーザーによる実戦テストは行われていません。3つの内部テストが完了しました。そのうち1つは自己参照型、2つは外部ドメイン型です。実験3（外部からのプレッシャー下でのAPIの安定性）は、**2026年5月10日に完了しました**: ComfyUI、XRPL、Godotの3つのパッケージすべてが、v0.3.xのCLIインターフェースに変更を加えることなく、フリーズ状態に達しました。このテスト期間中に、v0.3.0の`--detector`（F-09）、v0.3.1のセクションごとの免除（F-10/F-11）、v0.3.2の標準化された承認済みクレーム会計（F-36）、およびv0.3.3のゲートセマンティクスに関する明確化（F-43/F-41）が実現されました。
+- 合成コードを生成するものではありません。`synth workspace`コマンドは、構造化されたワークスペースを生成します。プログラミングコードではなく、承認されたクレームIDに基づいて、人間（またはCowork）がテキストを作成します。
+- セマンティックバージョニング（semver）でAPIの安定性は保証されません。v1.0.0は、カレンダー上の日付ではなく、達成すべき目標です。詳細は[`docs/roadmap.md`](docs/roadmap.md)にある、その目標を達成するための6つの実験を参照してください。
 
 ### 既知の制限事項
 

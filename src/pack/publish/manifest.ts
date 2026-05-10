@@ -11,6 +11,7 @@ import {
 } from '../../closure-ledger/effective-accepted.js';
 import { PackManifestSchema } from './schema.js';
 import type { PackManifest } from './schema.js';
+import { RESEARCH_OS_VERSION } from '../../index.js';
 
 // Minimal schema for gate-result.json — only the fields manifest derivation needs.
 const GateResultMinimalSchema = z.object({
@@ -280,7 +281,7 @@ export function deriveManifest(
     name: packageName,
     topic: research.topic,
     frozen_at,
-    research_os_version: research.research_os_version,
+    research_os_version: RESEARCH_OS_VERSION,
     sections,
     totals: totalPreserved > 0
       ? { ...totalsBase, preserved_contradiction_records: totalPreserved }
