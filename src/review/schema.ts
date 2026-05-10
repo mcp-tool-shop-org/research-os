@@ -67,6 +67,10 @@ export const ClaimReviewSchema = z.object({
   reviewer: ReviewerNameSchema,
   review_method: z.string().min(1),
   created_at: z.string(),
+  // v0.5: optional profile lineage. Additive-optional — pre-v0.5 records
+  // without this field parse cleanly. Frozen packs unaffected (Zod .optional()
+  // with no .default() leaves absent keys absent on round-trip).
+  profile: z.string().optional(),
 });
 
 export const ReviewSnapshotSchema = z.object({

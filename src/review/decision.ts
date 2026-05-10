@@ -70,8 +70,11 @@ export function deriveClaimReviews(args: {
   // to apply normally — the waiver only neutralises the section-wide monopoly
   // signal that operators have explicitly disclosed and accepted.
   activeSectionWaivers?: SectionScopedWaiver[];
+  // v0.5+: optional profile name threaded into each claim-review record for
+  // per-record provenance. Absent when no profile context is available.
+  profile?: string;
 }): ClaimReview[] {
-  const { claims, findings, reviewer, reviewMethod, activeSectionWaivers } = args;
+  const { claims, findings, reviewer, reviewMethod, activeSectionWaivers, profile } = args;
   const reviews: ClaimReview[] = [];
   const now = new Date().toISOString();
 
@@ -97,6 +100,7 @@ export function deriveClaimReviews(args: {
         reviewer,
         review_method: reviewMethod,
         created_at: now,
+        ...(profile !== undefined ? { profile } : {}),
       });
       continue;
     }
@@ -150,6 +154,7 @@ export function deriveClaimReviews(args: {
       reviewer,
       review_method: reviewMethod,
       created_at: now,
+      ...(profile !== undefined ? { profile } : {}),
     });
   }
 

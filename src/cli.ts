@@ -39,6 +39,8 @@ import {
 } from './sources/source-card-audit.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
+import { CalibrationReceiptSchema } from './calibration/receipt-schema.js';
+import { receiptToCalibrationSummary } from './calibration/receipt.js';
 
 function reportError(err: unknown): never {
   if (err instanceof ResearchOSError) {
@@ -1076,22 +1078,45 @@ program
   )
   .action(async (section: string, opts) => {
     try {
-      const calibration =
+      const explicitCalibration =
         opts.calibrationFixture ||
         opts.goodFp ||
         opts.anyFlagRecall ||
         opts.strictCatRecall ||
         opts.unsupportedRecall ||
-        opts.calibrationNotes
-          ? {
-              fixture: opts.calibrationFixture ?? null,
-              good_false_positive_rate: opts.goodFp ?? null,
-              bad_any_flag_recall: opts.anyFlagRecall ?? null,
-              strict_category_recall: opts.strictCatRecall ?? null,
-              unsupported_claim_recall: opts.unsupportedRecall ?? null,
-              notes: opts.calibrationNotes ?? null,
-            }
-          : null;
+        opts.calibrationNotes;
+
+      let calibration = explicitCalibration
+        ? {
+            fixture: opts.calibrationFixture ?? null,
+            good_false_positive_rate: opts.goodFp ?? null,
+            bad_any_flag_recall: opts.anyFlagRecall ?? null,
+            strict_category_recall: opts.strictCatRecall ?? null,
+            unsupported_claim_recall: opts.unsupportedRecall ?? null,
+            notes: opts.calibrationNotes ?? null,
+          }
+        : null;
+
+      // Narrow receipt integration: if no explicit --calibration-* flags were
+      // provided, look for a structured receipt at the canonical path and
+      // auto-populate calibration_summary from it. No-op if receipt absent.
+      if (!explicitCalibration) {
+        const { existsSync } = await import('node:fs');
+        const { readFile } = await import('node:fs/promises');
+        const { join } = await import('node:path');
+        const receiptPath = join(process.cwd(), 'calibration', 'reviewer-profiles', opts.profile, 'seeded-v1.json');
+        if (existsSync(receiptPath)) {
+          try {
+            const raw = JSON.parse(await readFile(receiptPath, 'utf8'));
+            const receipt = CalibrationReceiptSchema.parse(raw);
+            calibration = receiptToCalibrationSummary(receipt);
+            process.stdout.write(`  [auto] calibration_summary populated from ${receiptPath}\n`);
+          } catch {
+            // Receipt unreadable or schema mismatch — proceed without it
+          }
+        }
+      }
+
       const result = await runPromote({
         sectionId: section,
         packPath: opts.pack,

@@ -523,6 +523,7 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     reviewer: args.reviewer,
     reviewMethod: args.reviewMethod,
     activeSectionWaivers,
+    profile: args.profile !== DEFAULT_PROFILE ? args.profile : undefined,
   });
 
   const decisionCounts: Record<ReviewDecision, number> = {

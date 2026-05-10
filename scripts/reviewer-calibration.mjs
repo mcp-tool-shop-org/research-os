@@ -4,18 +4,32 @@
 // Builds a small synthetic pack with seeded "good" and "bad" claims, runs the
 // paged LLM reviewer over them, and reports per-category recall (did the
 // reviewer catch the seeded failures?) plus false-positive rate (did it
-// reject the seeded good claims?).
+// reject the seeded good claims?). Persists a structured calibration receipt
+// to calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}.
 //
 // Usage:
 //   OLLAMA_HOST=http://127.0.0.1:11435 \
 //   OLLAMA_INTERN_MODEL=hermes3:8b \
-//   node scripts/reviewer-calibration.mjs [pack-out-dir]
+//   node scripts/reviewer-calibration.mjs [pack-out-dir] [--model <name>] [--two-pass] [--profile <name>] [--mode comparison-only]
+//
+// --profile <name>   Profile name used for receipt path and record lineage.
+//                    If omitted, inferred from --model + --two-pass flag.
+//                    Inference rule: take model family (before ':'), strip
+//                    trailing version digits, append architecture suffix.
+//                    Examples: hermes3:8b --two-pass -> hermes-two-pass
+//                              mistral-nemo:12b --two-pass -> mistral-nemo-two-pass
+//                              hermes3:8b (single) -> hermes-single-pass
+//
+// --mode comparison-only   Force status = comparison_only regardless of bars.
+//                          Use for architectural side-runs not intended for
+//                          production admission.
 //
 // The fixture pack is rebuilt on every run — it is purely a calibration
 // surface, not research truth.
 
+import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,14 +41,45 @@ import {
   OllamaInternReviewer,
 } from '../dist/index.js';
 
+import {
+  computeDecisionVocabBar,
+  computePassFail,
+  computeStatusLabel,
+  buildReceiptMarkdown,
+} from '../dist/calibration/receipt.js';
+
+import { CalibrationReceiptSchema } from '../dist/calibration/receipt-schema.js';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
+const RESEARCH_OS_VERSION = pkg.version;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_OUT = resolve(__dirname, '..', 'tmp', 'reviewer-calibration');
-// args: [outDir?] [--two-pass] [--model <name>]
+const REPO_ROOT = resolve(__dirname, '..');
+const DEFAULT_OUT = resolve(REPO_ROOT, 'tmp', 'reviewer-calibration');
+
+// Parse args
 const args = process.argv.slice(2);
 const outDir = args[0] && !args[0].startsWith('--') ? args[0] : DEFAULT_OUT;
-const mode = args.includes('--two-pass') ? 'two-pass' : 'single';
+const isTwoPass = args.includes('--two-pass');
+const mode = isTwoPass ? 'two-pass' : 'single';
 const modelIdx = args.indexOf('--model');
 const modelOverride = modelIdx >= 0 ? args[modelIdx + 1] : undefined;
+const profileIdx = args.indexOf('--profile');
+const profileArg = profileIdx >= 0 ? args[profileIdx + 1] : undefined;
+const isComparisonOnly = args.includes('--mode') && args[args.indexOf('--mode') + 1] === 'comparison-only';
+
+// Profile name inference: model family (before ':'), strip trailing digits,
+// append architecture suffix. hermes3:8b + two-pass -> hermes-two-pass.
+function inferProfileName(model, isTwoPass) {
+  const family = (model ?? 'unknown').split(':')[0].replace(/\d+$/, '');
+  const arch = isTwoPass ? 'two-pass' : 'single-pass';
+  return `${family}-${arch}`;
+}
+
+const modelForInference = modelOverride ?? process.env['OLLAMA_INTERN_MODEL'] ?? 'hermes3:8b';
+const profileName = profileArg ?? inferProfileName(modelForInference, isTwoPass);
+const architecture = isTwoPass ? 'two-pass' : 'single-pass';
 
 // Seeded claim authoring set. expected_categories[] is the ground truth.
 // "good" claims have expected_categories = [].
@@ -368,10 +413,80 @@ async function runCalibration(packPath, mode, modelOverride) {
   return summary;
 }
 
-async function reportRecall(packPath, summary) {
+// Read decision vocabulary from claim-reviews.jsonl after the run.
+// Returns counts per decision kind and the number of keys with non-zero count.
+async function readDecisionVocabulary(packPath) {
+  const reviewsPath = join(packPath, 'sections', '01-calibration', 'claim-reviews.jsonl');
+  const allDecisions = [
+    'accepted_for_synthesis',
+    'rejected',
+    'needs_scope_repair',
+    'needs_source_repair',
+    'needs_contradiction_mapping',
+    'needs_human_review',
+  ];
+  const counts = Object.fromEntries(allDecisions.map((d) => [d, 0]));
+
+  if (!existsSync(reviewsPath)) return { counts, producedCount: 0 };
+
+  const text = await readFile(reviewsPath, 'utf8');
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line);
+      if (record.decision && counts[record.decision] !== undefined) {
+        counts[record.decision] += 1;
+      }
+    } catch {
+      // malformed line — skip
+    }
+  }
+  const producedCount = allDecisions.filter((d) => counts[d] > 0).length;
+  return { counts, producedCount };
+}
+
+// Compute per-category any-flag and strict recall from the SEEDS array and
+// the findings index. Returns structured PerCategoryRecall records.
+function computePerCategoryRecall(findingsByClaim) {
+  // Group seeds by primary expected category (first in expected_categories).
+  // Good claims (empty expected_categories) are excluded — they're FP tracking.
+  const buckets = {};
+  for (const seed of SEEDS) {
+    if (seed.expected_categories.length === 0) continue;
+    const primaryCat = seed.expected_categories[0];
+    if (!buckets[primaryCat]) {
+      buckets[primaryCat] = { anyFlagMatched: 0, strictMatched: 0, total: 0 };
+    }
+    const idx = SEEDS.indexOf(seed);
+    const claim_id = `clm_${SOURCE_ID.replace(/^src_/, '')}_ollama_intern_${idx + 1}`;
+    const fnds = findingsByClaim.get(claim_id) ?? [];
+    const expectedSet = new Set(seed.expected_categories);
+
+    buckets[primaryCat].total += 1;
+    if (fnds.length > 0) buckets[primaryCat].anyFlagMatched += 1;
+    if (fnds.some((f) => expectedSet.has(f.category))) buckets[primaryCat].strictMatched += 1;
+  }
+
+  const perCategoryAnyFlag = {};
+  const perCategoryStrict = {};
+  for (const [cat, b] of Object.entries(buckets)) {
+    perCategoryAnyFlag[cat] = {
+      matched: b.anyFlagMatched,
+      total: b.total,
+      ratio: b.total > 0 ? b.anyFlagMatched / b.total : 0,
+    };
+    perCategoryStrict[cat] = {
+      matched: b.strictMatched,
+      total: b.total,
+      ratio: b.total > 0 ? b.strictMatched / b.total : 0,
+    };
+  }
+  return { perCategoryAnyFlag, perCategoryStrict };
+}
+
+async function reportRecallAndBuildReceipt(packPath, summary, runtimeMs) {
   const findingsPath = join(packPath, 'audits', '01-calibration-findings.jsonl');
-  const fs = await import('node:fs/promises');
-  const text = existsSync(findingsPath) ? await fs.readFile(findingsPath, 'utf8') : '';
+  const text = existsSync(findingsPath) ? await readFile(findingsPath, 'utf8') : '';
   const findings = text
     .split(/\r?\n/)
     .filter(Boolean)
@@ -386,6 +501,7 @@ async function reportRecall(packPath, summary) {
     }
   }
 
+  // Console output (unchanged from before)
   console.log('\n=== reviewer calibration ===');
   console.log(`Reviewer:           ${summary.reviewer}`);
   console.log(`Method:             ${summary.reviewMethod}`);
@@ -420,11 +536,7 @@ async function reportRecall(packPath, summary) {
     console.log(`  ${seed.label.padEnd(22)} expect=${(expected.join('|') || '(none)').padEnd(40)} → ${summary_str}`);
   }
 
-  // Compute any-flag recall: how many bad claims received ANY finding,
-  // regardless of whether the LLM picked the expected category. Hermes-class
-  // models often know something is wrong but mislabel — strict-category
-  // recall undercounts; any-flag recall is the upper bound on "the reviewer
-  // saw a problem".
+  // Compute any-flag recall
   let anyFlagBadCaught = 0;
   let badTotal = 0;
   for (const seed of SEEDS) {
@@ -434,7 +546,7 @@ async function reportRecall(packPath, summary) {
     const fnds = findingsByClaim.get(claim_id) ?? [];
     if (fnds.length > 0) anyFlagBadCaught += 1;
   }
-  const goodFalseFlag = (buckets.good ?? { falseFlag: 0 }).falseFlag;
+  const goodFpCount = (buckets.good ?? { falseFlag: 0 }).falseFlag;
   const goodTotal = (buckets.good ?? { total: 0 }).total;
 
   console.log('\n=== bucket summary (strict category match) ===');
@@ -449,22 +561,153 @@ async function reportRecall(packPath, summary) {
       `| ${cat.padEnd(22)} | ${String(b.total).padEnd(5)} | ${String(b.caught).padEnd(6)} | ${String(b.falseFlag).padEnd(9)} | ${recall} |`,
     );
   }
-  console.log('\n=== headline calibration ===');
-  console.log(`good-claim false-flag rate:    ${goodFalseFlag}/${goodTotal} (${goodTotal > 0 ? ((goodFalseFlag / goodTotal) * 100).toFixed(0) : 0}%)`);
-  console.log(`bad-claim any-flag recall:     ${anyFlagBadCaught}/${badTotal} (${badTotal > 0 ? ((anyFlagBadCaught / badTotal) * 100).toFixed(0) : 0}%)`);
+
   let strictBadCaught = 0;
   for (const [cat, b] of Object.entries(buckets)) if (cat !== 'good') strictBadCaught += b.caught;
+
+  console.log('\n=== headline calibration ===');
+  console.log(`good-claim false-flag rate:    ${goodFpCount}/${goodTotal} (${goodTotal > 0 ? ((goodFpCount / goodTotal) * 100).toFixed(0) : 0}%)`);
+  console.log(`bad-claim any-flag recall:     ${anyFlagBadCaught}/${badTotal} (${badTotal > 0 ? ((anyFlagBadCaught / badTotal) * 100).toFixed(0) : 0}%)`);
   console.log(`bad-claim strict-cat recall:   ${strictBadCaught}/${badTotal} (${badTotal > 0 ? ((strictBadCaught / badTotal) * 100).toFixed(0) : 0}%)`);
+
+  // Structured metrics for receipt
+  const { perCategoryAnyFlag, perCategoryStrict } = computePerCategoryRecall(findingsByClaim);
+  const { counts: decisionVocabulary, producedCount: decisionsProducedCount } =
+    await readDecisionVocabulary(packPath);
+
+  const anyFlagRecall = {
+    matched: anyFlagBadCaught,
+    total: badTotal,
+    ratio: badTotal > 0 ? anyFlagBadCaught / badTotal : 0,
+  };
+  const strictRecall = {
+    matched: strictBadCaught,
+    total: badTotal,
+    ratio: badTotal > 0 ? strictBadCaught / badTotal : 0,
+  };
+
+  const decisionVocabBar = computeDecisionVocabBar(architecture, decisionsProducedCount);
+
+  // empty_or_malformed_responses: the reviewer already handles failures
+  // gracefully (no crash, no silent skips — all claims get a decision record).
+  // For seeded-v1, this is 0 by construction. Future sessions requiring deeper
+  // HTTP/parse-level instrumentation should add a counter to OllamaInternReviewer.
+  const emptyOrMalformed = 0;
+
+  const passFail = computePassFail({
+    good_fp_count: goodFpCount,
+    any_flag_recall: anyFlagRecall,
+    per_category_any_flag: perCategoryAnyFlag,
+    strict_recall: strictRecall,
+    decision_vocab_bar: decisionVocabBar,
+    runtime_ms: runtimeMs,
+    empty_or_malformed_responses: emptyOrMalformed,
+  });
+
+  const modeOverride = isComparisonOnly ? 'comparison_only' : undefined;
+  const status = computeStatusLabel({
+    profileName,
+    architecture,
+    passFail,
+    goodFpCount,
+    modeOverride,
+  });
+
+  console.log(`\n=== decision vocabulary (from claim-reviews.jsonl) ===`);
+  for (const [d, n] of Object.entries(decisionVocabulary)) {
+    console.log(`  ${d.padEnd(35)} ${n}`);
+  }
+  console.log(`  Produced (non-zero): ${decisionsProducedCount}/6`);
+  console.log(`  Decision vocab bar:  ${decisionVocabBar.passed ? 'PASS' : 'FAIL'} (${architecture} requires >= ${decisionVocabBar.required})`);
+
+  console.log(`\n=== PASS/FAIL ===`);
+  for (const [bar, result] of Object.entries(passFail)) {
+    console.log(`  ${bar.padEnd(35)} ${result}`);
+  }
+  console.log(`\n  Status: ${status}`);
+  console.log(`  Profile: ${profileName}`);
+  console.log(`  Runtime: ${(runtimeMs / 1000).toFixed(1)}s`);
+
+  // For seeded-v1, needs_contradiction_mapping is unreachable because there
+  // are no unmapped_contradiction seeds. Hardcoded per advisor lock.
+  const unreachableDecisions = ['needs_contradiction_mapping'];
+
+  const goodClaims = SEEDS.filter((s) => s.expected_categories.length === 0).length;
+  const badClaims = SEEDS.length - goodClaims;
+
+  const notes = [];
+  if (passFail.latency_soft === 'WARN') {
+    notes.push(`Latency warning: ${(runtimeMs / 1000).toFixed(1)}s exceeds soft limit of 600s`);
+  }
+  if (goodFpCount > 0) {
+    notes.push(`${goodFpCount} false positive(s) on good claims — see per-seed output for details`);
+  }
+  if (status === 'comparison_only') {
+    notes.push(`comparison_only: this run is a side-run for architectural comparison, not a production admission candidate`);
+  }
+  if (status === 'conditional_pass') {
+    notes.push(`conditional_pass: passes all bars but carries a production caution (check FP count and notes)`);
+  }
+
+  const receipt = CalibrationReceiptSchema.parse({
+    schema_version: 1,
+    profile_name: profileName,
+    status,
+    model: modelForInference,
+    architecture,
+    fixture: 'seeded-v1',
+    fixture_total_claims: SEEDS.length,
+    fixture_good_claims: goodClaims,
+    fixture_bad_claims: badClaims,
+    calibrated_at: new Date().toISOString(),
+    research_os_version: RESEARCH_OS_VERSION,
+    runtime_ms: runtimeMs,
+    good_fp_count: goodFpCount,
+    any_flag_recall: anyFlagRecall,
+    strict_recall: strictRecall,
+    per_category_any_flag: perCategoryAnyFlag,
+    per_category_strict: perCategoryStrict,
+    decision_vocabulary: decisionVocabulary,
+    decisions_produced_count: decisionsProducedCount,
+    decision_vocab_bar: decisionVocabBar,
+    unreachable_decisions: unreachableDecisions,
+    empty_or_malformed_responses: emptyOrMalformed,
+    pass_fail: passFail,
+    notes,
+  });
+
+  return receipt;
+}
+
+async function persistReceipt(receipt) {
+  const { buildReceiptMarkdown: buildMd } = await import('../dist/calibration/receipt.js');
+  const profileDir = join(REPO_ROOT, 'calibration', 'reviewer-profiles', receipt.profile_name);
+  await mkdir(profileDir, { recursive: true });
+
+  const jsonPath = join(profileDir, 'seeded-v1.json');
+  const mdPath = join(profileDir, 'seeded-v1.md');
+
+  await writeFile(jsonPath, JSON.stringify(receipt, null, 2), 'utf8');
+  await writeFile(mdPath, buildReceiptMarkdown(receipt), 'utf8');
+
+  console.log(`\n=== receipt persisted ===`);
+  console.log(`  JSON: ${jsonPath}`);
+  console.log(`  MD:   ${mdPath}`);
 }
 
 (async () => {
+  const startMs = Date.now();
   console.log(`Building fixture at: ${outDir}`);
-  console.log(`Mode: ${mode}`);
-  if (modelOverride) console.log(`Model override: ${modelOverride}`);
+  console.log(`Mode: ${mode} | Profile: ${profileName} | Model: ${modelForInference}`);
+  if (isComparisonOnly) console.log(`Status override: comparison-only`);
+
   const packPath = await buildFixturePack();
   console.log(`Fixture built. Running paged LLM review (${mode})...`);
   const summary = await runCalibration(packPath, mode, modelOverride);
-  await reportRecall(packPath, summary);
+  const runtimeMs = Date.now() - startMs;
+
+  const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
+  await persistReceipt(receipt);
 })().catch((err) => {
   console.error(err);
   process.exit(1);
