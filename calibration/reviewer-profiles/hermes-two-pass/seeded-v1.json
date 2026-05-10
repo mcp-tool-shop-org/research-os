@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "profile_name": "hermes-two-pass",
+  "status": "failed",
+  "model": "hermes3:8b",
+  "architecture": "two-pass",
+  "fixture": "seeded-v1",
+  "fixture_total_claims": 18,
+  "fixture_good_claims": 5,
+  "fixture_bad_claims": 13,
+  "calibrated_at": "2026-05-10T19:54:16.182Z",
+  "research_os_version": "0.4.0",
+  "runtime_ms": 69082,
+  "good_fp_count": 0,
+  "any_flag_recall": {
+    "matched": 10,
+    "total": 13,
+    "ratio": 0.7692307692307693
+  },
+  "strict_recall": {
+    "matched": 6,
+    "total": 13,
+    "ratio": 0.46153846153846156
+  },
+  "per_category_any_flag": {
+    "scope_widening": {
+      "matched": 2,
+      "total": 3,
+      "ratio": 0.6666666666666666
+    },
+    "unsupported_claim": {
+      "matched": 2,
+      "total": 3,
+      "ratio": 0.6666666666666666
+    },
+    "definition_drift": {
+      "matched": 2,
+      "total": 2,
+      "ratio": 1
+    },
+    "temporal_mismatch": {
+      "matched": 1,
+      "total": 2,
+      "ratio": 0.5
+    },
+    "valid_but_low_value": {
+      "matched": 3,
+      "total": 3,
+      "ratio": 1
+    }
+  },
+  "per_category_strict": {
+    "scope_widening": {
+      "matched": 2,
+      "total": 3,
+      "ratio": 0.6666666666666666
+    },
+    "unsupported_claim": {
+      "matched": 0,
+      "total": 3,
+      "ratio": 0
+    },
+    "definition_drift": {
+      "matched": 1,
+      "total": 2,
+      "ratio": 0.5
+    },
+    "temporal_mismatch": {
+      "matched": 0,
+      "total": 2,
+      "ratio": 0
+    },
+    "valid_but_low_value": {
+      "matched": 3,
+      "total": 3,
+      "ratio": 1
+    }
+  },
+  "decision_vocabulary": {
+    "accepted_for_synthesis": 14,
+    "rejected": 0,
+    "needs_scope_repair": 4,
+    "needs_source_repair": 0,
+    "needs_contradiction_mapping": 0,
+    "needs_human_review": 0
+  },
+  "decisions_produced_count": 2,
+  "decision_vocab_bar": {
+    "architecture": "two-pass",
+    "required": 3,
+    "produced": 2,
+    "passed": false
+  },
+  "unreachable_decisions": [
+    "needs_contradiction_mapping"
+  ],
+  "empty_or_malformed_responses": 0,
+  "pass_fail": {
+    "fp_ceiling": "PASS",
+    "any_flag_recall_floor": "PASS",
+    "per_category_any_flag_floor": "PASS",
+    "strict_recall_floor": "PASS",
+    "decision_vocab_completeness": "FAIL",
+    "latency_soft": "PASS",
+    "latency_hard": "PASS",
+    "empty_or_malformed": "PASS",
+    "overall": "FAIL"
+  },
+  "notes": []
+}

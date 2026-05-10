@@ -2,6 +2,85 @@
 
 All notable changes to `research-os` are documented here.
 
+## [Unreleased] — v0.5.0 candidate — reviewer trust as inspectable contract
+
+v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
+it ran; it is trusted because seeded failures prove its recall, false-positive
+rate, decision coverage, and limits.
+
+### Added
+
+- **`profile?: string`** optional field on `ClaimReviewSchema`. Per-claim review
+  records can now carry the profile name that produced them. Existing records
+  without `profile` parse cleanly.
+- **Structured calibration receipts** at `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`.
+  Zod-validated JSON + operator-readable Markdown sibling. `schema_version: 1`.
+- **`research-os` source `--profile <name>` flag** on `scripts/reviewer-calibration.mjs`.
+  Drives output path and persists profile name on claim-review records.
+- **Architecture-aware decision-vocabulary bar:** single-pass ≥ 4/6 decisions;
+  two-pass ≥ 3/6 decisions. Two-pass acknowledges that `narrow_critic` severity
+  escalation collapses the `needs_human_review` path.
+- **Four status labels:** `trusted_baseline`, `conditional_pass`, `failed`,
+  `comparison_only`. `trusted_baseline` requires the canonical Hermes two-pass
+  profile + all bars pass + zero false positives.
+- **`review-promote` receipt lookup is now pack-relative** — reads from
+  `<pack>/calibration/reviewer-profiles/<profile>/seeded-v1.json`, not
+  `process.cwd()`. Operators running `review-promote --pack <non-cwd-pack>`
+  now correctly resolve the receipt from the specified pack.
+- **`review-promote` fails visibly on invalid receipts.** Previously a malformed
+  receipt was silently skipped; now any schema mismatch or JSON parse failure
+  throws `Invalid calibration receipt at <path>: <reason>`. Missing receipts
+  remain a no-op.
+- **Three canonical receipts shipped:** `hermes-two-pass`, `mistral-nemo-two-pass`,
+  `hermes-single-pass` — all under `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`.
+  These are the v0.5.0 proof artifacts. See Session 4 status note below.
+
+### Frictions closed
+
+- **F-48** — Structured calibration receipt persistence. The harness previously
+  wrote raw artifacts but no comparable receipt; recall metrics lived in
+  `console.log` only.
+- **F-49** — Decision-vocabulary bar was miscalibrated against two-pass
+  architecture. Bar is now architecture-aware.
+
+### Compatibility
+
+- All 4 frozen packs verify byte-identical against v0.3.3 baselines.
+- `ClaimReviewSchema.profile` is optional (Zod `.optional()`, no `.default()`).
+  Existing pack records parse cleanly. Frozen pack receipts unchanged.
+- No gate-law, freeze-law, or synthesis-law changes.
+
+### Out of scope
+
+- `seeded-v1` cannot test `needs_contradiction_mapping` (no `unmapped_contradiction`
+  seeded). The receipt's `unreachable_decisions` array discloses this honestly.
+  Fixture expansion deferred to v0.6.
+- `phi3:14b` calibration deferred to a later experiment.
+
+### Session 4 receipt status note (escalation point for advisor)
+
+The three canonical receipts committed here reflect honest run evidence.
+`hermes-single-pass` produced the expected `comparison_only` status (auto-assigned
+via `--mode comparison-only`). `hermes-two-pass` and `mistral-nemo-two-pass` both
+produced `failed` across two runs each, with high per-run variance:
+
+- `hermes-two-pass` run 1: `per_category_any_flag_floor FAIL` (valid_but_low_value 1/3);
+  run 2: `decision_vocab_completeness FAIL` (2/6 decisions produced).
+- `mistral-nemo-two-pass` run 1: `per_category_any_flag_floor FAIL` (unsupported_claim 1/3);
+  run 2: `fp_ceiling FAIL` (2/5 FP) + `per_category_any_flag_floor FAIL`.
+
+The re-run budget (2 attempts each) is exhausted per advisor protocol. Receipts
+are committed as honest evidence. Advisor decides: accept `failed` status, lower
+bars, or re-run under different conditions. This is a new F-50 candidate:
+nondeterminism at this scale (1–2 category claim variance per run) may require
+multi-run averaging or wider fixture.
+
+### Test surface
+
+- 620 → 646 tests in Session 3 (+26).
+- Session 4 adds 5 regression tests (646 → 651): pack-relative lookup,
+  cwd-irrelevance, invalid-receipt fail (×2), missing-receipt no-op.
+
 ## [0.4.0] — 2026-05-10 — source-truth discipline
 
 v0.4.0 makes source identity durable. Deterministic source-type rules

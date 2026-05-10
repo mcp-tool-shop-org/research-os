@@ -149,6 +149,27 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 `research-os` is a local-first CLI. It reads and writes files within the research-pack directory you point it at, and (when using `gather`) issues outbound HTTP requests to fetch source URLs you provide. It does not: run a server, accept inbound connections, store credentials, or send telemetry. No secrets are written to pack artifacts. See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
+## Reviewer calibration (unreleased — v0.5.0 candidate)
+
+v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
+it ran; it is trusted because seeded failures prove its recall, false-positive
+rate, decision coverage, and limits.
+
+Calibration receipts live at `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`.
+Each receipt records PASS/FAIL against seven bars, four status labels
+(`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), and
+honestly discloses what the fixture cannot test (`needs_contradiction_mapping`
+is unreachable from `seeded-v1`). See [CHANGELOG.md](CHANGELOG.md) for the
+v0.5.0 candidate entry and the Session 4 receipt status note.
+
+```bash
+# Calibrate a reviewer profile against seeded-v1 fixture
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
 ## Status
 
 **v0.4.0** — published to npm as `@mcptoolshop/research-os@0.4.0`, 2026-05-10. v0.4.0 makes source identity durable. Deterministic source-type rules handle the repeatable majority, override ledgers preserve operator corrections across re-gather, and `source-card audit` replaces scratch-script drift checks with a first-class CLI surface. Ships: centralized source-type classifier (Component B — `classifySourceType`, 11 canonical vendors, `source-type-rules.json`); source-card override ledger (Component A — `source-card-overrides.jsonl`, `validate` + `list` subcommands); and source-card audit CLI (Component D — `research-os source-card audit --pack <dir>`, 7 finding kinds, JSON + Markdown artifacts, `--apply --from` apply path). F-46 cosmetic fix: pack manifests now stamp the live binary version rather than the version frozen into `research.yaml` at pack-init. **No gate, freeze, or synthesis-law changes. All four existing frozen packs verify-pack byte-identically.** 620/620 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and the [source-card audit handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/).

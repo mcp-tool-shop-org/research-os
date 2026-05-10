@@ -39,8 +39,7 @@ import {
 } from './sources/source-card-audit.js';
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
-import { CalibrationReceiptSchema } from './calibration/receipt-schema.js';
-import { receiptToCalibrationSummary } from './calibration/receipt.js';
+import { loadReceiptForPack, receiptPathForPack } from './calibration/lookup.js';
 
 function reportError(err: unknown): never {
   if (err instanceof ResearchOSError) {
@@ -1098,22 +1097,16 @@ program
         : null;
 
       // Narrow receipt integration: if no explicit --calibration-* flags were
-      // provided, look for a structured receipt at the canonical path and
-      // auto-populate calibration_summary from it. No-op if receipt absent.
+      // provided, look for a structured receipt at the pack-relative path and
+      // auto-populate calibration_summary from it.
+      // Missing receipt = no-op. Present but invalid = fail visibly (throw).
       if (!explicitCalibration) {
-        const { existsSync } = await import('node:fs');
-        const { readFile } = await import('node:fs/promises');
-        const { join } = await import('node:path');
-        const receiptPath = join(process.cwd(), 'calibration', 'reviewer-profiles', opts.profile, 'seeded-v1.json');
-        if (existsSync(receiptPath)) {
-          try {
-            const raw = JSON.parse(await readFile(receiptPath, 'utf8'));
-            const receipt = CalibrationReceiptSchema.parse(raw);
-            calibration = receiptToCalibrationSummary(receipt);
-            process.stdout.write(`  [auto] calibration_summary populated from ${receiptPath}\n`);
-          } catch {
-            // Receipt unreadable or schema mismatch — proceed without it
-          }
+        const summary = await loadReceiptForPack(opts.pack as string, opts.profile);
+        if (summary !== null) {
+          calibration = summary;
+          process.stdout.write(
+            `  [auto] calibration_summary populated from ${receiptPathForPack(opts.pack as string, opts.profile)}\n`,
+          );
         }
       }
 
