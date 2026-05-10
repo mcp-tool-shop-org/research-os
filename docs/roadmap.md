@@ -60,6 +60,8 @@ The command copies the frozen pack into the package layout, generates `pack.mani
 
 **Status: CLOSED 2026-05-10.** Experiment 3 closed 2026-05-10. research-os v0.3.x survived three external-domain packs: ComfyUI workflow durability (Experiment 1, frozen 2026-05-09), XRPL creator-token durability (Pack-2 frozen 2026-05-10, archived as `xrpl-creator-token-durability`), and Godot export/runtime durability (Pack-3 frozen 2026-05-10 at `pack_id 00002495e7b3`, archived as `godot-export-runtime-durability`). Three different domain shapes — community-distribution, canonical-protocol, mixed — all reached freeze without breaking changes to the v0.3.x CLI surface. Closure earned through the public interface; F-09 (v0.3.0), F-10/F-11 (v0.3.1), F-36 (v0.3.2) shipped during the arc as scoped releases. The third pack surfaced v0.3.3 candidates around source typing (F-40), gate semantics (F-43), source-cluster warnings (F-41), JS-rendered distribution surfaces (F-44), and pack publish CRLF detection (F-37 product side). v0.3.3 release prep follows; closure does not require those candidates ship — the API-stability bar was that the v0.3.x surface held, not that all friction was resolved. Pack #2 proof at [`docs/experiment-3-pack-2-proof.md`](experiment-3-pack-2-proof.md). Pack #3 proof at [`docs/experiment-3-pack-3-proof.md`](experiment-3-pack-3-proof.md).
 
+**v0.3.3 (2026-05-10)** — gate-semantics clarity (F-43 + F-41) earned by Pack-3. Compatibility-preserving; existing packs unaffected.
+
 **Progress (2026-05-09):** Three API-stability findings shipped from the XRPL pack so far:
 
 - **v0.3.0** — F-09 chain blocker resolved. The earlier "clear `OLLAMA_INTERN_MODEL`

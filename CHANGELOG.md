@@ -2,6 +2,89 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.3.3] — 2026-05-10
+
+Tight release. **Gate-semantics clarity, not behavior change.** Two
+diagnostic improvements earned by Pack-3 (Godot export/runtime
+durability, Experiment 3 pack #3 of 3, frozen 2026-05-10): F-43 (gate
+accumulation diagnostic) and F-41 (monopoly check reword). Existing
+pass/fail semantics for source-floor checks UNCHANGED. All four frozen
+packs in research-packs continue to verify-pack with byte-identical
+receipt fingerprints under v0.3.3.
+
+### Added
+
+- **Section-scoped diagnostic counts in gate output (F-43).** Gate
+  output now carries `section_primary` and `section_independent_publishers`
+  alongside the existing pack-wide counts. Section reports and audit
+  rollups display both views. Operators can now see, per section, how
+  many publishers contribute section-locally vs how many the
+  cumulative pack-wide source set carries.
+
+  *Gate pass/fail behavior is unchanged. v0.3.3 makes the source-floor
+  evidence legible by reporting both pack-wide and section-scoped
+  counts.*
+
+  Earned by Pack-3 Sessions 4–7 (Godot pack), where five sections of
+  identical single-publisher canonical-engine shape received different
+  waiver outcomes purely based on run-order — Section 01 (run first,
+  pack thin) needed dual waiver; Sections 02 + 04 + 05 + 06 + 07 (run
+  later, pack accumulated 6+ publishers) needed 0 waivers. The
+  difference was real (pack-wide counts at gate-run time), but the
+  diagnostic didn't show operators which view drove the decision.
+
+### Changed
+
+- **`no_source_cluster_monopoly` reworded from WARN to informational
+  diagnostic (F-41).** The check fired WARN on every single-source
+  claim across Pack-3 (confirmed 7×) regardless of explicit publisher
+  attribution on source cards. Each research-os claim is grounded to
+  one source span by design, so every claim is structurally
+  "single-publisher sourced." The WARN didn't carry actionable signal —
+  publisher diversity is already enforced by `min_independent_publishers`
+  at the source-card level.
+
+  *Because research-os claims are usually grounded to one source span,
+  single-source claim attribution is expected. Source diversity should
+  be judged from the section/pack source floor, not from a per-claim
+  "monopoly" warning.*
+
+  The check is preserved (not removed) so its diagnostic stays visible.
+  It now passes with an explanatory message rather than firing a
+  warning.
+
+### Compatibility
+
+- All four frozen packs (`research-os-self-dogfood`,
+  `comfyui-workflow-durability`, `xrpl-creator-token-durability`,
+  `godot-export-runtime-durability`) verify-pack with byte-identical
+  receipt sha256 under v0.3.3.
+- Manifest format, freeze receipt format, claim-reviews.jsonl
+  semantics, F-36 effective-accepted-claims helper — all UNCHANGED.
+- New diagnostic fields are additive. Existing tooling that reads
+  gate output continues to function.
+
+### Tests
+
+- 558 → **570 passing** (+12). Lint clean; typecheck clean; build
+  clean.
+- 4-pack regression confirmed: ComfyUI sha256
+  `d71943c6...09c79038eb`, dogfood sha256 `368d2361...142ef1fd5d466`,
+  XRPL sha256 `6511a044...725259a5`, Godot sha256
+  `55a65792...6cf41235` — all stable.
+
+### Out of scope (deferred to later releases)
+
+- F-40 (source-type classification stability across authoritative
+  docs).
+- F-42 / F-44 (operator-playbook documentation for JS-rendered
+  vendor doc alternates).
+- F-37 product side (admission emits `.gitattributes` snippet).
+- F-46 (manifest version display: init-time vs publish-time).
+
+These are real frictions earned during Pack-3, but v0.3.3 ships with a
+single coherent spine. They will land in their own scoped releases.
+
 ## [0.3.2] — 2026-05-09
 
 Tight release. One real, tested, dogfooded improvement: normalized

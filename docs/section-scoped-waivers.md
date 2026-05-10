@@ -1,4 +1,4 @@
-# Section-Scoped Source Waivers (v0.3.1)
+# Section-Scoped Source Waivers (v0.3.1 / v0.3.3)
 
 > Use section-scoped source waivers when publisher diversity is structurally
 > incompatible with the section's truth source, not when a section merely
@@ -251,6 +251,60 @@ Within the same XRPL pack:
 
 When in doubt: the waiver is for sections that document *what something
 is*, not *what people think about it*.
+
+---
+
+---
+
+## Gate-semantics clarity (v0.3.3)
+
+### Pack-wide vs section-scoped source-floor counts (F-43)
+
+The `min_independent_publishers` and `primary_sources_required` checks
+evaluate **pack-wide** — the decision uses the full source set accumulated
+across every section run so far, not just sources from the current section.
+
+From v0.3.3, gate output carries both views explicitly:
+
+```
+min_independent_publishers: PASS (pack-wide=8, section-scoped=1; threshold=4)
+```
+
+The threshold check uses the **pack-wide** count. The **section-scoped**
+count is diagnostic: it shows how many publishers this specific section
+contributed locally.
+
+*Gate pass/fail behavior is unchanged. v0.3.3 makes the source-floor
+evidence legible by reporting both pack-wide and section-scoped counts.*
+
+**Why this matters for section-scoped waivers.** A section may need a
+waiver when it runs early, before the pack-wide source set has accumulated
+enough independent publishers — even if the section itself is a valid
+canonical-protocol section. The same section, run later (after other
+sections have added diverse publishers), may pass with 0 waivers. Both
+outcomes are correct under pack-wide semantics; v0.3.3 makes the reason
+visible in the gate diagnostic.
+
+### `no_source_cluster_monopoly` is informational, not a warning (F-41)
+
+From v0.3.3, the `no_source_cluster_monopoly` check emits an informational
+`pass` rather than a `warn` when claims are single-source:
+
+```
+no_source_cluster_monopoly: PASS (12/12 claims are single-source by
+architecture — publisher diversity enforced at source-card level via
+min_independent_publishers)
+```
+
+*Because research-os claims are usually grounded to one source span,
+single-source claim attribution is expected. Source diversity should be
+judged from the section/pack source floor, not from a per-claim "monopoly"
+warning.*
+
+The check is preserved (not removed) — it remains visible in gate output.
+It no longer inflates the section's warning count. Publisher diversity is
+enforced by `min_independent_publishers` at the source-card level, which
+is where the floor belongs.
 
 ---
 

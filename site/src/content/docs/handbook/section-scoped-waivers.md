@@ -168,6 +168,42 @@ the honest answer.
 
 ---
 
+## Gate-semantics clarity (v0.3.3)
+
+### Pack-wide vs section-scoped diagnostic counts (F-43)
+
+The source-floor checks evaluate **pack-wide** — the pass/fail decision
+uses the full source set accumulated across every section run so far.
+From v0.3.3, gate output carries both views explicitly:
+
+```
+min_independent_publishers: PASS (pack-wide=8, section-scoped=1; threshold=4)
+```
+
+*Gate pass/fail behavior is unchanged. v0.3.3 makes the source-floor
+evidence legible by reporting both pack-wide and section-scoped counts.*
+
+A section that runs early (when the pack source set is thin) may need a
+waiver even though the same section, run later, would pass. Both outcomes
+are correct; the diagnostic now shows which view drove the decision.
+
+### `no_source_cluster_monopoly` is informational, not a warning (F-41)
+
+From v0.3.3, this check emits an informational `pass` rather than a `warn`
+when claims are single-source. Each research-os claim is grounded to one
+source span by design, so single-source attribution is expected and carries
+no actionable signal.
+
+*Because research-os claims are usually grounded to one source span,
+single-source claim attribution is expected. Source diversity should be
+judged from the section/pack source floor, not from a per-claim "monopoly"
+warning.*
+
+The check is preserved — it stays visible in gate output. It no longer
+inflates the section's warning count.
+
+---
+
 ## Related
 
 - [`docs/section-scoped-waivers.md`](https://github.com/mcp-tool-shop-org/research-os/blob/master/docs/section-scoped-waivers.md)

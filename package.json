@@ -1,6 +1,6 @@
 {
   "name": "@mcptoolshop/research-os",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Local-first research control plane for gated source packs, claim truth, contradiction handling, and long-running AI synthesis",
   "type": "module",
   "main": "./dist/index.js",

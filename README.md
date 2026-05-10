@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.2"><img src="https://img.shields.io/badge/version-0.3.2-blue" alt="version 0.3.2"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.3.3"><img src="https://img.shields.io/badge/version-0.3.3-blue" alt="version 0.3.3"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,6 +151,8 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ## Status
 
+**v0.3.3** — published to npm as `@mcptoolshop/research-os@0.3.3`, 2026-05-10. Ships gate-semantics clarity earned by Pack-3 (Godot export/runtime durability, Experiment 3 pack #3 of 3). Gate output now carries section-scoped publisher + primary counts alongside pack-wide counts (F-43); `no_source_cluster_monopoly` reworded from WARN to informational diagnostic (F-41). **Pass/fail behavior unchanged; existing frozen packs verify-pack byte-identically.** 570/570 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
+
 **v0.3.2** — published to npm as `@mcptoolshop/research-os@0.3.2`, 2026-05-09. Ships normalized accepted-claim accounting for `pack publish` admission. The strict equality check between `claim-reviews.jsonl` and `pack-audit.json::accepted_claims` is replaced with an effective-set comparison — accepted claims are unique `claim_id`s whose latest canonical review decision is `accepted_for_synthesis` (latest-decision-wins per `claim_id`). Frozen packs whose legacy audit count differs from the effective set now admit with a warning rather than refusing; the legacy audit file is preserved verbatim (Law 15) while the archive manifest reflects the normalized count. Refusal stays hard for phantom claim_ids, incompatible duplicate decisions, and non-synthesis-eligible gates. Earned by Experiment 3 XRPL pack Session K — pack publish refused on a real closure-ledger seam disagreement (Section 07 had 24 raw `accepted_for_synthesis` rows but only 19 unique `claim_id`s due to overlapping reviewer windows). 558/558 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/pack-publish.md`](docs/pack-publish.md).
 
 **v0.3.1** — published to npm as `@mcptoolshop/research-os@0.3.1`, 2026-05-09. Ships section-scoped source-floor waivers (`primary_source_waiver.section_waivers[]`) plus reviewer-side acknowledgement so a waived section-wide `source_cluster_monopoly` finding becomes a visible caveat rather than auto-routing all claims to `needs_source_repair`. Earned by Experiment 3 XRPL pack Session 2 — canonical-protocol sections (single-foundation chains, walled-garden API specs, standards-body docs) inverted the assumption that publisher diversity is a proxy for truth quality. 540/540 vitest passing then. See [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md).
@@ -169,7 +171,7 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 ### What v0.3 is not
 
-- Not battle-tested by external users. Two dogfood arcs have closed — one self-referential, one external-domain — and Experiment 3 (API stability under external pressure) is in progress: pack #2 of 3 (XRPL creator-token durability) is frozen with 251 accepted claims across 7 sections, awaiting pack publish admission against npm v0.3.2. The arc has earned the v0.3.0 `--detector` flag (F-09 chain-blocker), the v0.3.1 section-scoped source waivers (F-10/F-11 canonical-protocol pressure), and the v0.3.2 normalized accepted-claim accounting (F-36 closure-ledger seam). One more external-domain pack required for Experiment 3 closure.
+- Not battle-tested by external users. Three dogfood arcs have closed — one self-referential, two external-domain — and Experiment 3 (API stability under external pressure) is **CLOSED 2026-05-10**: all three packs (ComfyUI, XRPL, Godot) reached freeze without breaking changes to the v0.3.x CLI surface. The arc earned v0.3.0 `--detector` (F-09), v0.3.1 section-scoped waivers (F-10/F-11), v0.3.2 normalized accepted-claim accounting (F-36), and v0.3.3 gate-semantics clarity (F-43/F-41).
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.
 - Not API-stable under semver. v1.0.0 is an earned state, not a calendar date — see [`docs/roadmap.md`](docs/roadmap.md) for the six experiments that close the gap.
 
