@@ -2,7 +2,7 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased] — v0.5.0 candidate — reviewer trust as inspectable contract
+## [0.5.0] — 2026-05-10 — reviewer calibration as durable trust contract
 
 ### F-50 stabilization (Session 5)
 
@@ -42,9 +42,23 @@ All notable changes to `research-os` are documented here.
   Run 1 FAIL (FP=2/5); runs 2–3 PASS.
 - `hermes-single-pass` (single-run): **`comparison_only`** — auto-assigned.
 
-v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
-it ran; it is trusted because seeded failures prove its recall, false-positive
-rate, decision coverage, and limits.
+v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because
+it ran once; it earns a status through structured seeded-failure receipts and
+multi-run aggregation.
+
+**Product guardrail:** research-os can now refuse to trust a reviewer profile when
+repeated seeded failures do not support trust.
+
+**No trusted baseline admitted.** The three canonical receipts shipped with v0.5.0:
+
+| Profile | Status | Notes |
+|---|---|---|
+| `hermes-two-pass` | `failed` | Aggregate, 3 runs. Recurring failures: any-flag recall, per-category floor, decision vocab. |
+| `mistral-nemo-two-pass` | `conditional_pass` | Aggregate, 3 runs. FP at ceiling (median=1/max=2); no recurring failures. |
+| `hermes-single-pass` | `comparison_only` | Auto-assigned; architectural comparison only. |
+
+`trusted_baseline` is earned, not assumed. Single-run receipts remain available for quick
+local checks; aggregate receipts (3+ runs, median-based bars) are the trust artifact.
 
 ### Added
 
@@ -95,29 +109,32 @@ rate, decision coverage, and limits.
   Fixture expansion deferred to v0.6.
 - `phi3:14b` calibration deferred to a later experiment.
 
-### Session 4 receipt status note (escalation point for advisor)
+### Session 4 single-run evidence (context for F-50 investigation)
 
-The three canonical receipts committed here reflect honest run evidence.
-`hermes-single-pass` produced the expected `comparison_only` status (auto-assigned
-via `--mode comparison-only`). `hermes-two-pass` and `mistral-nemo-two-pass` both
-produced `failed` across two runs each, with high per-run variance:
+The three canonical receipts initially committed in Session 4 reflect honest single-run
+evidence. `hermes-single-pass` produced `comparison_only` (auto-assigned). `hermes-two-pass`
+and `mistral-nemo-two-pass` both produced `failed` across two single-run attempts each,
+with high per-run variance:
 
 - `hermes-two-pass` run 1: `per_category_any_flag_floor FAIL` (valid_but_low_value 1/3);
   run 2: `decision_vocab_completeness FAIL` (2/6 decisions produced).
 - `mistral-nemo-two-pass` run 1: `per_category_any_flag_floor FAIL` (unsupported_claim 1/3);
   run 2: `fp_ceiling FAIL` (2/5 FP) + `per_category_any_flag_floor FAIL`.
 
-The re-run budget (2 attempts each) is exhausted per advisor protocol. Receipts
-are committed as honest evidence. Advisor decides: accept `failed` status, lower
-bars, or re-run under different conditions. This is a new F-50 candidate:
-nondeterminism at this scale (1–2 category claim variance per run) may require
-multi-run averaging or wider fixture.
+This per-run nondeterminism (1–2 claim variance per category at N=2–3 seeds) was the
+root cause of F-50. Session 5 resolved it via multi-run median aggregation. See
+"Canonical receipt statuses (Session 5)" above for the aggregate outcome. The initial
+Session 4 receipts were overwritten by the Session 5 aggregate re-runs.
 
 ### Test surface
 
 - 620 → 646 tests in Session 3 (+26).
 - Session 4 adds 5 regression tests (646 → 651): pack-relative lookup,
   cwd-irrelevance, invalid-receipt fail (×2), missing-receipt no-op.
+- Session 5 adds 20 aggregate-helper tests (651 → 671): median, aggregateMetric,
+  per-category aggregation, decision-vocab aggregation, PASS/FAIL bars,
+  recurring-failure demotion, status-label logic, aggregateReceipts round-trip.
+- **Cumulative (Experiments 4+5):** 570 → 671 tests (+101).
 
 ## [0.4.0] — 2026-05-10 — source-truth discipline
 

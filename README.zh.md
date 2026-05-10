@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,9 +149,32 @@ discover
 
 `research-os` 是一个本地优先的命令行工具。它在您指定的“研究包”目录中读取和写入文件，并在使用 `gather` 命令时，会向外部发送 HTTP 请求以获取您提供的来源 URL。它不会：运行服务器、接受传入连接、存储凭据或发送遥测数据。任何敏感信息都不会写入到包文件中。请参阅 [SECURITY.md](SECURITY.md)，了解漏洞报告政策。
 
+## 评审员校准
+
+v0.5.0版本使评审员校准更加可靠。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有预设错误的测试结果和多次运行的聚合来获得信任状态。
+
+**目前没有任何配置文件被认为是`trusted_baseline`（可信基线）。** 仓库中的标准测试结果显示`hermes-two-pass=failed`（失败），`mistral-nemo-two-pass=conditional_pass`（条件通过），`hermes-single-pass=comparison_only`（仅供比较）。这是有意为之：信任是通过反复的、带有预设错误的结果来获得的，而不是默认信任。
+
+校准结果文件位于`calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`。每个结果文件记录了针对七个方面的PASS/FAIL（通过/失败）结果，四个状态标签（`trusted_baseline`、`conditional_pass`、`failed`、`comparison_only`），并诚实地披露了测试框架无法测试的内容（`needs_contradiction_mapping`无法从`seeded-v1`访问）。请参阅[CHANGELOG.md](CHANGELOG.md)。
+
+```bash
+# Single-run calibration (quick local check)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
+当使用`--runs <n>`参数时，每个运行的结果文件会被写入到`<profile>/runs/run-NNN.json`，并且会生成一个聚合结果文件（包含基于中位数的PASS/FAIL结果，以及重复失败检测），写入到`<profile>/seeded-v1.{json,md}`。聚合结果文件包含`receipt_kind: 'aggregate'`，用于区分单次运行的结果文件。单次运行模式（`--runs 1`或省略）会保留现有的直接写入行为。
+
 ## 状态
 
-**v0.4.0** 版本已发布到 npm，包名为 `@mcptoolshop/research-os@0.4.0`，发布日期为 2026年5月10日。 v0.4.0 版本增强了源标识的持久性。 确定性的源类型规则处理可重复的大部分情况，覆盖账本保留了操作员的修正，即使在重新收集数据时也能生效，并且 `source-card audit` 命令取代了对临时脚本漂移的检查，提供了一个更完善的命令行界面。 包含内容：集中式的源类型分类器（组件 B，`classifySourceType`，11个标准供应商，`source-type-rules.json`）；源卡覆盖账本（组件 A，`source-card-overrides.jsonl`，`validate` 和 `list` 子命令）；以及源卡审计命令行工具（组件 D，`research-os source-card audit --pack <dir>`，7种检测类型，JSON 和 Markdown 格式的报告，`--apply --from` 参数用于指定应用路径）。 F-46：修复了外观问题，现在打包清单会记录实际的二进制版本，而不是 `research.yaml` 文件中固定的版本。 **没有对安全机制、冻结机制或合成规则进行任何更改。所有四个现有的冻结包都经过了字节级别的完全一致性验证。** 620/620 个 vitest 测试通过。 详情请参考 [CHANGELOG.md](CHANGELOG.md) 文件以及 [源卡审计手册](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/) 页面。
+**v0.5.0** — 发布到npm，版本号为`@mcptoolshop/research-os@0.5.0`，发布日期：2026-05-10。v0.5.0版本使评审员校准更加可靠。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有预设错误的测试结果和多次运行的聚合来获得信任状态。包含：结构化的校准结果模式（`seeded-v1.{json,md}`，经过Zod验证，包含四个状态标签）；多运行测试框架（`--runs <n>`，每个运行隔离，基于中位数的PASS/FAIL结果，重复失败降级）；能够感知架构的决策词汇表；在`review-promote`中进行包相关的结果文件查找。**没有可信的基线：** `hermes-two-pass=failed`（聚合，3次运行），`mistral-nemo-two-pass=conditional_pass`，`hermes-single-pass=comparison_only`。research-os现在可以拒绝信任评审员配置文件，当反复的、带有预设错误的测试结果不支持信任时。**没有对网关、冻结或合成规则的更改。所有四个现有的冻结包都以字节级别的相同方式进行验证。** 671/671个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)。
+
+**v0.4.0** — 发布到npm，版本号为`@mcptoolshop/research-os@0.4.0`，发布日期：2026-05-10。v0.4.0版本使源代码身份更加可靠。基于确定性的源代码类型规则处理可重复的多数情况，覆盖账本保留了操作员的更正，并且`source-card audit`（源代码卡审计）取代了对临时脚本漂移的检查，提供了一个一流的命令行界面。包含：集中式的源代码类型分类器（组件B — `classifySourceType`，11个标准供应商，`source-type-rules.json`）；源代码卡覆盖账本（组件A — `source-card-overrides.jsonl`，`validate` + `list`子命令）；以及源代码卡审计命令行界面（组件D — `research-os source-card audit --pack <dir>`，7种发现类型，JSON + Markdown格式，`--apply --from`用于应用路径）。F-46：一个小的修复，现在包清单会记录实际的二进制版本，而不是冻结在`research.yaml`中的版本，该版本在包初始化时被冻结。**没有对网关、冻结或合成规则的更改。所有四个现有的冻结包都以字节级别的相同方式进行验证。** 620/620个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)以及[源代码卡审计手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/)。
 
 **v0.3.3** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.3.3`，发布日期：2026年5月10日。此版本改进了“门”机制的语义清晰度，这是Pack-3（Godot导出/运行时稳定性，实验3的第3个包）所取得的成果。现在，“门”的输出结果除了包含整个包的计数外，还包含按“门”划分的发布者和主要计数（F-43）；`no_source_cluster_monopoly` 的警告信息已更改为信息性诊断信息（F-41）。**通过/失败的行为未改变；现有的冻结包在字节级别上进行验证。** 570/570 个 vitest 测试通过。请参阅 [CHANGELOG.md](CHANGELOG.md) 和 [`docs/section-scoped-waivers.md`](docs/section-scoped-waivers.md)。
 

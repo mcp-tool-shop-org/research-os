@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,7 +149,30 @@ Ceci est une alternative structurée à *recherche → résumé → rapport dét
 
 `research-os` est une interface en ligne de commande qui fonctionne localement. Elle lit et écrit des fichiers dans le répertoire de l'ensemble de données que vous lui spécifiez, et (lorsque vous utilisez la commande `gather`), elle effectue des requêtes HTTP sortantes pour récupérer les URL de sources que vous fournissez. Elle ne : ne fait pas fonctionner de serveur, n'accepte pas de connexions entrantes, ne stocke pas de mots de passe, ni n'envoie de données de télémétrie. Aucun mot de passe n'est écrit dans les fichiers de l'ensemble de données. Consultez le fichier [SECURITY.md](SECURITY.md) pour connaître la politique de signalement des vulnérabilités.
 
+## Calibrage des évaluateurs
+
+La version 0.5.0 rend le calibrage des évaluateurs plus fiable. Un profil d'évaluateur n'est pas considéré comme fiable simplement parce qu'il a été exécuté une fois ; il acquiert un statut grâce à des rapports structurés de défaillances simulées et à une agrégation de plusieurs exécutions.
+
+**Aucun profil n'est actuellement admis comme étant une "baseline de confiance".** Les rapports canoniques dans le dépôt indiquent `hermes-two-pass=échec`, `mistral-nemo-two-pass=succès conditionnel`, `hermes-single-pass=comparaison uniquement`. Ceci est intentionnel : la confiance est acquise grâce à des preuves répétées de défaillances simulées, et non supposée.
+
+Les rapports de calibrage se trouvent dans le répertoire `calibration/reviewer-profiles/<profil>/seeded-v1.{json,md`. Chaque rapport enregistre les résultats PASS/FAIL pour sept critères, quatre étiquettes de statut (`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), et indique honnêtement ce que le test ne peut pas vérifier (`needs_contradiction_mapping` est inaccessible depuis `seeded-v1`). Consultez [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+# Single-run calibration (quick local check)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
+Lorsque l'option `--runs <n>` est utilisée, les rapports pour chaque exécution sont écrits dans `<profil>/runs/run-NNN.json`, et un rapport agrégé (avec des critères basés sur la médiane et la détection des défaillances récurrentes) est écrit dans `<profil>/seeded-v1.{json,md`. Le rapport agrégé contient `receipt_kind: 'aggregate'` pour le distinguer des rapports d'une seule exécution. Le mode d'exécution unique (`--runs 1` ou omis) conserve le comportement d'écriture directe existant.
+
 ## Statut
+
+**v0.5.0** — publié sur npm en tant que `@mcptoolshop/research-os@0.5.0`, le 10 mai 2026. La version 0.5.0 rend le calibrage des évaluateurs plus fiable. Un profil d'évaluateur n'est pas considéré comme fiable simplement parce qu'il a été exécuté une fois ; il acquiert un statut grâce à des rapports structurés de défaillances simulées et à une agrégation de plusieurs exécutions. Inclut : schéma de rapport de calibrage structuré (`seeded-v1.{json,md}`, validé par Zod, quatre étiquettes de statut) ; environnement d'exécution multi-exécutions (`--runs <n>`, isolation par exécution, critères PASS/FAIL basés sur la médiane, dégradation en cas de défaillances récurrentes) ; critère de vocabulaire de décision conscient de l'architecture ; recherche de rapports relative au paquet dans `review-promote`. **Aucune "baseline de confiance" admise :** `hermes-two-pass=échec` (agrégé, 3 exécutions), `mistral-nemo-two-pass=succès conditionnel`, `hermes-single-pass=comparaison uniquement`. research-os peut désormais refuser de faire confiance à un profil d'évaluateur lorsque les défaillances simulées répétées ne justifient pas la confiance. **Aucun changement concernant les "gates", les "freezes" ou les "lois de synthèse". Les quatre paquets figés vérifient l'identité des octets.** 671/671 tests vitest réussis. Consultez [CHANGELOG.md](CHANGELOG.md).
 
 **v0.4.0** — publié sur npm sous le nom `@mcptoolshop/research-os@0.4.0`, le 10 mai 2026. La version 0.4.0 assure la pérennité de l'identité de la source. Les règles de type de source déterministes gèrent la majorité reproductible, les registres de remplacement préservent les corrections de l'opérateur lors des nouvelles agrégations, et la commande `source-card audit` remplace les vérifications de dérive des scripts temporaires par une interface CLI de première classe. Comprend : un classificateur de type de source centralisé (Composant B — `classifySourceType`, 11 fournisseurs canoniques, `source-type-rules.json`); un registre de remplacement de carte source (Composant A — `source-card-overrides.jsonl`, commandes `validate` et `list`); et une CLI d'audit de carte source (Composant D — `research-os source-card audit --pack <dir>`, 7 types de résultats, artefacts JSON et Markdown, options `--apply --from` pour spécifier le chemin). Correction cosmétique F-46 : les manifestes de pack indiquent désormais la version binaire en cours d'utilisation plutôt que la version figée dans `research.yaml` lors de l'initialisation du pack. **Aucun changement concernant les mécanismes de contrôle, de blocage ou les lois de synthèse. Les quatre packs figés existants sont vérifiés de manière identique au niveau des octets.** 620/620 tests vitest réussis. Consultez le fichier [CHANGELOG.md](CHANGELOG.md) et la page du manuel d'audit de carte source : [https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/).
 

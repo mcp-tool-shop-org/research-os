@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,7 +149,45 @@ discover
 
 `research-os` एक स्थानीय-प्रथम कमांड-लाइन इंटरफेस है। यह उन शोध-पैकेज निर्देशिकाओं में फ़ाइलों को पढ़ता और लिखता है जिन्हें आप निर्दिष्ट करते हैं, और (जब `gather` का उपयोग किया जाता है) स्रोत यूआरएल प्राप्त करने के लिए बाहरी HTTP अनुरोध भेजता है जिन्हें आप प्रदान करते हैं। यह निम्नलिखित नहीं करता है: कोई सर्वर नहीं चलाता, इनकमिंग कनेक्शन स्वीकार नहीं करता, क्रेडेंशियल संग्रहीत नहीं करता, या टेलीमेट्री नहीं भेजता। किसी भी गुप्त जानकारी को पैकेज फ़ाइलों में नहीं लिखा जाता है। भेद्यता रिपोर्टिंग नीति के लिए [SECURITY.md](SECURITY.md) देखें।
 
+## समीक्षक कैलिब्रेशन
+
+v0.5.0 समीक्षक कैलिब्रेशन को अधिक टिकाऊ बनाता है। किसी समीक्षक प्रोफाइल पर इसलिए भरोसा नहीं किया जाता क्योंकि
+यह केवल एक बार चलाया गया था; यह संरचित, पूर्वनिर्धारित विफलता रिपोर्टों और
+एकाधिक रनों के संयोजन के माध्यम से एक स्थिति प्राप्त करता है।
+
+**वर्तमान में कोई भी प्रोफाइल `trusted_baseline` के रूप में स्वीकार नहीं किया गया है।** रिपॉजिटरी में मौजूद मानक रिपोर्टें
+`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`,
+`hermes-single-pass=comparison_only` दिखाती हैं। यह जानबूझकर किया गया है: विश्वास
+बार-बार होने वाले पूर्वनिर्धारित विफलता के प्रमाणों के माध्यम से अर्जित किया जाता है, न कि केवल अनुमान लगाकर।
+
+कैलिब्रेशन रिपोर्ट `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}` पर उपलब्ध हैं।
+प्रत्येक रिपोर्ट में सात मानदंडों के विरुद्ध PASS/FAIL दर्ज किया जाता है, चार स्थिति लेबल
+(`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), और
+यह ईमानदारी से बताता है कि कौन सा परीक्षण मामला (फिक्स्चर) परीक्षण करने में सक्षम नहीं है (`needs_contradiction_mapping`
+`seeded-v1` से दुर्गम है)। [CHANGELOG.md](CHANGELOG.md) देखें।
+
+```bash
+# Single-run calibration (quick local check)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
+जब `--runs <n>` का उपयोग किया जाता है, तो प्रत्येक रन के लिए रिपोर्ट `<profile>/runs/run-NNN.json` में लिखी जाती हैं
+और एक एकत्रित रिपोर्ट (माध्य-आधारित मानदंडों और आवर्ती विफलता का पता लगाने के साथ)
+`<profile>/seeded-v1.{json,md}` में लिखी जाती है। एकत्रित रिपोर्ट में `receipt_kind: 'aggregate'` होता है
+जो इसे एकल-रन रिपोर्टों से अलग करता है। एकल-रन मोड (`--runs 1` या छोड़ा गया)
+मौजूदा सीधे लिखने के व्यवहार को बनाए रखता है।
+
 ## स्थिति
+
+**v0.5.0** — npm पर `@mcptoolshop/research-os@0.5.0` के रूप में प्रकाशित, 2026-05-10। v0.5.0 समीक्षक कैलिब्रेशन को अधिक टिकाऊ बनाता है। किसी समीक्षक प्रोफाइल पर इसलिए भरोसा नहीं किया जाता क्योंकि
+यह केवल एक बार चलाया गया था; यह संरचित, पूर्वनिर्धारित विफलता रिपोर्टों और
+एकाधिक रनों के संयोजन के माध्यम से एक स्थिति प्राप्त करता है। इसमें शामिल हैं: संरचित कैलिब्रेशन रिपोर्ट स्कीमा (`seeded-v1.{json,md}`, Zod द्वारा सत्यापित, चार स्थिति लेबल); बहु-रन प्रणाली (`--runs <n>`, प्रति-रन अलगाव, माध्य-आधारित PASS/FAIL मानदंड, आवर्ती विफलता का पता लगाना); आर्किटेक्चर-जागरूक निर्णय शब्दावली मानदंड; `review-promote` में पैकेज-सापेक्ष रिपोर्ट खोज। **कोई भी विश्वसनीय आधारभूत स्वीकार नहीं किया गया:** `hermes-two-pass=failed` (एकत्रित, 3 रन), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. research-os अब एक समीक्षक प्रोफाइल पर भरोसा करने से इनकार कर सकता है जब बार-बार होने वाली पूर्वनिर्धारित विफलताएं विश्वास का समर्थन नहीं करती हैं। **कोई गेट, फ्रीज या संश्लेषण-कानून परिवर्तन नहीं। सभी चार स्थिर पैकेजों को बाइट-समान रूप से सत्यापित किया गया है।** 671/671 vitest पास हो गया। [CHANGELOG.md](CHANGELOG.md) देखें।
 
 **v0.4.0** — npm पर `@mcptoolshop/research-os@0.4.0` के रूप में प्रकाशित, 2026-05-10। v0.4.0 स्रोत की पहचान को स्थायी बनाता है। नियतात्मक स्रोत-प्रकार नियम दोहराए जा सकने वाले अधिकांश मामलों को संभालते हैं, ओवरराइड लेजर ऑपरेटर द्वारा किए गए सुधारों को पुनः-संग्रहण के दौरान संरक्षित करते हैं, और `source-card audit` एक समर्पित कमांड-लाइन इंटरफेस के साथ "स्क्रैच-स्क्रिप्ट" विचलन जांचों को बदलता है। इसमें शामिल हैं: केंद्रीकृत स्रोत-प्रकार वर्गीकरण (घटक B — `classifySourceType`, 11 मानक विक्रेता, `source-type-rules.json`); स्रोत-कार्ड ओवरराइड लेजर (घटक A — `source-card-overrides.jsonl`, `validate` + `list` उप-कमांड); और स्रोत-कार्ड ऑडिट कमांड-लाइन इंटरफेस (घटक D — `research-os source-card audit --pack <dir>`, 7 प्रकार की खोज, JSON + Markdown प्रारूप, `--apply --from` पथ लागू करें)। F-46: एक सौंदर्य संबंधी सुधार: अब "पैक" मैनिफेस्ट में `research.yaml` में "पैक" शुरू करने के समय "फ्रीज" किए गए संस्करण के बजाय, लाइव बाइनरी संस्करण अंकित किया जाता है। **कोई "गेट", "फ्रीज" या "सिंथेसिस-लॉ" परिवर्तन नहीं। सभी चार मौजूदा "फ्रीज" किए गए "पैक" "वेरिफाई-पैक" बाइट-समान रूप से पास होते हैं।** 620/620 "विटेस्ट" पास। [CHANGELOG.md](CHANGELOG.md) और [स्रोत-कार्ड ऑडिट हैंडबुक पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/) देखें।
 

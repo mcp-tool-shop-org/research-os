@@ -5,9 +5,23 @@ sidebar:
   order: 7
 ---
 
-v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
-it ran; it is trusted because seeded failures prove its recall, false-positive
-rate, decision coverage, and limits.
+v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because
+it ran once; it earns a status through structured seeded-failure receipts and
+multi-run aggregation.
+
+**Product guardrail:** research-os can now refuse to trust a reviewer profile when
+repeated seeded failures do not support trust.
+
+**No trusted baseline admitted (v0.5.0).** The three canonical profiles shipped:
+
+| Profile | Status |
+|---|---|
+| `hermes-two-pass` | `failed` — aggregate, 3 runs |
+| `mistral-nemo-two-pass` | `conditional_pass` — aggregate, 3 runs |
+| `hermes-single-pass` | `comparison_only` |
+
+`trusted_baseline` is earned, not assumed. Single-run receipts exist for quick local
+checks; aggregate receipts (3+ runs, median-based bars) are the trust artifact.
 
 ---
 

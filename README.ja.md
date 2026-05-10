@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,7 +149,30 @@ discover
 
 `research-os` は、ローカル環境で動作するCLIです。このツールは、指定された研究パッケージのディレクトリ内のファイルを読み書きし、`gather` コマンドを使用する場合、提供されたソースコードのURLから情報を取得するために、HTTPリクエストを送信します。このツールは、サーバーを起動したり、外部からの接続を受け付けたり、認証情報を保存したり、テレメトリデータを送信したりすることはありません。また、機密情報はパッケージのファイルに書き込まれません。脆弱性に関する報告については、[SECURITY.md](SECURITY.md) を参照してください。
 
+## レビュー担当者の評価調整機能
+
+v0.5.0では、レビュー担当者の評価調整機能がより安定しました。レビュー担当者のプロファイルは、単に一度実行されたというだけで信頼されるわけではありません。構造化されたテストケースの失敗結果と、複数回の実行結果の集計によって、信頼度合いが評価されます。
+
+**現在、どのプロファイルも`trusted_baseline`として認められていません。** リポジトリ内の標準的なテスト結果では、`hermes-two-pass`が`failed`、`mistral-nemo-two-pass`が`conditional_pass`、`hermes-single-pass`が`comparison_only`となっています。これは意図的なものです。信頼は、単なる仮定ではなく、繰り返されるテストケースの失敗結果によって獲得されます。
+
+評価結果は、`calibration/reviewer-profiles/<プロファイル名>/seeded-v1.{json,md}`に保存されています。各評価結果は、7つの項目に対する合否、4つのステータスラベル（`trusted_baseline`、`conditional_pass`、`failed`、`comparison_only`）、およびテストが実行できない状況を正直に報告します（`needs_contradiction_mapping`は`seeded-v1`からは到達できません）。詳細は[CHANGELOG.md](CHANGELOG.md)を参照してください。
+
+```bash
+# Single-run calibration (quick local check)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
+`--runs <n>`オプションを使用すると、各実行結果が`<プロファイル名>/runs/run-NNN.json`に保存され、集計結果（中央値に基づいた合否判定と、繰り返し発生するエラーの検出を含む）が`<プロファイル名>/seeded-v1.{json,md}`に保存されます。集計結果には、`receipt_kind: 'aggregate'`という情報が含まれており、これにより単一実行の結果と区別されます。単一実行モード（`--runs 1`または省略）では、既存の直接書き込み動作が維持されます。
+
 ## ステータス
+
+**v0.5.0** — npmで`@mcptoolshop/research-os@0.5.0`として公開。2026年5月10日。v0.5.0では、レビュー担当者の評価調整機能がより安定しました。レビュー担当者のプロファイルは、単に一度実行されたというだけで信頼されるわけではありません。構造化されたテストケースの失敗結果と、複数回の実行結果の集計によって、信頼度合いが評価されます。変更点：構造化された評価結果スキーマ（`seeded-v1.{json,md}`、Zodによる検証、4つのステータスラベル）、複数実行機能（`--runs <n>`、各実行の分離、中央値に基づいた合否判定、繰り返し発生するエラーの検出）、アーキテクチャを考慮した判定語彙、`review-promote`におけるパッケージ相対パスでの評価結果参照。**信頼できるベースラインは存在しません：** `hermes-two-pass=failed`（集計、3回の実行）、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`。research-osは、繰り返し発生するテストケースの失敗結果が信頼を裏付けない場合、レビュー担当者のプロファイルを信頼しないようにすることができます。**ゲート、フリーズ、または合成ルールに関する変更はありません。すべての4つのフリーズされたパッケージが、バイト単位で完全に同一であることを確認しました。** 671/671のvitestが成功しました。詳細は[CHANGELOG.md](CHANGELOG.md)を参照してください。
 
 **v0.4.0** — npmに`@mcptoolshop/research-os@0.4.0`として公開。2026年5月10日。v0.4.0では、ソースの同一性を維持できるようになりました。決定論的なソースタイプルールにより、再現可能な多数が処理され、オーバーライドされたレジャーにより、再収集時のオペレーターによる修正が保持され、`source-card audit`コマンドが、従来のスクリプトのずれチェックを置き換え、より使いやすいCLIインターフェースを提供します。同梱内容：集中型のソースタイプ分類器（コンポーネントB — `classifySourceType`、11種類のベンダー、`source-type-rules.json`）、ソースカードのオーバーライドレジャー（コンポーネントA — `source-card-overrides.jsonl`、`validate`および`list`サブコマンド）、およびソースカード監査CLI（コンポーネントD — `research-os source-card audit --pack <dir>`、7種類の検出結果、JSONおよびMarkdown形式のレポート、`--apply --from`による適用パス）。F-46：見た目の修正。パッケージのマニフェストには、`research.yaml`に固定されたバージョンではなく、実行中のバイナリのバージョンが記録されるようになりました。**ゲート、フリーズ、または合成に関する変更はありません。既存のすべてのパッケージは、バイト単位で同一であることを検証済みです。** 620/620のvitestテストが合格しました。詳細は[CHANGELOG.md](CHANGELOG.md)および[ソースカード監査に関するハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/)を参照してください。
 

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,18 +149,22 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 `research-os` is a local-first CLI. It reads and writes files within the research-pack directory you point it at, and (when using `gather`) issues outbound HTTP requests to fetch source URLs you provide. It does not: run a server, accept inbound connections, store credentials, or send telemetry. No secrets are written to pack artifacts. See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
-## Reviewer calibration (unreleased — v0.5.0 candidate)
+## Reviewer calibration
 
-v0.5 makes reviewer trust inspectable. A reviewer profile is not trusted because
-it ran; it is trusted because seeded failures prove its recall, false-positive
-rate, decision coverage, and limits.
+v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because
+it ran once; it earns a status through structured seeded-failure receipts and
+multi-run aggregation.
+
+**No profile is currently admitted as `trusted_baseline`.** The canonical receipts
+in the repo show `hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`,
+`hermes-single-pass=comparison_only`. This is intentional: trust is earned through
+repeated seeded-failure evidence, not assumed.
 
 Calibration receipts live at `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`.
 Each receipt records PASS/FAIL against seven bars, four status labels
 (`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), and
 honestly discloses what the fixture cannot test (`needs_contradiction_mapping`
-is unreachable from `seeded-v1`). See [CHANGELOG.md](CHANGELOG.md) for the
-v0.5.0 candidate entry and the Session 4 receipt status note.
+is unreachable from `seeded-v1`). See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 # Single-run calibration (quick local check)
@@ -180,6 +184,8 @@ to discriminate from single-run receipts. Single-run mode (`--runs 1` or omitted
 the existing direct-write behavior.
 
 ## Status
+
+**v0.5.0** — published to npm as `@mcptoolshop/research-os@0.5.0`, 2026-05-10. v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because it ran once; it earns a status through structured seeded-failure receipts and multi-run aggregation. Ships: structured calibration receipt schema (`seeded-v1.{json,md}`, Zod-validated, four status labels); multi-run harness (`--runs <n>`, per-run isolation, median-based PASS/FAIL bars, recurring-failure demotion); architecture-aware decision-vocab bar; pack-relative receipt lookup in `review-promote`. **No trusted baseline admitted:** `hermes-two-pass=failed` (aggregate, 3 runs), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. research-os can now refuse to trust a reviewer profile when repeated seeded failures do not support trust. **No gate, freeze, or synthesis-law changes. All four frozen packs verify-pack byte-identically.** 671/671 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
 
 **v0.4.0** — published to npm as `@mcptoolshop/research-os@0.4.0`, 2026-05-10. v0.4.0 makes source identity durable. Deterministic source-type rules handle the repeatable majority, override ledgers preserve operator corrections across re-gather, and `source-card audit` replaces scratch-script drift checks with a first-class CLI surface. Ships: centralized source-type classifier (Component B — `classifySourceType`, 11 canonical vendors, `source-type-rules.json`); source-card override ledger (Component A — `source-card-overrides.jsonl`, `validate` + `list` subcommands); and source-card audit CLI (Component D — `research-os source-card audit --pack <dir>`, 7 finding kinds, JSON + Markdown artifacts, `--apply --from` apply path). F-46 cosmetic fix: pack manifests now stamp the live binary version rather than the version frozen into `research.yaml` at pack-init. **No gate, freeze, or synthesis-law changes. All four existing frozen packs verify-pack byte-identically.** 620/620 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and the [source-card audit handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/).
 

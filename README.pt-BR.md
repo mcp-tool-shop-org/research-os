@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="version 0.4.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -149,7 +149,30 @@ Esta é a alternativa estrutural para *pesquisar → resumir → gerar relatóri
 
 `research-os` é uma ferramenta de linha de comando que opera localmente. Ela lê e grava arquivos dentro do diretório do pacote de pesquisa que você especificar e, quando usa o comando `gather`, faz solicitações HTTP para buscar URLs de origem que você fornecer. Ela não: executa um servidor, aceita conexões de entrada, armazena credenciais ou envia dados de telemetria. Nenhum segredo é gravado nos arquivos do pacote. Consulte [SECURITY.md](SECURITY.md) para a política de relatório de vulnerabilidades.
 
+## Calibração de revisores
+
+A versão v0.5.0 torna a calibração de revisores mais robusta. Um perfil de revisor não é considerado confiável apenas porque foi executado uma vez; ele adquire um status através de relatórios estruturados de falhas simuladas e agregação de múltiplas execuções.
+
+**Atualmente, nenhum perfil é considerado como "baseline confiável".** Os relatórios canônicos no repositório mostram `hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. Isso é intencional: a confiança é conquistada através de evidências repetidas de falhas simuladas, e não é presumida.
+
+Os relatórios de calibração estão localizados em `calibration/reviewer-profiles/<perfil>/seeded-v1.{json,md}`. Cada relatório registra PASS/FAIL em relação a sete critérios, quatro rótulos de status (`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), e revela honestamente o que o teste não consegue verificar (`needs_contradiction_mapping` é inacessível a partir de `seeded-v1`). Consulte [CHANGELOG.md](CHANGELOG.md).
+
+```bash
+# Single-run calibration (quick local check)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass
+
+# Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
+
+# Promote a section's review — auto-populates calibration_summary from pack-relative receipt
+research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
+```
+
+Quando `--runs <n>` é usado, os relatórios de cada execução são gravados em `<perfil>/runs/run-NNN.json` e um relatório agregado (com critérios baseados na mediana e detecção de falhas recorrentes) é gravado em `<perfil>/seeded-v1.{json,md}`. O relatório agregado contém `receipt_kind: 'aggregate'` para diferenciá-lo dos relatórios de execução única. O modo de execução única (`--runs 1` ou omitido) preserva o comportamento de gravação direta existente.
+
 ## Status
+
+**v0.5.0** — publicado no npm como `@mcptoolshop/research-os@0.5.0`, 10 de maio de 2026. A versão v0.5.0 torna a calibração de revisores mais robusta. Um perfil de revisor não é considerado confiável apenas porque foi executado uma vez; ele adquire um status através de relatórios estruturados de falhas simuladas e agregação de múltiplas execuções. Inclui: esquema de relatório de calibração estruturado (`seeded-v1.{json,md}`, validado com Zod, quatro rótulos de status); sistema de execução de múltiplas execuções (`--runs <n>`, isolamento por execução, critérios PASS/FAIL baseados na mediana, detecção de falhas recorrentes); critério de avaliação baseado na arquitetura; pesquisa de relatórios relativa ao pacote em `review-promote`. **Nenhum baseline confiável admitido:** `hermes-two-pass=failed` (agregado, 3 execuções), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. O research-os agora pode recusar a confiança em um perfil de revisor quando falhas simuladas repetidas não suportam a confiança. **Nenhuma alteração nos gates, congelamentos ou leis de síntese. Todos os quatro pacotes congelados verificam a identidade dos bytes.** 671/671 testes vitest aprovados. Consulte [CHANGELOG.md](CHANGELOG.md).
 
 **v0.4.0** — Publicada no npm como `@mcptoolshop/research-os@0.4.0`, 10 de maio de 2026. A versão 0.4.0 garante a durabilidade da identidade da fonte. Regras determinísticas para o tipo de fonte lidam com a maioria repetível, os registros de substituição preservam as correções do operador durante a re-coleta, e o comando `source-card audit` substitui as verificações de derivação de scripts por uma interface de linha de comando (CLI) completa. Inclui: um classificador centralizado de tipo de fonte (Componente B — `classifySourceType`, 11 fornecedores padrão, `source-type-rules.json`); um registro de substituição de cartão de fonte (Componente A — `source-card-overrides.jsonl`, subcomandos `validate` e `list`); e uma CLI para auditoria de cartão de fonte (Componente D — `research-os source-card audit --pack <dir>`, 7 tipos de detecção, artefatos JSON + Markdown, opções `--apply --from` para aplicar o caminho). Correção estética F-46: os arquivos de manifesto agora indicam a versão binária em execução, em vez da versão fixada no arquivo `research.yaml` durante a inicialização da criação do pacote. **Não há alterações nas regras de validação, congelamento ou síntese. Todos os quatro pacotes existentes passam na verificação de integridade byte a byte.** 620/620 testes vitest aprovados. Consulte o arquivo [CHANGELOG.md](CHANGELOG.md) e a página do manual de auditoria de cartão de fonte: [https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/](https://mcp-tool-shop-org.github.io/research-os/handbook/source-card-audit/).
 
