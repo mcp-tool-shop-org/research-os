@@ -1,14 +1,23 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { PackNotFoundError } from '../errors.js';
+import { PackNotFoundError, ResearchOSError } from '../errors.js';
 import { openIndexDb, indexDbPath } from './db.js';
 import type { IndexQueryOptions, IndexQuerySummary, QueryHit, RecordType } from './types.js';
 
-export class IndexNotBuiltError extends Error {
+// C1-012: IndexNotBuiltError now extends ResearchOSError so the CLI's
+// reportError prints `<code>: <message>` + `  hint:` consistently. The
+// command-text in the message names the registered subcommand
+// `research-os index build --all` (previous string `research-os index --all`
+// was a typo — there is no top-level `index` command, only `index build`).
+// Closest existing code: PACK_NOT_FOUND broadens slightly to "pack
+// derivative artifact (index DB) missing" — see closeout escalation note.
+export class IndexNotBuiltError extends ResearchOSError {
   constructor(public readonly dbPath: string) {
     super(
-      `No index found at ${dbPath}. Run 'research-os index --all' to build it before querying.`,
+      `No index found at ${dbPath}. Run \`research-os index build --all\` to build it before querying.`,
+      'PACK_NOT_FOUND',
+      `Run \`research-os index build --all --pack <dir>\` to populate the FTS5 index, then re-run your query. See handbook/recovery.md.`,
     );
     this.name = 'IndexNotBuiltError';
   }

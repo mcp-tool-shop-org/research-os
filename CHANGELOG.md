@@ -7,10 +7,10 @@ All notable changes to `research-os` are documented here.
 ### Behavior changes
 
 - **`pack publish --force` now replaces the target package directory unconditionally.**
-  Prior behavior preserved hand-edited generated files with a warning; that behavior was a
-  stale-artifact hiding place and is reverted. Do not keep hand-authored files inside
-  generated package output. Edit upstream artifacts (claims, sources, synthesis) or
-  sibling files instead.
+  `--force clears and replaces the target package directory. Do not keep hand-authored files inside generated package output.`
+  Prior behavior preserved hand-edited generated files with a warning; that behavior was
+  a stale-artifact hiding place and is reverted. Edit upstream artifacts (claims, sources,
+  synthesis) or sibling files instead.
 
 ### Fixes — Stage A swarm
 
@@ -210,6 +210,129 @@ shape of each fix is reviewable, not just the surface.
     tolerated). Wave 3 mirrors the audit pattern: per-line try/catch, structured
     warnings on `SectionGateResult.malformed_jsonl_warnings` (separate field from the
     pre-existing `warnings: GateCheckResult[]` to avoid the name collision).
+
+### Fixes — Stage C (operator humanization) Phase 3 amend wave
+
+Stage C Phase 1 audit identified 22 v1.0 blockers + 10 release-doc fixes + 11 POST-v1
+backlog items across three themes: `pack publish --force` cross-surface contradiction,
+raw `Error` throws at high-traffic CLI surfaces, long-running command silence, and
+recovery documentation gaps. The Phase 3 amend wave landed all 22 v1.0 blockers and all
+10 release-doc fixes across three concurrent agents (C1 — CLI error actionability;
+C2 — long-running feedback; C3 — recovery docs). 32 fixes total. The canonical
+`--force` sentence is now anchored byte-for-byte across five operator-facing surfaces.
+
+#### C1 — CLI error actionability (14 fixes)
+
+  - **C1-001 CRITICAL — `pack publish --force` `--help` text.** `src/cli.ts` `--force`
+    option description now carries the canonical sentence verbatim: `--force clears and
+    replaces the target package directory. Do not keep hand-authored files inside
+    generated package output.` Operator no longer reads a euphemism at the moment they
+    decide whether to type `--force`.
+  - **C1-002** — `source-card audit --apply` missing-arg routed through `InvalidArgumentError`
+    (D-008 pattern; lone holdout from the prior sweep).
+  - **C1-003** — `review --preset` raw Error replaced with structured channel using the
+    existing `ReviewerProfileNotFoundError` sibling pattern.
+  - **C1-004 / C1-005 / C1-007** — `pack/publish/index.ts` source-missing,
+    freeze-refusal-present, and verify-pack-post-publish failures routed through
+    ResearchOSError with file/line/actionable hints.
+  - **C1-006** — `pack/publish/index.ts` first-encounter `--force` error hint now carries
+    the canonical sentence verbatim: `--force clears and replaces the target package
+    directory. Do not keep hand-authored files inside generated package output.`
+  - **C1-008 / C1-009** — `pack/publish/manifest.ts` 4 frozen-pack precondition raw Errors
+    and 5 admission-contract refusals routed through ResearchOSError using existing
+    taxonomy. No new error codes introduced.
+  - **C1-010 / C1-011 / C1-012 / C1-013 / C1-014** — Discover, contradict map, indexer
+    query (also fixed the wrong command name in `IndexNotBuiltError`'s hint —
+    `research-os index build --all` instead of the previously-named non-existent
+    `research-os index --all`), source-card audit, and invalidate/review validation
+    paths routed to structured-error channel.
+  - **Per-error handbook-page pointers** added to hint text on ResearchOSError
+    subclasses per C3-006 Option C part A (the handbook-page-mapping table is in
+    `reports/stage-c-phase3-c3-closeout.md`).
+  - **`research-os help <topic>` subcommand** registered in `src/cli.ts`; topic content
+    sourced from the frozen `HELP_TOPICS` map at `src/cli/help-topics.ts` (C3-006
+    Option C part B).
+
+#### C2 — long-running command feedback (10 fixes)
+
+  - **C2-001 / C2-003** — `review` paged-window loop now emits per-window progress to
+    stderr (window N of M). `--no-progress` flag gates progress output for golden-test
+    determinism.
+  - **C2-002** — `ReviewerCascadeFailedError` now carries partial-progress count so
+    operator can target re-run instead of re-reviewing the whole section.
+  - **C2-004** — `calibration` multi-run mode emits per-run progress between `Run N of
+    M` boundaries.
+  - **C2-005 / C2-006** — `gather` emits per-URL progress + names the failing URL
+    inline when the synthetic-failure receipt is written (Stage B B-A-001 win now
+    visible).
+  - **C2-007** — Freeze "no output until verdict" behavior documented in `README.md` (the
+    operator-perception paragraph landed adjacent to the freeze mention in quick-start).
+  - **C2-008** — `contradict map` ollama-intern detector emits per-pair progress (N²/2
+    pair count printed up-front; per-pair tick on stderr).
+  - **C2-010 / C2-011** — `pack publish` copyDir + verifyPack rehash now stream progress;
+    verify-fail names the mismatched file and references the `--force` retry path.
+
+#### C3 — recovery docs (8 fixes)
+
+  - **C3-001 CRITICAL** — `docs/pack-publish.md` `--force` example no longer claims to
+    preserve `docs/how-to-read-this.md`. Replaced with the canonical sentence: `--force
+    clears and replaces the target package directory. Do not keep hand-authored files
+    inside generated package output.` Surrounding prose adjusted to match.
+  - **C3-002 CRITICAL** — `site/src/content/docs/handbook/pack-publish.md` flags table
+    `--force` row carries the canonical sentence verbatim.
+  - **C3-003** — `site/src/content/docs/handbook/known-limitations.md` (new page) mirrors
+    the `## Known limitations` block from this CHANGELOG: B-E-001 frozen-pack version
+    stamp historical artifact, B-E-004 npm provenance deferred to v1.x, B-A-003
+    indexer schema-version migration model.
+  - **C3-004** — `site/src/content/docs/handbook/reference.md` CLI Reference page now
+    carries a `pack publish` entry (synopsis, flags including canonical `--force`
+    sentence, exit codes, link to full handbook page).
+  - **C3-005** — `site/src/content/docs/handbook/recovery.md` (new page) — partial-failure
+    runbook covering review cascade-failure, gather URL failures, pack-publish
+    verify-fail, indexer malformed-JSONL warnings, calibration multi-run failures, and
+    freeze refusals with stable `reason_code` lookup.
+  - **C3-006** — `src/cli/help-topics.ts` (new file) — frozen `HELP_TOPICS` map (4
+    topics: `recovery`, `pack-publish`, `review`, `gather`) backs the new
+    `research-os help <topic>` subcommand. ≤500 chars per topic, no ANSI, no markdown
+    rendering at runtime. `pack-publish` topic carries the canonical `--force` sentence.
+  - **C3-007** — `README.md` quick-start gained a `--force` warning block: `--force
+    clears and replaces the target package directory. Do not keep hand-authored files
+    inside generated package output.` Link to `docs/pack-publish.md` for the full
+    admission contract.
+  - **C3-008** — Subsumed by C3-002; handbook ↔ CHANGELOG now agree on the `--force`
+    framing.
+
+#### Canonical sentence anchored on 5+ surfaces
+
+The sentence `--force clears and replaces the target package directory. Do not keep
+hand-authored files inside generated package output.` is now byte-for-byte present
+across the operator surface. Regression test
+`test/canonical-pack-publish-force-text.test.ts` asserts the load-bearing substring
+`clears and replaces the target package directory` is present on every surface and
+fails on any drop. This applies the "old-API-dead" doctrine to operator-facing prose.
+
+| Surface | File | Verbatim |
+|---|---|---|
+| CLI `--help` | `src/cli.ts` `--force` option description | YES |
+| First-encounter `--force` error | `src/pack/publish/index.ts` | YES |
+| Repo docs | `docs/pack-publish.md` | YES |
+| Handbook page | `site/src/content/docs/handbook/pack-publish.md` | YES |
+| CHANGELOG (this entry) | `CHANGELOG.md` `[Unreleased]` | YES |
+| README quick-start | `README.md` | YES (load-bearing substring) |
+| CLI `help <topic>` | `src/cli/help-topics.ts` (`pack-publish` topic) | YES (load-bearing substring) |
+| Handbook reference | `site/src/content/docs/handbook/reference.md` | YES |
+
+### Doctrine notes
+
+**Doc-update audit scope (codified Stage C Phase 3, 2026-05-11):** When a code change
+affects operator-visible behavior, the doc-update audit must scan **every** operator-facing
+doc surface that mentions the behavior — handbook, README, docs/*, CLI help, error
+messages — not only CHANGELOG. Missing operator-visible doc surfaces is a finding, not
+a follow-up. This rule earned its place when Stage C Phase 1 surfaced that the D-001
+behavior change (Stage A Wave 1) had landed in CHANGELOG and code but never propagated
+to `docs/pack-publish.md` (which claimed the opposite of the live behavior) or to the
+handbook (which inherited the legacy framing). The rule applies forward from this
+release; prior stages were caught in this audit.
 
 ### Known limitations — historical disclosure for v1.0
 

@@ -229,8 +229,12 @@ describe('--detector ollama-intern (model unavailable)', () => {
   it('throws a visible error without falling back to heuristic', async () => {
     await makePackWithClaims(CONFLICTING_CLAIMS);
 
-    await expect(
-      map({
+    // Stage C Phase 3 C1-011: error converted to ResearchOSError
+    // (INTAKE_VALIDATION) with operator-actionable hint (handbook pointer +
+    // ollama pull guidance) — the "use --detector heuristic to bypass"
+    // phrasing moved from the message into the hint.
+    try {
+      await map({
         sectionId: '01-landscape',
         packPath,
         detectorMode: 'ollama-intern',
@@ -239,10 +243,16 @@ describe('--detector ollama-intern (model unavailable)', () => {
           model: TEST_MODEL,
           fetchImpl: makeUnavailableFetch(),
         },
-      }),
-    ).rejects.toThrow(
-      `ollama-intern detector requested but model ${TEST_MODEL} is unavailable; aborting (use --detector heuristic to bypass)`,
-    );
+      });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('INTAKE_VALIDATION');
+      const msg = (err as Error).message;
+      expect(msg).toContain(`model ${TEST_MODEL} is unavailable`);
+      const hint = (err as { hint?: string }).hint ?? '';
+      expect(hint).toContain('--detector heuristic');
+    }
   });
 
   it('does not write contradictions.jsonl when model is unavailable', async () => {

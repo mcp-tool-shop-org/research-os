@@ -23,6 +23,17 @@ export interface VerifyResult {
   name?: string;
   artifactsVerified?: number;
   softWarnings?: string[];
+  // C2-011: when a fingerprinted artifact fails the re-hash check (or is
+  // missing from disk), the relative path of the offending file. The
+  // `reason` field already names it in a human-readable string, but C1
+  // needs a structured handle to attach to error.details without parsing
+  // the prose. Populated on:
+  //   - "Fingerprinted artifact missing: pack/<path>"
+  //   - "Hash mismatch for pack/<path>"
+  //   - "Orphan artifact(s) present in pack: <first>, ..."
+  // Path is in POSIX form (forward slashes) to match how freeze-receipt.json
+  // stores paths.
+  mismatchedFile?: string;
 }
 
 function sha256File(filePath: string): string {
@@ -149,10 +160,13 @@ export function verifyPack(packageDir: string): VerifyResult {
   for (const entry of allFingerprints) {
     const artifactPath = join(packageDir, 'pack', entry.path);
     if (!existsSync(artifactPath)) {
+      // C2-011: surface the offending path as a structured field so the
+      // caller can attach it to error details without parsing `reason`.
       return {
         pass: false,
         reason: `Fingerprinted artifact missing: pack/${entry.path}`,
         name: m.name,
+        mismatchedFile: `pack/${entry.path}`,
       };
     }
     const actualHash = sha256File(artifactPath);
@@ -166,10 +180,12 @@ export function verifyPack(packageDir: string): VerifyResult {
         verified++;
         continue;
       }
+      // C2-011: same — structured handle for the mismatched file.
       return {
         pass: false,
         reason: `Hash mismatch for pack/${entry.path}.\n  receipt: ${entry.sha256}\n  actual:  ${actualHash}`,
         name: m.name,
+        mismatchedFile: `pack/${entry.path}`,
       };
     }
     verified++;

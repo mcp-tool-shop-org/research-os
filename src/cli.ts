@@ -37,7 +37,8 @@ import {
   runSourceCardAudit,
   applySourceCardOverrides,
 } from './sources/source-card-audit.js';
-import { ResearchOSError } from './errors.js';
+import { ResearchOSError, ReviewerProfileNotFoundError } from './errors.js';
+import { HELP_TOPICS } from './cli/help-topics.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 import { loadReceiptForPack, receiptPathForPack } from './calibration/lookup.js';
 import type { ReviewerOptions } from './review/reviewer-options-schema.js';
@@ -701,8 +702,13 @@ program
         );
         const found = research.review_profiles[opts.preset as string];
         if (!found) {
-          throw new Error(
-            `Preset "${opts.preset}" not in research.yaml/review_profiles. Known: ${Object.keys(research.review_profiles).join(', ') || '(none)'}`,
+          // C1-003: structured error using existing sibling code
+          // ReviewerProfileNotFoundError (added in Wave 3).
+          const knownNames = Object.keys(research.review_profiles);
+          throw new ReviewerProfileNotFoundError(
+            String(opts.preset),
+            knownNames,
+            yamlPath,
           );
         }
         preset = found;
@@ -1197,7 +1203,11 @@ packCmd
   .requiredOption('--to <path>', 'Target package directory, e.g. <research-packs>/packages/<name>')
   .option('--from <path>', 'Source frozen pack directory (defaults to cwd)', process.cwd())
   .option('--operator-notes <text>', 'Operator notes recorded in pack.manifest.json', '')
-  .option('--force', 'Overwrite an existing non-empty target directory', false)
+  .option(
+    '--force',
+    '--force clears and replaces the target package directory. Do not keep hand-authored files inside generated package output.',
+    false,
+  )
   .option('--dry-run', 'Print derived manifest and README plan; write nothing', false)
   .action(async (opts) => {
     try {
@@ -1257,8 +1267,10 @@ sourceCardCmd
       if (opts.apply) {
         const fromFile = opts.from as string | undefined;
         if (!fromFile) {
-          process.stderr.write('research-os: --apply requires --from <file>\n');
-          process.exit(1);
+          // C1-002: route through reportError via InvalidArgumentError
+          // (D-008 pattern) instead of bypassing the catch block with raw
+          // stderr + exit(1).
+          throw new InvalidArgumentError('--apply requires --from <file>');
         }
         const result = await applySourceCardOverrides(packPath, fromFile);
         process.stdout.write(`source-card overrides applied\n`);
@@ -1291,6 +1303,26 @@ sourceCardCmd
     } catch (err) {
       reportError(err);
     }
+  });
+
+// Stage C Phase 3 Theme 4 (C3-006 Option C part B): `research-os help <topic>`
+// subcommand. Prints a plain-text snippet from the frozen HELP_TOPICS map. No
+// markdown rendering at runtime, no ANSI codes. Unknown topic exits 2 with the
+// list of available topics; known topic exits 0.
+program
+  .command('help')
+  .description('Print a short plain-text reference for one of the built-in topics')
+  .argument('<topic>', 'Topic name; one of: ' + Object.keys(HELP_TOPICS).join(', '))
+  .action((topic: string) => {
+    const entry = (HELP_TOPICS as Record<string, string | undefined>)[topic];
+    if (entry === undefined) {
+      process.stderr.write(
+        `research-os help: unknown topic "${topic}"\n` +
+          `  Available topics: ${Object.keys(HELP_TOPICS).join(', ')}\n`,
+      );
+      process.exit(2);
+    }
+    process.stdout.write(entry + '\n');
   });
 
 // Only auto-run as a CLI when this file is the process entry point. Under

@@ -30,7 +30,7 @@ Exit 0 = admission-contract PASS. Exit 2 = refused (nothing written).
 | `--to <path>` | yes | — | Target package directory |
 | `--from <path>` | no | cwd | Source frozen pack directory |
 | `--operator-notes <text>` | no | `""` | Notes written into `pack.manifest.json` |
-| `--force` | no | false | Overwrite an existing non-empty target |
+| `--force` | no | false | `--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output. |
 | `--dry-run` | no | false | Derive and print plan; write nothing |
 
 ---

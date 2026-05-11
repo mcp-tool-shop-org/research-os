@@ -152,8 +152,18 @@ describe('pack publish — --force', () => {
     createTinyPack(packDir);
     // First publish
     await publish({ fromDir: packDir, toDir: pkgDir });
-    // Second publish without --force should fail
-    await expect(publish({ fromDir: packDir, toDir: pkgDir })).rejects.toThrow(/force/);
+    // Stage C Phase 3 C1-006: second publish without --force now throws a
+    // structured ResearchOSError(PACK_EXISTS). The canonical "force" word
+    // moved from the message into the hint (where the canonical sentence
+    // lives).
+    try {
+      await publish({ fromDir: packDir, toDir: pkgDir });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('PACK_EXISTS');
+      expect((err as { hint?: string }).hint).toContain('--force');
+    }
     // Third publish with --force should succeed
     const result = await publish({ fromDir: packDir, toDir: pkgDir, force: true });
     expect(result.verifyPassed).toBe(true);
@@ -205,7 +215,16 @@ describe('pack publish — refusal cases', () => {
 
     createTinyPack(packDir);
 
-    await expect(publish({ fromDir: packDir, toDir: pkgDir })).rejects.toThrow(/force/);
+    // Stage C Phase 3 C1-006: structured PACK_EXISTS — "force" moved from
+    // the message into the canonical-sentence hint.
+    try {
+      await publish({ fromDir: packDir, toDir: pkgDir });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('PACK_EXISTS');
+      expect((err as { hint?: string }).hint).toContain('--force');
+    }
   });
 
   it('D-001 part 1: --force clears the target so operator-authored how-to-read-this.md is REPLACED, not preserved', async () => {

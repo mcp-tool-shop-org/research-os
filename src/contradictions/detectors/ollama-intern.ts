@@ -1,4 +1,5 @@
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
+import { emitProgress } from '../../util/progress.js';
 import type { Claim } from '../../claims/schema.js';
 import type {
   ContradictionDetector,
@@ -198,11 +199,31 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
     // final ledger; the model never sees them.
     const candidatePairs = candidateContradictionPairs(claims);
     const drafts: PairedDraft[] = [];
+    // C2-008: throttled per-pair progress. Emit at most every 5 pairs OR
+    // every 10s (whichever first). Without the throttle dense sections
+    // (435 pairs at 10s/pair) would flood stderr with one line per LLM call;
+    // without the time floor sparse sections would only print every 5*10s.
+    const PAIR_INTERVAL = 5;
+    const TIME_INTERVAL_MS = 10_000;
+    const totalPairs = candidatePairs.length;
+    let lastEmittedPair = 0;
+    let lastEmittedAt = Date.now();
+    let pairIndex = 0;
     for (const [i, j] of candidatePairs) {
+      pairIndex += 1;
       const a = claims[i]!;
       const b = claims[j]!;
       const draft = await this.classifyPair(a, b);
       if (draft) drafts.push({ claim_a: a, claim_b: b, draft });
+      const now = Date.now();
+      const pairsSince = pairIndex - lastEmittedPair;
+      const msSince = now - lastEmittedAt;
+      const isLast = pairIndex === totalPairs;
+      if (isLast || pairsSince >= PAIR_INTERVAL || msSince >= TIME_INTERVAL_MS) {
+        emitProgress(`Classified ${pairIndex}/${totalPairs} pairs`);
+        lastEmittedPair = pairIndex;
+        lastEmittedAt = now;
+      }
     }
     return {
       ok: true,

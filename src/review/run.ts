@@ -302,9 +302,17 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     if (!heuristic || heuristic === reviewer) {
       // B-C-002: structured cascade-failed error. Includes the failing
       // reviewer name + error so callers can distinguish from generic errors.
-      throw new ReviewerCascadeFailedError([
-        `${reviewer.name}:${result.error}`,
-      ]);
+      // C2-002: pass window-progress through the ReviewerCascadeFailedError
+      // constructor so the hint can report "Completed N/M window(s) before
+      // failure." The constructor signature is owned by src/errors.ts (C1's
+      // lane); both fields are optional there.
+      throw new ReviewerCascadeFailedError(
+        [`${reviewer.name}:${result.error}`],
+        {
+          completedWindows: result.completedWindows,
+          totalWindows: result.totalWindows,
+        },
+      );
     }
     return reviewWithSpecificReviewer({
       packPath,
@@ -428,6 +436,9 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
 
   if (allDrafts.length === 0 && failedReviewers.length === args.reviewers.length) {
     // B-C-002: every reviewer failed in multi-pass mode.
+    // C2-002: multi-pass cascade has no single window-count to report (each
+    // reviewer paged independently). Both fields stay undefined; the hint
+    // falls back to the generic "Inspect each error and re-run" form.
     throw new ReviewerCascadeFailedError(failedReviewers);
   }
 
@@ -473,9 +484,17 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
   });
   if (!result.ok) {
     // B-C-002: structured cascade-failed error from the fallback reviewer path.
-    throw new ReviewerCascadeFailedError([
-      `${args.reviewer.name}:${result.error}`,
-    ]);
+    // C2-002: forward window-progress through the constructor when the
+    // failing reviewer had a paged window concept. Heuristic fallback has
+    // no windows — both fields stay undefined and the hint falls back to
+    // the simpler cascade message.
+    throw new ReviewerCascadeFailedError(
+      [`${args.reviewer.name}:${result.error}`],
+      {
+        completedWindows: result.completedWindows,
+        totalWindows: result.totalWindows,
+      },
+    );
   }
   return finalizeReview({
     packPath: args.packPath,

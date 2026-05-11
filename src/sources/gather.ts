@@ -7,6 +7,7 @@ import {
   PackNotFoundError,
   SectionNotFoundError,
 } from '../errors.js';
+import { emitProgress } from '../util/progress.js';
 import { fetchOnce } from './fetch.js';
 import { collectUrls } from './url-input.js';
 import { defaultExtractors, pickExtractor } from './extractors/index.js';
@@ -87,7 +88,12 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
   // sources.jsonl file is read at most once per gather() call (was O(N²)).
   const sourceIdAppender = await createSectionSourceIdAppender(packPath, options.sectionId);
 
+  let urlIndex = 0;
   for (const url of urls) {
+    urlIndex += 1;
+    // C2-005: per-URL stderr progress line. TTY-gated through emitProgress so
+    // a piped run / non-interactive shell stays silent and stdout is untouched.
+    emitProgress(`Gathering ${urlIndex}/${urls.length} ${url}`);
     // B-A-001 — per-URL try/catch. fetchOnce can throw if it raises through
     // SSRF DNS lookup, writeFile of evidence/raw/<sid>.<ext> fails for
     // disk-full/EACCES/EROFS/AV-quarantine, etc. writeSourceCard +
@@ -159,9 +165,21 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
             extraction_extractor: extractor.name,
             extraction_error: result.error,
           };
+          // C2-005 failure line for the extraction-failed branch (fetch ok,
+          // extractor said no). receipt is still appended below, so we say
+          // "receipt recorded" not "no record".
+          emitProgress(`  ! Failed (extraction: ${result.error}) — receipt recorded for ${url}`);
         }
       } else {
         delta.fetchedFailed = 1;
+        // C2-005 failure line for the fetch-not-ok branch (HTTP 404/503,
+        // network_error, etc — fetchOnce returned a receipt rather than
+        // throwing). status may be null for network errors; surface
+        // fetch_outcome plus status when present so the operator sees the
+        // distinction (status_text is on the receipt as well but
+        // fetch_outcome is the canonical category).
+        const code = receipt.status !== null ? ` HTTP ${receipt.status}` : '';
+        emitProgress(`  ! Failed (${receipt.fetch_outcome}${code}) — receipt recorded for ${url}`);
       }
 
       await appendFetchLog(packPath, receiptToWrite);
@@ -173,6 +191,13 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
       summary.extractedFailed += delta.extractedFailed;
       summary.cardsWritten += delta.cardsWritten;
     } catch (err) {
+      // C2-005 / C2-006: name the failing URL on stderr inline so the operator
+      // sees WHICH URL just failed without grep'ing fetch-log.jsonl after the
+      // run. Best-effort error class extraction (constructor name) so the
+      // line tells the operator what kind of failure it was.
+      const errClass = err instanceof Error ? err.constructor.name : 'Error';
+      const errMsg = err instanceof Error ? err.message : String(err);
+      emitProgress(`  ! Failed (${errClass}: ${errMsg}) — receipt recorded for ${url}`);
       // Roll back: deltas were never committed. The card may have been
       // pushed to summary.sourceIds before a downstream throw — pop it back
       // off to keep the array consistent with cardsWritten.

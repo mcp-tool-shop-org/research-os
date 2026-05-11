@@ -49,7 +49,18 @@ export interface DraftFinding {
 
 export type ReviewerResult =
   | { ok: true; drafts: DraftFinding[]; method: string; rejected_ungrounded?: number }
-  | { ok: false; error: string };
+  // C2-002: on cascade failure callers want to tell the operator how much
+  // work completed before the cascade gave up. Both fields are optional —
+  // heuristic reviewer has no concept of windows. ollama-intern populates
+  // them so the eventual ReviewerCascadeFailedError hint can read
+  // "Completed N/M windows before cascade failure." instead of leaving the
+  // operator guessing whether the reviewer hung on window 1 or window 11.
+  | {
+      ok: false;
+      error: string;
+      completedWindows?: number;
+      totalWindows?: number;
+    };
 
 export interface ReviewerInput {
   research: ResearchYaml;

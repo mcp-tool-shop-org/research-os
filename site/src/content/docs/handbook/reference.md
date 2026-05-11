@@ -230,6 +230,36 @@ research-os invalidate extraction 01-landscape
 research-os invalidate review 01-landscape
 ```
 
+---
+
+### `research-os pack publish`
+
+Export a frozen research pack into the canonical `research-packs` archive format.
+Derives the admission contract, copies all artifacts, and verifies the result — in one command.
+
+```bash
+research-os pack publish \
+  --from ./research-os-packs/my-pack \
+  --to ./research-packs/packages/my-pack
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--to <path>` | yes | — | Target package directory |
+| `--from <path>` | no | cwd | Source frozen pack directory |
+| `--operator-notes <text>` | no | `""` | Free-text notes written into `pack.manifest.json` |
+| `--force` | no | false | `--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output. |
+| `--dry-run` | no | false | Derive manifest + README, print plan, write nothing |
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | Success — admission-contract PASS |
+| 2 | Refused — pack or target failed a pre-condition; nothing written |
+
+Full reference: [pack publish handbook page](/research-os/handbook/pack-publish/).
+
+---
+
 ## Exit codes
 
 | Code | Meaning |
@@ -237,3 +267,11 @@ research-os invalidate review 01-landscape
 | 0 | Success |
 | 1 | User error (bad input, pack not found) |
 | 2 | Gate/freeze/synthesis blocked |
+
+## Help topics
+
+```
+research-os help <topic>
+```
+
+Static topic content keyed by name. Topics: `recovery`, `pack-publish`, `review`, `gather`.

@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
+import { PackNotFoundError, ResearchOSError, SectionNotFoundError } from '../errors.js';
+import { InvalidArgumentError } from 'commander';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from './schema.js';
 import {
@@ -110,8 +111,10 @@ async function resolveDetector(options: MapOptions): Promise<{
 }> {
   const mode = options.detectorMode ?? 'auto';
 
+  // C1-011: detector-mode validation — InvalidArgumentError flows through
+  // commander's usage-error handling (consistent with parseIntArg / D-008).
   if (!VALID_DETECTOR_MODES.includes(mode as (typeof VALID_DETECTOR_MODES)[number])) {
-    throw new Error(
+    throw new InvalidArgumentError(
       `contradict map: invalid --detector value "${mode}"; valid values are: auto, heuristic, ollama-intern`,
     );
   }
@@ -126,8 +129,15 @@ async function resolveDetector(options: MapOptions): Promise<{
   if (mode === 'ollama-intern') {
     const d = new OllamaInternContradictionDetector(options.ollamaConfig ?? {});
     if (!(await d.available())) {
-      throw new Error(
-        `contradict map: ollama-intern detector requested but model ${d.model} is unavailable; aborting (use --detector heuristic to bypass)`,
+      // C1-011: ollama-intern not running is a state failure (not a CLI
+      // arg validation failure). Closest existing code is INTAKE_VALIDATION
+      // ("admission to the detector path failed"). See escalation note:
+      // a dedicated DETECTOR_UNAVAILABLE / OLLAMA_UNAVAILABLE code would
+      // be more precise.
+      throw new ResearchOSError(
+        `contradict map: ollama-intern detector requested but model ${d.model} is unavailable; aborting.`,
+        'INTAKE_VALIDATION',
+        `Start the Ollama daemon and pull the model (\`ollama pull ${d.model}\`), or fall back with --detector heuristic. See handbook/known-limitations.md.`,
       );
     }
     return {

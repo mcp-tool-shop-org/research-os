@@ -34,7 +34,7 @@ research-os pack publish --to <path> [--from <path>] [--operator-notes <text>] [
 | `--to <path>` | yes | — | Target package directory, e.g. `<research-packs>/packages/<name>` |
 | `--from <path>` | no | `cwd` | Source frozen pack directory |
 | `--operator-notes <text>` | no | `""` | Free-text notes written into `pack.manifest.json` |
-| `--force` | no | `false` | Overwrite an existing non-empty target directory |
+| `--force` | no | `false` | `--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output. |
 | `--dry-run` | no | `false` | Derive manifest + README, print plan, write nothing |
 
 ### Exit codes
@@ -61,7 +61,11 @@ research-os pack publish \
   --dry-run
 ```
 
-**Re-publish with force (overwrites existing, preserves `docs/how-to-read-this.md` if operator-authored):**
+**Re-publish with force (destructive — clears and replaces the target):**
+
+`--force clears and replaces the target package directory. Do not keep hand-authored files inside generated package output.`
+Edit upstream artifacts (claims, sources, synthesis) or sibling files instead.
+
 ```bash
 research-os pack publish \
   --from ./research-os-packs/my-pack \

@@ -4,7 +4,8 @@ import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as yamlParse } from 'yaml';
 
-import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
+import { PackNotFoundError, ResearchOSError, SectionNotFoundError } from '../errors.js';
+import { InvalidArgumentError } from 'commander';
 import { ResearchYamlSchema } from '../intake/schema.js';
 import { RESEARCH_OS_VERSION } from '../index.js';
 import {
@@ -153,13 +154,22 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
     throw new SectionNotFoundError(options.sectionId);
 
   const query = options.query.trim();
-  if (query.length < 4) throw new Error('discover query must be at least 4 characters');
+  // C1-010: validation → InvalidArgumentError (D-008 pattern).
+  if (query.length < 4)
+    throw new InvalidArgumentError('discover query must be at least 4 characters');
 
   const target = options.targetCount ?? DEFAULT_TARGET_COUNT;
   const providers = options.providers ?? defaultProviders();
   const provider = await pickProvider(providers);
   if (!provider) {
-    throw new Error('No discover provider available. Default provider is LLM-based and requires Ollama.');
+    // C1-010: state failure (no provider available). INTAKE_VALIDATION is the
+    // closest existing code; see escalation note (DETECTOR_UNAVAILABLE family
+    // would be more precise).
+    throw new ResearchOSError(
+      'No discover provider available. Default provider is LLM-based and requires Ollama.',
+      'INTAKE_VALIDATION',
+      'Start the Ollama daemon (default provider requires it), or supply a custom provider via the library API. See handbook/known-limitations.md.',
+    );
   }
 
   const sectionPurpose = await loadSectionPurpose(packPath, options.sectionId);
@@ -170,7 +180,12 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
     targetCount: target,
   });
   if (!result.ok) {
-    throw new Error(`Discover provider "${provider.name}" failed: ${result.error}`);
+    // C1-010: provider runtime failure — state error.
+    throw new ResearchOSError(
+      `Discover provider "${provider.name}" failed: ${result.error}`,
+      'INTAKE_VALIDATION',
+      `Inspect the provider error above. Re-run \`research-os discover run <section> --query "..."\` after addressing the cause (e.g., restart Ollama). See handbook/recovery.md.`,
+    );
   }
 
   const stamp = (options.now ?? (() => new Date()))();
@@ -301,7 +316,13 @@ export async function approve(options: ApproveOptions): Promise<ApproveResult> {
   if (options.candidateIds && options.candidateIds.length > 0) {
     for (const id of options.candidateIds) {
       const c = latest.get(id);
-      if (!c) throw new Error(`Candidate ${id} not found in section ${options.sectionId}`);
+      // C1-010: candidate-id not found. Closest existing code is INTAKE_VALIDATION.
+      if (!c)
+        throw new ResearchOSError(
+          `Candidate ${id} not found in section ${options.sectionId}`,
+          'INTAKE_VALIDATION',
+          `Check sections/${options.sectionId}/discovery-candidates.jsonl for valid candidate_ids, or re-run \`research-os discover run\` first.`,
+        );
       targets.push(c);
     }
   } else if (options.topN && options.topN > 0) {
@@ -310,7 +331,8 @@ export async function approve(options: ApproveOptions): Promise<ApproveResult> {
       .sort((a, b) => a.rank - b.rank);
     targets.push(...eligible.slice(0, options.topN));
   } else {
-    throw new Error('approve requires --candidate <id> or --top <N>');
+    // C1-010: caller-arg validation (D-008 pattern).
+    throw new InvalidArgumentError('approve requires --candidate <id> or --top <N>');
   }
 
   const approvedIds: string[] = [];
@@ -332,7 +354,8 @@ export async function reject(options: RejectOptions): Promise<RejectResult> {
   if (!existsSync(join(packPath, 'sections', options.sectionId)))
     throw new SectionNotFoundError(options.sectionId);
   if (options.reason.trim().length < 4) {
-    throw new Error('reject requires --reason of at least 4 characters');
+    // C1-010: caller-arg validation (D-008 pattern).
+    throw new InvalidArgumentError('reject requires --reason of at least 4 characters');
   }
   const all = await readCandidates(packPath, options.sectionId);
   const latest = latestPerCandidate(all);
@@ -341,7 +364,12 @@ export async function reject(options: RejectOptions): Promise<RejectResult> {
   const rejectedIds: string[] = [];
   for (const id of options.candidateIds) {
     const c = latest.get(id);
-    if (!c) throw new Error(`Candidate ${id} not found in section ${options.sectionId}`);
+    if (!c)
+      throw new ResearchOSError(
+        `Candidate ${id} not found in section ${options.sectionId}`,
+        'INTAKE_VALIDATION',
+        `Check sections/${options.sectionId}/discovery-candidates.jsonl for valid candidate_ids.`,
+      );
     await appendStatusUpdate(
       packPath,
       options.sectionId,

@@ -15,6 +15,7 @@ import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { ResearchOSError } from '../errors.js';
 import { SourceCardSchema, type SourceCard } from './schema.js';
 import { readOverrides, appendOverride } from './source-card-overrides.js';
 import {
@@ -186,8 +187,12 @@ function buildMarkdown(report: AuditReport): string {
 export async function runSourceCardAudit(packPath: string): Promise<AuditResult> {
   const cardsDir = join(packPath, 'evidence', 'source-cards');
   if (!existsSync(cardsDir)) {
-    throw new Error(
+    // C1-013: structured error. Closest existing code: PACK_NOT_FOUND
+    // (pack lacks a required sub-directory).
+    throw new ResearchOSError(
       `Pack directory does not contain evidence/source-cards/: ${packPath}`,
+      'PACK_NOT_FOUND',
+      `Run \`research-os gather <section>\` to produce source cards before auditing. See handbook/recovery.md.`,
     );
   }
 
@@ -285,8 +290,14 @@ export async function applySourceCardOverrides(
 ): Promise<ApplyResult> {
   const freezeReceipt = join(packPath, 'audits', 'freeze-receipt.json');
   if (existsSync(freezeReceipt)) {
-    throw new Error(
-      `Cannot apply overrides to a frozen pack. audits/freeze-receipt.json is present.\n  Pack: ${packPath}\n  Use a fresh (non-frozen) copy of the pack for operator corrections.`,
+    // C1-013: frozen-pack refusal. Closest existing code: SYNTHESIS_NOT_READY
+    // ("pack is in a state that refuses writes"). See escalation note —
+    // a dedicated PACK_FROZEN code would programmatically distinguish frozen
+    // refusals from synthesis-not-ready refusals.
+    throw new ResearchOSError(
+      `Cannot apply overrides to a frozen pack. audits/freeze-receipt.json is present (pack: ${packPath}).`,
+      'SYNTHESIS_NOT_READY',
+      `Use a fresh (non-frozen) copy of the pack for operator corrections, or run \`research-os invalidate extraction --reason "..."\` to clear frozen_at before applying overrides. See handbook/recovery.md.`,
     );
   }
 
@@ -294,20 +305,37 @@ export async function applySourceCardOverrides(
   try {
     rawContent = await readFile(fromFile, 'utf8');
   } catch (err) {
-    throw new Error(`Cannot read override file: ${fromFile}`, { cause: err });
+    // C1-013: file-read failure. PACK_NOT_FOUND broadens to "operator-supplied
+    // file not readable" — see escalation note.
+    throw new ResearchOSError(
+      `Cannot read override file: ${fromFile}`,
+      'PACK_NOT_FOUND',
+      `Check the path passed to --from. The override file must be a readable JSON array at the supplied path.`,
+      err instanceof Error ? err : undefined,
+    );
   }
 
   let entries: unknown[];
   try {
     const parsed: unknown = JSON.parse(rawContent);
     if (!Array.isArray(parsed)) {
-      throw new Error('Override file must be a JSON array at the top level.');
+      // C1-013: schema-shape validation.
+      throw new ResearchOSError(
+        'Override file must be a JSON array at the top level.',
+        'INTAKE_VALIDATION',
+        `Edit ${fromFile} so the top-level value is a JSON array of override objects. See handbook/recovery.md.`,
+      );
     }
     entries = parsed;
   } catch (err) {
-    throw new Error(
+    if (err instanceof ResearchOSError) throw err;
+    // C1-013: JSON parse failure. PACK_PARSE_ERROR is the existing code for
+    // "JSON parse failed in a pack-adjacent file".
+    throw new ResearchOSError(
       `Override file parse error: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err },
+      'PACK_PARSE_ERROR',
+      `Inspect ${fromFile} for malformed JSON. See handbook/recovery.md.`,
+      err instanceof Error ? err : undefined,
     );
   }
 
@@ -317,9 +345,12 @@ export async function applySourceCardOverrides(
     try {
       validated.push(validateSourceCardOverride(entries[i]));
     } catch (err) {
-      throw new Error(
+      // C1-013: per-entry validation failure.
+      throw new ResearchOSError(
         `Override entry ${i + 1} failed validation: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err },
+        'INTAKE_VALIDATION',
+        `Fix the schema violation at entry ${i + 1} of ${fromFile}. See handbook/recovery.md.`,
+        err instanceof Error ? err : undefined,
       );
     }
   }

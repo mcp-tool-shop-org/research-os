@@ -794,15 +794,23 @@ async function persistReceipt(receipt) {
   const runsDir = join(profileDir, 'runs');
   await mkdir(runsDir, { recursive: true });
 
+  // C2-004: intra-run step boundary lines so multi-run calibration shows
+  // current step / total steps inside each Run N of M block. The per-run
+  // step plan is fixed at 3 (build fixture, paged LLM review, score + write
+  // receipt). The LLM-review step itself emits per-window stderr via
+  // emitProgress (C2-001 / C2-003) from inside the live reviewer, so the
+  // operator sees both the run-level skeleton AND the window-level pulse.
+  const TOTAL_STEPS_PER_RUN = 3;
   for (let i = 0; i < runsCount; i++) {
     const runNum = i + 1;
     console.log(`\n=== Run ${runNum} of ${runsCount} ===`);
-    console.log(`Building fixture at: ${outDir} (fresh rebuild for isolation)`);
+    console.log(`  [step 1/${TOTAL_STEPS_PER_RUN}] Building fixture at: ${outDir} (fresh rebuild for isolation)`);
     const runStartMs = Date.now();
     const packPath = await buildFixturePack();
-    console.log(`Fixture built. Running paged LLM review (${mode})...`);
+    console.log(`  [step 2/${TOTAL_STEPS_PER_RUN}] Fixture built. Running paged LLM review (${mode})...`);
     const summary = await runCalibration(packPath, mode, modelOverride, reviewerOptions);
     const runtimeMs = Date.now() - runStartMs;
+    console.log(`  [step 3/${TOTAL_STEPS_PER_RUN}] Scoring + writing per-run receipt...`);
 
     const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs, reviewerOptions);
 

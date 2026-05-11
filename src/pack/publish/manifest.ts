@@ -181,17 +181,35 @@ export function deriveManifest(
   warnings: string[] = [],
 ): PackManifest {
   // research.yaml
+  // C1-008: 4 frozen-pack preconditions. We use the closest existing codes
+  // (PACK_NOT_FOUND for missing pack-required artifacts, SYNTHESIS_NOT_READY
+  // for pack-not-frozen). See closeout escalation note: a dedicated
+  // `PACK_NOT_FROZEN` code would programmatically distinguish "pack absent"
+  // from "pack present but never frozen" — not introduced in this wave.
   const yamlPath = join(packDir, 'research.yaml');
-  if (!existsSync(yamlPath)) throw new Error(`research.yaml not found in ${packDir}`);
+  if (!existsSync(yamlPath))
+    throw new ResearchOSError(
+      `research.yaml not found in ${packDir}`,
+      'PACK_NOT_FOUND',
+      `Run \`research-os init\` to create a pack, or supply the correct --from <dir>. See handbook/pack-publish.md.`,
+    );
   const research = ResearchYamlSchema.parse(parseYaml(readFileSync(yamlPath, 'utf8')));
   if (!research.frozen_at) {
-    throw new Error(`Pack is not frozen: research.yaml.frozen_at is null — run research-os freeze first`);
+    throw new ResearchOSError(
+      `Pack is not frozen: research.yaml.frozen_at is null`,
+      'SYNTHESIS_NOT_READY',
+      `Run \`research-os freeze\` to produce audits/freeze-receipt.json and stamp research.yaml.frozen_at. See handbook/pack-publish.md.`,
+    );
   }
 
   // freeze-receipt.json → sha256 of file bytes → freeze_receipt_sha256; parse for frozen_at
   const receiptPath = join(packDir, 'audits/freeze-receipt.json');
   if (!existsSync(receiptPath)) {
-    throw new Error(`audits/freeze-receipt.json not found — pack is not frozen`);
+    throw new ResearchOSError(
+      `audits/freeze-receipt.json not found — pack is not frozen`,
+      'SYNTHESIS_NOT_READY',
+      `Run \`research-os freeze\` to produce the freeze receipt. See handbook/pack-publish.md.`,
+    );
   }
   const receiptBytes = readFileSync(receiptPath);
   const freeze_receipt_sha256 = sha256Bytes(receiptBytes);
@@ -200,7 +218,12 @@ export function deriveManifest(
 
   // pack-audit.json → per-section accepted_claims for soft cross-check (F-36)
   const packAuditPath = join(packDir, 'audits/pack-audit.json');
-  if (!existsSync(packAuditPath)) throw new Error(`audits/pack-audit.json not found`);
+  if (!existsSync(packAuditPath))
+    throw new ResearchOSError(
+      `audits/pack-audit.json not found`,
+      'PACK_NOT_FOUND',
+      `Run \`research-os audit\` before \`research-os freeze\` to produce audits/pack-audit.json. See handbook/pack-publish.md.`,
+    );
   const packAudit = JSON.parse(readFileSync(packAuditPath, 'utf8')) as {
     section_summaries?: AuditSectionSummary[];
   };
@@ -225,15 +248,17 @@ export function deriveManifest(
 
     // Refuse on incompatible decisions at the same timestamp — the
     // latest-decision-wins tie-breaker is undefined for these.
+    // C1-009: translate the internal "tie-breaker undefined" phrasing into an
+    // operator-actionable hint. INTAKE_VALIDATION is the closest existing
+    // code for "admission-contract refusal: input data violates an invariant".
     const conflicts = findIncompatibleDecisions(reviews);
     if (conflicts.length > 0) {
       const first = conflicts[0];
-      throw new Error(
-        `Section ${sectionId}: claim-reviews.jsonl has incompatible decisions for ` +
-          `claim_id=${first.claim_id} at created_at=${first.created_at} ` +
-          `(decisions seen: ${first.decisions.join(', ')}). ` +
-          `Latest-decision-wins tie-breaker undefined — investigate the review pipeline state.` +
-          (conflicts.length > 1 ? ` (${conflicts.length - 1} other claim_id(s) similarly affected.)` : ''),
+      const others = conflicts.length > 1 ? ` (${conflicts.length - 1} other claim_id(s) similarly affected)` : '';
+      throw new ResearchOSError(
+        `Section ${sectionId}: claim-reviews.jsonl has incompatible review decisions for claim_id=${first.claim_id} recorded at the same timestamp ${first.created_at} (decisions: ${first.decisions.join(', ')})${others}.`,
+        'INTAKE_VALIDATION',
+        `Inspect sections/${sectionId}/claim-reviews.jsonl rows with created_at=${first.created_at} — multiple rows for the same claim_id at the same timestamp prevent a deterministic latest-decision-wins resolution. Remove the duplicate row or re-run \`research-os review\` to overwrite with a fresh decision. See handbook/recovery.md.`,
       );
     }
 
@@ -257,11 +282,13 @@ export function deriveManifest(
         if (!claimIds.has(cid)) phantoms.push(cid);
       }
       if (phantoms.length > 0) {
-        throw new Error(
-          `Section ${sectionId}: ${phantoms.length} effective accepted claim_id(s) ` +
-            `absent from claims.jsonl — phantom claims violate the closure-ledger ` +
-            `subset invariant. Examples: ${phantoms.slice(0, 3).join(', ')}` +
-            (phantoms.length > 3 ? ` (+${phantoms.length - 3} more)` : ''),
+        // C1-009: operator-actionable translation of "phantom claim_ids".
+        const examples = phantoms.slice(0, 3).join(', ');
+        const more = phantoms.length > 3 ? ` (+${phantoms.length - 3} more)` : '';
+        throw new ResearchOSError(
+          `Section ${sectionId}: ${phantoms.length} accepted claim_id(s) reference a claim that does not exist in sections/${sectionId}/claims.jsonl (examples: ${examples}${more}).`,
+          'INTAKE_VALIDATION',
+          `Each accepted claim_id must exist in claims.jsonl. Either restore the missing claim row(s), or invalidate the review state via \`research-os invalidate review ${sectionId}\` and re-run review. See handbook/recovery.md.`,
         );
       }
     } else {
@@ -285,7 +312,12 @@ export function deriveManifest(
     // audits/<section-id>-gate.json → verdict + synthesis_eligible
     const gateResultPath = join(packDir, 'audits', `${sectionId}-gate.json`);
     if (!existsSync(gateResultPath)) {
-      throw new Error(`audits/${sectionId}-gate.json not found — section not gated`);
+      // C1-008: missing gate result is a pack-not-frozen-cleanly signal.
+      throw new ResearchOSError(
+        `audits/${sectionId}-gate.json not found — section not gated`,
+        'PACK_NOT_FOUND',
+        `Run \`research-os gate ${sectionId}\` (then \`research-os freeze\`) to produce the gate result. See handbook/pack-publish.md.`,
+      );
     }
     const gateResult = GateResultMinimalSchema.parse(
       JSON.parse(readFileSync(gateResultPath, 'utf8')),
@@ -293,10 +325,12 @@ export function deriveManifest(
 
     // Refuse on non-synthesis-eligible section gate (defense in depth — freeze
     // should already block this, but admission is the last gate).
+    // C1-009: operator-actionable phrasing.
     if (!gateResult.synthesis_eligible) {
-      throw new Error(
-        `Section ${sectionId}: gate is not synthesis_eligible (verdict=${gateResult.verdict}). ` +
-          `Pack admission requires every section to be synthesis-eligible.`,
+      throw new ResearchOSError(
+        `Section ${sectionId}: gate verdict is ${gateResult.verdict} and synthesis_eligible=false; pack admission requires every section to be synthesis-eligible.`,
+        'INTAKE_VALIDATION',
+        `Re-run \`research-os gate ${sectionId}\` after resolving the gate's blocking reasons (see audits/${sectionId}-gate.{json,md}). Then re-freeze and re-publish. See handbook/recovery.md.`,
       );
     }
 
@@ -314,9 +348,12 @@ export function deriveManifest(
     const resolutionMap = latestContradictionStatuses(resolutions);
     const stillUnresolved = [...resolutionMap.values()].filter((s) => s === 'unresolved').length;
     if (stillUnresolved > 0) {
-      throw new Error(
-        `Section ${sectionId} has ${stillUnresolved} unresolved contradictions.` +
-          ` Freeze should have blocked this — investigate before publishing.`,
+      // C1-009: operator-actionable phrasing. Unresolved contradictions can be
+      // closed via `research-os contradict resolve`.
+      throw new ResearchOSError(
+        `Section ${sectionId} has ${stillUnresolved} unresolved contradiction(s); freeze should have blocked this.`,
+        'INTAKE_VALIDATION',
+        `Run \`research-os contradict resolve ${sectionId} --id <id> --status resolved --reason "..."\` (or --all) to close them, then re-freeze. See handbook/recovery.md.`,
       );
     }
     totalPreserved += [...resolutionMap.values()].filter((s) => s !== 'unresolved').length;

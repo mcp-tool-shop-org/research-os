@@ -1,4 +1,5 @@
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
+import { emitProgress } from '../../util/progress.js';
 import { ReviewerOptionsSchema } from '../reviewer-options-schema.js';
 import type { ReviewerOptions } from '../reviewer-options-schema.js';
 import type {
@@ -307,13 +308,28 @@ export class OllamaInternReviewer implements Reviewer {
     }
 
     const windows = pageClaimsForReview(input.candidateClaims, this.claimsPerWindow);
+    // C2-003: upfront banner so the operator sees the work plan before any
+    // model call. passLabel distinguishes general vs narrow_critic on
+    // two-pass runs — the same Reviewer instance carries `mode`.
+    const passLabel = this.mode === 'narrow_critic' ? 'narrow_critic' : 'general';
+    emitProgress(
+      `Reviewing ${input.candidateClaims.length} claims across ${windows.length} window${windows.length === 1 ? '' : 's'} (pass: ${passLabel})...`,
+    );
     const allDrafts: DraftFinding[] = [];
     const pageErrors: string[] = [];
     let pagesOk = 0;
     let rejectedCrossWindow = 0;
+    let claimsSoFar = 0;
 
-    for (const windowClaims of windows) {
+    for (let wIdx = 0; wIdx < windows.length; wIdx += 1) {
+      const windowClaims = windows[wIdx]!;
       const validIds = new Set(windowClaims.map((c) => c.claim_id));
+      claimsSoFar += windowClaims.length;
+      // C2-001: per-window progress. Includes pass label so two-pass logs
+      // make sense when general and narrow_critic interleave.
+      emitProgress(
+        `Reviewing window ${wIdx + 1}/${windows.length} (claim ${claimsSoFar}/${input.candidateClaims.length}, pass: ${passLabel})...`,
+      );
       const page = await this.reviewOnePage(
         windowClaims,
         input.section.id,
@@ -346,6 +362,10 @@ export class OllamaInternReviewer implements Reviewer {
           pageErrors.length === 1
             ? pageErrors[0]!
             : `all ${windows.length} review pages failed (first: ${pageErrors[0] ?? 'unknown'})`,
+        // C2-002: pagesOk is 0 in this branch by definition. totalWindows
+        // is still useful so the cascade hint can name the work scope.
+        completedWindows: 0,
+        totalWindows: windows.length,
       };
     }
 

@@ -3,6 +3,8 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
+import { InvalidArgumentError } from 'commander';
+
 import { PackNotFoundError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { RESEARCH_OS_VERSION } from '../index.js';
@@ -170,13 +172,14 @@ export async function invalidateExtraction(
   if (!existsSync(yamlPath)) throw new PackNotFoundError(packPath);
 
   const reason = options.reason.trim();
+  // C1-014: caller-arg validation (D-008 pattern).
   if (reason.length < 8) {
-    throw new Error('invalidation reason must be at least 8 characters');
+    throw new InvalidArgumentError('invalidation reason must be at least 8 characters');
   }
 
   const label = (options.label ?? 'pre-span-extraction').trim();
   if (!/^[a-z0-9-]+$/.test(label)) {
-    throw new Error('invalidation label must be a kebab-case slug');
+    throw new InvalidArgumentError('invalidation label must be a kebab-case slug (a-z, 0-9, hyphen)');
   }
   const newContract = options.newContract ?? 'span-first-extraction';
   const supersededContract = options.supersededContract ?? 'authored-evidence-excerpt';

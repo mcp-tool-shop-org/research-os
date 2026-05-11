@@ -91,7 +91,18 @@ describe('F-36: deriveManifest refuses on real integrity problems', () => {
       join(packDir, 'sections/01-test/claim-reviews.jsonl'),
       `{"claim_id":"${PHANTOM}","decision":"accepted_for_synthesis","reason":"phantom","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:30:00.000Z"}\n`,
     );
-    expect(() => deriveManifest(packDir, 'test-package')).toThrow(/phantom/i);
+    // Stage C Phase 3 C1-009: error reworded into operator-actionable
+    // phrasing ("references a claim that does not exist") and converted to
+    // ResearchOSError(INTAKE_VALIDATION). Assert on the structured code
+    // rather than legacy "phantom" substring.
+    try {
+      deriveManifest(packDir, 'test-package');
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('INTAKE_VALIDATION');
+      expect((err as Error).message).toMatch(/does not exist|absent|not exist/i);
+    }
   });
 
   it('refuses when two review rows for the same claim_id at the same created_at disagree', () => {
@@ -101,7 +112,17 @@ describe('F-36: deriveManifest refuses on real integrity problems', () => {
       join(packDir, 'sections/01-test/claim-reviews.jsonl'),
       `{"claim_id":"${C1}","decision":"rejected","reason":"conflict-row","finding_ids":[],"reviewer":"heuristic","review_method":"heuristic","created_at":"2026-05-09T11:01:00.000Z"}\n`,
     );
-    expect(() => deriveManifest(packDir, 'test-package')).toThrow(/incompatible decisions/i);
+    // Stage C Phase 3 C1-009: error reworded — "incompatible decisions"
+    // → "incompatible review decisions ... at the same timestamp". Assert
+    // on the structured code.
+    try {
+      deriveManifest(packDir, 'test-package');
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('INTAKE_VALIDATION');
+      expect((err as Error).message).toMatch(/incompatible/i);
+    }
   });
 
   it('refuses when section gate is not synthesis_eligible', () => {
@@ -111,7 +132,16 @@ describe('F-36: deriveManifest refuses on real integrity problems', () => {
     gate.synthesis_eligible = false;
     gate.verdict = 'fail';
     writeFileSync(gatePath, JSON.stringify(gate, null, 2) + '\n', 'utf8');
-    expect(() => deriveManifest(packDir, 'test-package')).toThrow(/not synthesis_eligible/i);
+    // Stage C Phase 3 C1-009: error reworded — "not synthesis_eligible" →
+    // "synthesis_eligible=false". Assert on the structured code + concept.
+    try {
+      deriveManifest(packDir, 'test-package');
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as { name?: string }).name).toBe('ResearchOSError');
+      expect((err as { code?: string }).code).toBe('INTAKE_VALIDATION');
+      expect((err as Error).message).toMatch(/synthesis_eligible/);
+    }
   });
 
   it('warns (not refuses) when claims.jsonl is absent — phantom check skipped', () => {

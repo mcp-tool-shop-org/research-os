@@ -82,6 +82,10 @@ research-os pack publish \
   --to <research-packs>/packages/<name>
 ```
 
+> **Note on `freeze` output.** `research-os freeze` operates silently while it walks every canonical artifact and computes content hashes — there is no incremental progress for this command. On large packs it can run for tens of seconds before printing anything. When it finishes it prints a single verdict block (`PASS` / `REFUSED` plus the receipt path). Do not interpret the gap as a hang.
+
+> **`--force` warning.** `--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output. Edit upstream artifacts (claims, sources, synthesis) or sibling files instead. Full admission contract + refusal cases: [`docs/pack-publish.md`](docs/pack-publish.md).
+
 **For a real worked example**, see the dogfood pack at `research-os-packs/research-os-spec/` — every artifact, every receipt, every disposition, every freeze fingerprint, all on disk in append-only ledgers. That pack is what produced `docs/dogfood-proof.md`.
 
 **Requires [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. Default model is `hermes3:8b`; override with `OLLAMA_INTERN_MODEL=<model>`. Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
