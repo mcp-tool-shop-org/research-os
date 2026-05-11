@@ -74,6 +74,25 @@ export function parseIntArg(label: string): (value: string) => number {
   };
 }
 
+// C2-RE-001 fix: translate --no-progress / --progress Commander flags into the
+// RESEARCH_OS_NO_PROGRESS / RESEARCH_OS_FORCE_PROGRESS env vars that
+// src/util/progress.ts inspects. Reads process.argv directly so the two flags
+// share no Commander destination field (avoids Commander's --no-X negation
+// magic clashing with --progress on the same opts key). Mutual exclusion is a
+// usage error so an operator who passes both (e.g. alias + command line) gets
+// a clear failure instead of unspecified behavior.
+export function applyProgressFlags(argv: readonly string[] = process.argv): void {
+  const hasNoProgress = argv.includes('--no-progress');
+  const hasProgress = argv.includes('--progress');
+  if (hasNoProgress && hasProgress) {
+    throw new InvalidArgumentError(
+      '--no-progress and --progress are mutually exclusive',
+    );
+  }
+  if (hasNoProgress) process.env.RESEARCH_OS_NO_PROGRESS = '1';
+  if (hasProgress) process.env.RESEARCH_OS_FORCE_PROGRESS = '1';
+}
+
 const program = new Command();
 
 program
@@ -217,8 +236,11 @@ program
     'Read URLs from sections/<id>/urls.approved.txt (produced by `research-os discover approve` / `discover export-urls`)',
     false,
   )
+  .option('--no-progress', 'Suppress per-iteration progress output to stderr')
+  .option('--progress', 'Force per-iteration progress output even when not on a TTY (debug aid)')
   .action(async (section: string, opts) => {
     try {
+      applyProgressFlags();
       let urlsFile = opts.urlsFile as string | undefined;
       if (opts.approved) {
         const path = await import('node:path');
@@ -518,8 +540,11 @@ contradictCmd
       .choices(['auto', 'heuristic', 'ollama-intern'])
       .default('auto'),
   )
+  .option('--no-progress', 'Suppress per-iteration progress output to stderr')
+  .option('--progress', 'Force per-iteration progress output even when not on a TTY (debug aid)')
   .action(async (section: string, opts) => {
     try {
+      applyProgressFlags();
       const result = await contradictMap({
         sectionId: section,
         packPath: opts.pack,
@@ -678,8 +703,11 @@ program
     '--preset <name>',
     'Reviewer preset name from research.yaml/review_profiles. Fills --general-model, --critic-model, --review-window, --two-pass-llm from the preset; explicit flags still override.',
   )
+  .option('--no-progress', 'Suppress per-iteration progress output to stderr')
+  .option('--progress', 'Force per-iteration progress output even when not on a TTY (debug aid)')
   .action(async (section: string, opts) => {
     try {
+      applyProgressFlags();
       // Resolve preset (if any) from research.yaml/review_profiles. Explicit
       // CLI flags override preset values; preset only fills the gaps.
       let preset:
@@ -1209,8 +1237,11 @@ packCmd
     false,
   )
   .option('--dry-run', 'Print derived manifest and README plan; write nothing', false)
+  .option('--no-progress', 'Suppress per-iteration progress output to stderr')
+  .option('--progress', 'Force per-iteration progress output even when not on a TTY (debug aid)')
   .action(async (opts) => {
     try {
+      applyProgressFlags();
       const result = await packPublish({
         fromDir: opts.from as string,
         toDir: opts.to as string,

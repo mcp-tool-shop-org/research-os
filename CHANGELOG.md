@@ -322,6 +322,37 @@ fails on any drop. This applies the "old-API-dead" doctrine to operator-facing p
 | CLI `help <topic>` | `src/cli/help-topics.ts` (`pack-publish` topic) | YES (load-bearing substring) |
 | Handbook reference | `site/src/content/docs/handbook/reference.md` | YES |
 
+### Fixes — Stage C Phase 4 correct-forward (C2-RE-001)
+
+Stage C Phase 4 re-audit caught one v1.0 BLOCKER (`C2-RE-001`): the Wave 4 commit
+landed `--no-progress` / `--progress` env-var plumbing in `src/util/progress.ts` but
+did NOT register the corresponding Commander flag options on the four long-running
+commands. The Phase 3 C2 closeout framed `src/cli.ts` registration as a "C1 handoff"
+without generating an explicit C1 work item; the handoff was dropped.
+
+This commit lands the four flag registrations to make the Wave 4 CHANGELOG claim true:
+
+  - `src/cli.ts` — `applyProgressFlags(argv)` helper added (exported for tests). Reads
+    `process.argv` directly to sidestep Commander's `--no-X` negation parsing magic;
+    detects mutual exclusion as a usage error so an operator who passes both flags
+    (e.g. alias + command line) gets a clear failure instead of unspecified behavior.
+  - `--no-progress` and `--progress` Commander options now registered on `gather`,
+    `review`, `contradict map`, and `pack publish`. Each `.action()` body calls
+    `applyProgressFlags()` at entry so `RESEARCH_OS_NO_PROGRESS=1` /
+    `RESEARCH_OS_FORCE_PROGRESS=1` propagate to `shouldEmitProgress()` for the rest
+    of the run.
+  - Mutual-exclusion semantics: passing both `--no-progress` AND `--progress` throws
+    `InvalidArgumentError('--no-progress and --progress are mutually exclusive')` —
+    surfaced through `reportError` in the standard `research-os: <message>` envelope.
+  - Regression test `test/cli/no-progress-flag.test.ts` (13 cases): asserts all four
+    commands accept both flags via the reproduction-flip pattern (stderr must NOT
+    contain "unknown option"); asserts the env-var translation for each flag;
+    asserts the mutex usage error.
+
+Reproduction-flip evidence (BEFORE → AFTER):
+  - BEFORE: `node ./dist/cli.js gather --no-progress test` → `error: unknown option '--no-progress'`
+  - AFTER: `node ./dist/cli.js gather --no-progress test` → action proceeds (or fails for non-flag reasons such as missing pack)
+
 ### Doctrine notes
 
 **Doc-update audit scope (codified Stage C Phase 3, 2026-05-11):** When a code change
@@ -333,6 +364,18 @@ behavior change (Stage A Wave 1) had landed in CHANGELOG and code but never prop
 to `docs/pack-publish.md` (which claimed the opposite of the live behavior) or to the
 handbook (which inherited the legacy framing). The rule applies forward from this
 release; prior stages were caught in this audit.
+
+**Cross-domain pickup as a tracked work item (codified Stage C Phase 4, 2026-05-11):**
+When an agent's fix requires changes in another agent's domain to be operator-visible,
+the cross-domain dependency is a tracked work item with its own ID, assigned to the
+receiving agent in the same wave. "Handoff" is not a status; it's an explicit pickup
+task with an owning agent. Closeout footnotes do not constitute assignment. This rule
+earned its place when Stage C Phase 4 surfaced that Wave 4 landed `--no-progress` /
+`--progress` env-var plumbing in `src/util/progress.ts` (C2's lane) but did NOT land
+the corresponding Commander flag registration in `src/cli.ts` (C1's lane), because the
+Phase 3 C2 closeout framed the cli.ts registration as a "C1 handoff" without
+generating an explicit C1 work item. The C2-RE-001 correct-forward commit closed the
+gap; the rule applies forward.
 
 ### Known limitations — historical disclosure for v1.0
 
