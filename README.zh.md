@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="version 1.0.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -24,7 +24,7 @@
 
 它不是一个报告生成器。它不是一个 LLM 编排的框架。它不会为你编写综合报告。它强制执行综合分析开始的条件。
 
-已冻结的研究包被归档在 [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) 仓库中，其中包含两个初始版本。请参阅 [`docs/roadmap.md`](docs/roadmap.md) 以了解 v1.0 的发展路线图。
+已冻结的软件包存档在 [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) 仓库中，这些软件包是实时更新的，涵盖了六个已完成的内部测试项目。请参阅 [`docs/roadmap.md`](docs/roadmap.md) 以了解 v1.0 的发展路线。
 
 v0.1 版本已经在两个内部测试阶段进行了压力测试。第一次测试——`research-os` 研究自身的规范——在 v0.1.0 发布之前发现了七个正确性问题，每个问题都需要实际的代码修复，并衍生出相应的规则或集成模式。第二次测试（v1 实验 1：ComfyUI 工作流程的稳定性，11 个会话，一个与 `research-os` 没有任何词汇重叠的领域）于 2026-05-09 结束：研究包已冻结，归档已上线，模式 2 的执行通过提交 `22b5dba` 完成。v0.1 版本的验证记录位于 [`docs/dogfood-proof.md`](docs/dogfood-proof.md)；实验 1 的验证记录位于 [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md)。 详细文档：<https://mcp-tool-shop-org.github.io/research-os/handbook/>。
 
@@ -81,6 +81,10 @@ research-os freeze
 research-os pack publish \
   --to <research-packs>/packages/<name>
 ```
+
+> **关于 `freeze` 命令的说明。** `research-os freeze` 命令在扫描所有标准文件并计算内容哈希时，会静默运行，因此该命令没有增量进度显示。对于大型软件包，它可能需要几秒钟的时间才能输出任何内容。完成后，它会打印一个结果块（`PASS` / `REFUSED`，以及收据的路径）。不要将这段时间间隔误解为程序卡死。
+
+> **`--force` 警告。** `--force` 参数会清除并替换目标软件包目录。请勿将手动创建的文件保存在生成的软件包输出目录中。请编辑上游文件（例如，声明、源代码、合成结果）或兄弟文件。完整的入职协议和拒绝案例：[`docs/pack-publish.md`](docs/pack-publish.md)。
 
 **要查看一个实际的示例**，请参阅 `research-os-packs/research-os-spec/` 目录下的研究包——每个文件、每个记录、每个结论、每个冻结的指纹，都以只追加的日志形式存储在磁盘上。该研究包生成了 `docs/dogfood-proof.md`。
 
@@ -151,9 +155,9 @@ discover
 
 ## 评审员校准
 
-v0.5.0版本使评审器校准更加可靠。评审器配置文件不会因为只运行一次而被信任，而是通过结构化的、带有模拟错误的反馈和多次运行的聚合来获得信任状态。v0.6.0版本为生产环境的评审流程和校准工具添加了确定性的评审器选项。
+v0.5.0 版本使评审员校准更加稳定。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有模拟失败的收据以及多次运行的聚合来获得信任状态。v0.6.0 版本为生产评审流程和校准工具添加了确定性的评审员选项。
 
-**目前没有任何配置文件被认为是“可信任的基准”。** 仓库中的标准反馈显示：`hermes-two-pass=failed`（失败），`mistral-nemo-two-pass=conditional_pass`（条件通过），`hermes-single-pass=comparison_only`（仅进行比较），`hermes-two-pass-deterministic=failed`（失败）。这是有意为之：信任是通过重复的、带有模拟错误的数据获得的，而不是默认信任。`hermes-two-pass-deterministic`反馈存在结构上的模型能力差距（产生了2/6种决策类型，需要3/6种），这并非是方差问题。
+**目前没有任何配置文件被认为是 `trusted_baseline`。** 仓库中的标准收据显示：`hermes-two-pass=failed`，`mistral-nemo-two-pass=conditional_pass`，`hermes-single-pass=comparison_only`，`hermes-two-pass-deterministic=failed`。这是有意为之：信任是通过重复的、带有模拟失败的证据获得的，而不是默认信任。`hermes-two-pass-deterministic` 收据存在结构模型能力上的差距（生成了 2/6 种决策类型，需要 3/6 种），这并非是方差问题。
 
 校准结果文件位于`calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`。每个结果文件记录了针对七个方面的PASS/FAIL（通过/失败）结果，四个状态标签（`trusted_baseline`、`conditional_pass`、`failed`、`comparison_only`），并诚实地披露了测试框架无法测试的内容（`needs_contradiction_mapping`无法从`seeded-v1`访问）。请参阅[CHANGELOG.md](CHANGELOG.md)。
 
@@ -174,11 +178,13 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 当使用`--runs <n>`参数时，每个运行的结果文件会被写入到`<profile>/runs/run-NNN.json`，并且会生成一个聚合结果文件（包含基于中位数的PASS/FAIL结果，以及重复失败检测），写入到`<profile>/seeded-v1.{json,md}`。聚合结果文件包含`receipt_kind: 'aggregate'`，用于区分单次运行的结果文件。单次运行模式（`--runs 1`或省略）会保留现有的直接写入行为。
 
-**确定性的评审器配置文件**——在`research.yaml`文件中，使用`review_profiles.<name>.reviewer_options`来将`temperature`（温度）、`seed`（种子）和其他Ollama采样参数传递到生产环境评审流程中的每个`OllamaInternReviewer`实例。`hermes-two-pass-deterministic`配置文件作为内置示例提供。请参阅[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)以及[评审器校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+**确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
 
 ## 状态
 
-**v0.6.0**——已发布到npm，版本号为`@mcptoolshop/research-os@0.6.0`，发布日期为2026年5月10日。v0.6.0版本完成了实验6，并提供了评审器信任的证据：research-os现在可以生成可重复、可追溯的标准模型基准。包含内容：在生产环境的评审流程中，添加了确定性的评审器选项（`review_profiles.<name>.reviewer_options`，位于`research.yaml`文件中）；为预v0.3.3版本的冻结资源（F-53）提供了向后兼容的schema；评审输出直接在`review.json`和`review.md`文件中显示采样条件（F-54）；提交了标准的、确定性的聚合反馈（`hermes-two-pass-deterministic`，`temperature:0, seed:7`）。**目前没有任何可信任的基准。** `hermes-two-pass-deterministic=failed`（决策词汇表中的结构模型能力差距，而非方差问题）。**Hermes没有被提升为“可信任的基准”。** 关键在于机制，而不是通过了反馈。没有对gate、freeze或合成规则进行任何更改。所有四个冻结包都具有完全相同的字节标识。713/713个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)以及[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)。
+**v1.0.0** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@1.0.0`，发布日期：2026-05-11。v1.0.0 是一个可靠的合约发布版本：工作流程已验证，潜在的故障模式已公开，并且合成过程仍然需要基于证据的验证。**research-os 默认情况下不包含任何经过信任验证的审查模型。** 它提供了用于验证、拒绝或有条件地接受审查者配置的机制。包含：四阶段的内部测试（阶段 A：错误/安全问题，B：主动增强鲁棒性，C：优化操作人员体验，D：完善界面），产生了 188 个新的测试用例，覆盖了 23 个生产代码文件，以及 14 个文档/网站文件，以及 2 个新的辅助模块 (`src/cli/help-topics.ts` 和 `src/util/progress.ts`)；跨域数据传输规范已编码，基于两次纠正后的数据传输（A-RE-001：调用方迁移，C2-RE-001：跨域数据接收）；`--force` 参数的用法在 8 个方面都进行了逐字节的回归测试；对 12 个 `ResearchOSError` 子类进行了错误处理手册的更新；`research-os help <topic>` 提供了静态的错误恢复界面（4 个主题已锁定）；`--no-progress` / `--progress` 参数实现了在审查、收集、冲突映射和打包发布过程中，基于 TTY 终端检测的线程控制，并使用了互斥锁机制。**不接受任何经过信任验证的基线版本。** **所有四个冻结版本的软件包都与 v0.3.3 的基线版本进行逐字节的验证。** 901/901 个 vitest 测试通过。 已知的限制请参考 [CHANGELOG.md](CHANGELOG.md) 和 [`handbook/known-limitations.md`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)：冻结版本的版本戳是一个历史遗留的配置（B-E-001），npm provenance 验证推迟到 v1.x 版本（B-E-004），索引模式版本迁移是基于公开的，而不是自动迁移（B-A-003）。请参考 [`docs/release-notes/v1.0.0.md`](docs/release-notes/v1.0.0.md) 和 [`docs/v1-dogfood-swarm-proof.md`](docs/v1-dogfood-swarm-proof.md)。
+
+**v0.6.0** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.6.0`，发布日期：2026-05-10。v0.6.0 结束了实验 6，并提供了审查者信任的证据：research-os 现在可以生成可重现、可追溯的规范模型基线。包含：生产审查路径上的确定性审查器选项（`research.yaml` 文件中的 `review_profiles.<name>.reviewer_options`）；为在 v0.3.3 之前的冻结版本提供向后兼容的网关（F-53）；审查输出直接在 `review.json` 和 `review.md` 文件中公开了采样条件（F-54）；规范的确定性聚合接收已提交（`hermes-two-pass-deterministic`，`temperature:0, seed:7`）。**不接受任何经过信任验证的基线版本。** `hermes-two-pass-deterministic=failed`（结构模型能力在决策词汇表上的差距，而不是方差）。**Hermes 未被提升为 `trusted_baseline`。** 关键在于机制，而不是接收结果。没有对网关、冻结或合成规则进行任何更改。所有四个冻结版本的软件包都进行了逐字节的验证。 713/713 个 vitest 测试通过。请参考 [CHANGELOG.md](CHANGELOG.md) 和 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)。
 
 **v0.5.0** — 发布到npm，版本号为`@mcptoolshop/research-os@0.5.0`，发布日期：2026-05-10。v0.5.0版本使评审员校准更加可靠。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有预设错误的测试结果和多次运行的聚合来获得信任状态。包含：结构化的校准结果模式（`seeded-v1.{json,md}`，经过Zod验证，包含四个状态标签）；多运行测试框架（`--runs <n>`，每个运行隔离，基于中位数的PASS/FAIL结果，重复失败降级）；能够感知架构的决策词汇表；在`review-promote`中进行包相关的结果文件查找。**没有可信的基线：** `hermes-two-pass=failed`（聚合，3次运行），`mistral-nemo-two-pass=conditional_pass`，`hermes-single-pass=comparison_only`。research-os现在可以拒绝信任评审员配置文件，当反复的、带有预设错误的测试结果不支持信任时。**没有对网关、冻结或合成规则的更改。所有四个现有的冻结包都以字节级别的相同方式进行验证。** 671/671个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)。
 
@@ -198,25 +204,31 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **v0.1.0** — 2026-05-08 冻结了内部测试软件包。 位于 `research-os-packs/research-os-spec/`（兄弟仓库）的软件包已冻结，共包含 8 个部分，有 296 个已接受的声明，17 个已处理，30 个被操作员覆盖，0 个活动修复阻止器，0 个未解决的矛盾，所有条件 `synthesis_eligible=true`。 共有 16 条关键规则。 参见 [`docs/dogfood-proof.md`](docs/dogfood-proof.md)，其中包含七个发现和冻结确认的指纹。
 
-**research-packs 归档单库** — 位于 [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)，包含两个初始软件包。 `comfyui-workflow-durability`（Experiment 1，302 个已接受的声明，8 个部分）和 `research-os-self-dogfood`（v0.1 内部测试回填，296 个已接受的声明，8 个部分）。 这两个软件包都通过了 `verify-pack.mjs` 测试。
+**research-packs 归档代码仓库** — 位于 [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)，包含四个软件包：`research-os-self-dogfood`（v0.1 内部测试版本，296 个已接受的声明，8 个部分），`comfyui-workflow-durability`（实验 1，302 个已接受的声明，8 个部分），`xrpl-creator-token-durability`（实验 3 的软件包 #2），以及 `godot-export-runtime-durability`（实验 3 的软件包 #3）。所有软件包都通过了 `verify-pack.mjs` 的验证。
 
 **v1 Experiment 1 (ComfyUI 工作流程的稳定性)** — 已于 2026-05-09 结束。 终端 A 的所有 8 个部分已完成，软件包已冻结，归档已上线。 参见 [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) 和 [`docs/roadmap.md`](docs/roadmap.md)。
 
 ### v0.3 的局限性
 
-- 未经外部用户进行实际测试。三个内部测试阶段已结束——一个自指，两个涉及外部领域——并且 Experiment 3（在外部压力下的 API 稳定性）已于 **2026年5月10日 结束**：所有三个包（ComfyUI、XRPL、Godot）都已冻结，并且没有对 v0.3.x 的命令行界面进行任何重大更改。这些测试阶段带来了 v0.3.0 的 `--detector` 功能（F-09）、v0.3.1 的按“门”划分的豁免（F-10/F-11）、v0.3.2 的标准化“已接受的声明”处理（F-36）以及 v0.3.3 的“门”机制语义清晰度（F-43/F-41）。
-- 不支持自动内容生成。`synth workspace` 命令用于生成结构化的工作区；人类（或 Cowork）负责根据已接受的声明 ID 编写内容。
-- API 不保证语义版本兼容。v1.0.0 是一个需要通过实验才能达到的状态，而不是一个日期的约定——请参阅 [`docs/roadmap.md`](docs/roadmap.md)，了解实现这一目标所需的六个实验。
+- 未经外部用户的大规模测试，仅在内部测试阶段使用。六个内部测试项目已结束，其中一个涉及自我引用，五个涉及外部领域（ComfyUI、XRPL、Godot、评审员校准、确定性评审员），但外部用户的规模化使用仍有待进一步研究。
+- 并非内容生成器。`synth workspace` 命令用于生成结构化的工作空间；人类（或 Cowork）根据已接受的声明 ID 编写内容。
+- 不代表对任何评审模型的认可。v1.0 版本默认不包含预设的“可信基准”评审员配置文件；校准记录是证据，而非认可。请参阅[评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+- 冻结包中可能存在历史遗留信息。在 v1.0 之前的冻结包包含 `research_os_version: '0.1.0'`，这是由于一个在 v0.4 之前的构建模板。该问题已修复，但历史版本的包在第 15 条规定的条件下是不可变的（参见 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
+- npm 上的来源信息未进行验证。Sigstore 来源验证将在 v1.x 版本中实现；请通过 package-shasum 和 GitHub 发布提交来验证 v1.0 版本的 npm 包。
 
 ### 已知的局限性
 
-- **提取器的来源信息在接口处不可见。** 一个部分可以满足已接受声明的最低要求，同时依赖于启发式回退声明，当经过校准的提取器（配置了模型的 Ollama）不可用时。 这已记录为路线图中的 Experiment 4； 未来的改进将报告每个提取器的已接受声明，并要求满足接口要求的已接受声明数量来自校准路径。
-- **超出经过校准的 `hermes-two-pass` 基线的审查器模型选择尚未解决。** 内部测试阶段验证了一种审查器配置； 其他模型需要在它们被信任之前，进行种子失败召回校准。 这是路线图中的 Experiment 5。
-- **v0.1 内部测试软件包使用了 `mistral-nemo:12b` 进行提取（标准的默认配置是 `hermes3:8b`）。** 在 v0.1 阶段，此设备上不可用 `hermes3:8b`。 此替代方案的说明将持续有效，直到生成基于 hermes3 的确认——这是路线图中的 Experiment 6。 对于在没有 `hermes3:8b` 的设备上的操作员，请将 `OLLAMA_INTERN_MODEL` 设置为可用的模型； 操作员预配置的 URL 和查询精度规范（参见手册）可以减轻对模糊主题的幻觉。
+v1.0 版本包含三个用户可见的已知限制。每个限制都记录在[手册中的已知限制页面](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)以及[CHANGELOG.md](CHANGELOG.md) 中。没有一个限制会阻止发布；所有限制都有明确的恢复或缓解方案。
+
+- **B-E-001 — v1.0 之前的冻结包版本信息是历史遗留信息。** 在 v0.3.3 到 v0.6.0 之间发布的冻结包，在 `pack.manifest.json` 和 `pack/research.yaml` 文件中包含 `research_os_version: "0.1.0"`，这是由于一个在 v0.4 之前的硬编码构建模板常量。该问题已在 v1.0 版本中修复（构建模板现在导入实时 `RESEARCH_OS_VERSION`）；现有的冻结包在第 15 条规定的条件下是不可变的。受影响的包中的 JSON 文件已经包含其对应的版本信息。
+- **B-E-004 — npm 来源验证将在 v1.x 版本中实现。** v1.0 版本的 npm tarball 仅通过 package-shasum 进行验证。将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）存在冲突；该迁移计划在 v1.x 版本中进行。请通过 package-shasum 和 GitHub 发布提交来验证 v1.0 版本的 npm 包。
+- **B-A-003 — 索引器模式版本迁移已记录，但未强制执行。** v1.0 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。当 `SCHEMA_VERSION` 发生记录中的更改时，请删除 `.research-os/index.sqlite` 文件，然后重新运行 `research-os index build --all` 命令。这不会影响包本身——索引器是证据 + 声明的加速层（第 8 条）；重建操作是幂等的。
+
+**v1.0 版本不包含任何预设的“可信基准”评审员配置文件。** 这是一种有意的信任策略，而不是一个缺陷：存储在仓库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。信任是通过反复的、有针对性的失败测试来获得的，而不是默认信任。
 
 ## 通往 v1.0 的路线图
 
-v1.0 是一个需要达成的状态，而不是一个发布日期。在 v0.1 和 v1.0 之间，有六个正在进行的实验。这些实验包括：非自指的内部测试版本（目前正在进行中的 ComfyUI 工作流程稳定性包）、一个 `research-os pack publish` 命令，该命令可以自动将内容导出到标准的 `research-packs` 单仓库（实验 2，其范围受实验 1 的手动关闭影响）、在外部压力下的 API 稳定性、弥补提取器溯源方面的差距、将评审员校准推广到 `hermes-two-pass` 之外，以及在 `hermes3:8b` 上进行的干净基准测试。实验 1 在打包完成时尚未结束——它会在打包版本作为 `research-packs` 单仓库中的第一个软件包发布时完成，同时也会发布 v0.1 的内部测试版本补丁。完整计划请参见 [`docs/roadmap.md`](docs/roadmap.md)。整个过程中，架构保持不变；v1.0 旨在深化 v0.1 已经证明的内容，而不是重新开启新的方向。
+v1.0 并非一个发布日期，而是一个达成的状态。所有六个内部测试环节都已经完成（Exp1–Exp6，时间为2026年5月8日至2026年5月11日），每个环节都产出了一个已冻结的研究包，并被提交到 [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) 仓库。该项目通过以下阶段达成了v0.2.0版本：`research-os pack publish` + 模式2（实验2），v0.3.0版本的`--detector`参数（F-09），v0.3.1版本的范围限定豁免（F-10/F-11），v0.3.2版本的标准化已批准声明处理（F-36），v0.3.3版本的门控语义清晰化（F-43/F-41），v0.4.0版本的源数据纪律（F-27/F-47/F-46），v0.5.0版本的评审员校准，作为一种持久的信任协议（F-48/F-49/F-50），以及v0.6.0版本的确定性评审员基线（F-53/F-54）。v1.0版本的发布准备工作正在进行中，通过一个多阶段的健康检查/优化流程，并且整个过程中架构锁定始终有效。完整计划请参考 [`docs/roadmap.md`](docs/roadmap.md)。
 
 ## 许可证
 

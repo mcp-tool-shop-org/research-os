@@ -2,7 +2,9 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased]
+## [1.0.0] — 2026-05-11
+
+v1.0.0 is an honest contract release: the workflow is proven, the failure modes are disclosed, and synthesis remains gated by evidence. research-os does not ship a trusted reviewer model by default. It ships the machinery to prove, reject, or conditionally admit reviewer profiles.
 
 ### Behavior changes
 

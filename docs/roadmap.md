@@ -1,10 +1,66 @@
-# Roadmap to v1.0
+# Roadmap
 
-`research-os` ships at **v0.1.0** because it has been used exactly once: by itself, on itself. That single run earned sixteen load-bearing laws, two integration patterns, and one frozen pack — but it doesn't tell us how the system holds up under everything the world will throw at it.
+> **Status (2026-05-11):** All six dogfood experiments closed; the four-stage health/polish swarm converged; v1.0.0 published. The roadmap below documents the path that earned v1.0 (Experiments 1–6) followed by the v1.x themes synthesized from the 86-item POST-v1 swarm backlog.
 
-v1.0 isn't a calendar date. It is an earned state. Six open questions stand between v0.1 and v1.0. Each is a small experiment or research project. Closing them is the fun part.
+## Path to v1.0 — six closed experiments
 
-The order below reflects a natural sequence — prove the chain holds off-self, automate the closeout the first arc revealed by hand, then run more domains through the automation, then tackle the architectural enforcement gaps, then polish the reviewer story, then a clean canonical-model baseline. The numbering is the recommended order, not a hard dependency. Whichever question is most interesting to answer next is the next experiment.
+`research-os` shipped at **v0.1.0** because it had been used exactly once: by itself, on itself. That single run earned sixteen load-bearing laws, two integration patterns, and one frozen pack. The six experiments below took the system from there to v1.0.0:
+
+| Exp | Topic | Closed | Earned |
+|---|---|---|---|
+| 1 | Non-self-referential dogfood (ComfyUI workflow durability) | 2026-05-09 | v0.2.0 `pack publish` + Pattern 2 fix |
+| 2 | `pack publish` automation | 2026-05-09 | v0.2.0 admission contract |
+| 3 | API stability under external pressure (XRPL + Godot packs) | 2026-05-10 | v0.3.0 `--detector`, v0.3.1 section-scoped waivers, v0.3.2 F-36 normalized accepted-claim accounting, v0.3.3 F-43/F-41 gate-semantics clarity |
+| 4 | Source identity durability | 2026-05-10 | v0.4.0 source-truth discipline (F-27/F-47/F-46) |
+| 5 | Reviewer calibration generalized | 2026-05-10 | v0.5.0 calibration receipts (F-48/F-49/F-50) |
+| 6 | Canonical Hermes baseline with deterministic options | 2026-05-10 | v0.6.0 deterministic reviewer options (F-53/F-54) |
+
+After Exp6 closed, the four-stage dogfood swarm (Stages A bug/security, B proactive resilience, C operator humanization, D presentation polish) ran against the v0.6.0 tree itself to earn v1.0. Test count: 713 → 901 (+188). Two cross-agent escapes caught + corrected forward. Three operator-side + one advisor-side doctrine ratchets codified. See [`v1-dogfood-swarm-proof.md`](v1-dogfood-swarm-proof.md) for the full narrative.
+
+**v1.0.0 release notes:** [`release-notes/v1.0.0.md`](release-notes/v1.0.0.md). **Readiness packet (the v1.0 contract):** [`v1-readiness-packet.md`](v1-readiness-packet.md).
+
+## v1.x themes — synthesized from POST-v1 swarm backlog (86 items)
+
+The four-stage swarm produced 86 POST-v1 items, preserved coordinator-internal at `dogfood-labs/swarms/mcp-tool-shop-org--research-os/reports/stage-b-phase1-post-v1-backlog.md`. The public-facing themes (curated synthesis, not raw items) for the v1.x roadmap:
+
+### Theme V1.1 — Error taxonomy refinement (13 candidate sibling codes)
+
+Stage C Wave 4 broadened existing error codes to absorb 13 new failure classes without admitting new taxonomy at v1.0 (advisor decision: stable contract at v1.0). The 13 candidates live in the backlog with their v1.0 holding code and intended use-case: pack-family (`PACK_INCOMPLETE`, `PACK_FREEZE_REFUSED`, `PACK_VERIFY_FAILED`, `SECTION_NOT_GATED`, `PACK_NOT_FROZEN`, `PACK_ADMISSION_FAILED`, `PACK_FROZEN`), discover-family (`DISCOVER_PROVIDER_UNAVAILABLE`, `DISCOVER_CANDIDATE_NOT_FOUND`), detector/runtime (`DETECTOR_UNAVAILABLE` / `OLLAMA_UNAVAILABLE`), indexer (`INDEX_NOT_BUILT`), override (`OVERRIDE_FILE_NOT_READABLE`), envelope uniformity (`CLIArgumentError` sibling `ResearchOSError`). Per v1.0 stability lock, these are admissible in v1.x as **additive non-breaking sibling codes**.
+
+### Theme V1.2 — Long-running command observability polish
+
+`--no-progress` / `--progress` shipped at v1.0 with TTY-detect threading on review/gather/contradict-map/pack-publish. v1.x extends to `--verbose` (per-claim / per-pair frequency bump), `--quiet` (suppresses progress + final summary together), `scripts/reviewer-calibration.mjs` step markers via `emitProgress` (currently stdout), and calibration harness folded into `src/cli.ts` as `research-os calibrate` for unified env-var contract.
+
+### Theme V1.3 — Handbook polish + recovery cross-discoverability
+
+Stage D Phase 1 found 12/12 ResearchOSError handbook pointers resolve, but 4 of 12 land on a page that exists without a dedicated runbook section. v1.x: dedicated `recovery.md` sections for handoff-not-found / synthesis-not-ready / reviewer-profile-not-found; canonical `gates.md` and `freeze.md` pages (currently substituted); 5 additional ResearchOSError subclasses get handbook pointers (`SectionExistsError`, `InvalidSectionIdError`, `SectionNotFoundError`, `ReviewerProfileInvalidError`, `NoReviewerAvailableError`); broad sweep test asserting every hint contains a `handbook/` pointer.
+
+### Theme V1.4 — Indexer schema migration enforcement
+
+v1.0 ships the disclosure-based migration model (B-A-003): when `SCHEMA_VERSION` bumps, release notes carry `BREAKING: delete .research-os/index.sqlite`. v1.x lands read-side enforcement + additive `ALTER TABLE` migrations.
+
+### Theme V1.5 — npm provenance attestation
+
+v1.0 defers npm provenance (B-E-004) due to the translation discipline conflict (local TranslateGemma 12B vs. GHA OIDC). v1.x migrates publish to a CI-based flow with the translation handoff worked out.
+
+### Theme V1.6 — Internal coherence + dead-code sweeps
+
+Stage A Wave 2 + ongoing audits surfaced internal-coherence items below v1.0 threshold: unused imports tracking, dead-code path retirement, additional sweep tests for cross-surface invariants beyond the canonical `--force` sentence. v1.x curated polish.
+
+## v2.0-track (semver breaking) — locked at v1.0
+
+v1.0 explicitly locks several operator-observable string surfaces. Changes to these surfaces are **v2.0-track**, not v1.x:
+
+- **Error code taxonomy semantics** — existing codes won't change semantics in v1.x; only additive sibling codes admissible. Renames / merges = v2.0.
+- **Help-topic cardinality** — exactly 4 topics at v1.0 (`recovery`, `pack-publish`, `review`, `gather`). Adding or removing topics = v2.0.
+- **CLI summary label format** — `source-card audit` Capital-Case labels + gate/audit/freeze blocking-reason headers locked at v1.0 due to operator-script grep contract. Unification = v2.0.
+- **Pack-publish `--force` replace semantics** — replace (not merge) semantics locked. Change of contract = v2.0.
+
+These locks earned by the dogfood swarm. See PB-002 v2.0-track lock in the backlog for the worked example.
+
+---
+
+The order below preserves the historical roadmap that earned v1.0 (Experiments 1–6), in the original framing. Each is now `CLOSED`. The substance is preserved as a snapshot of the path; the v1.x themes above are the forward-looking roadmap.
 
 ---
 
