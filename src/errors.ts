@@ -99,3 +99,98 @@ export class SynthesisNotReadyError extends ResearchOSError {
     this.name = 'SynthesisNotReadyError';
   }
 }
+
+// B-C-001: structured rejection when a calibration receipt declares a
+// schema_version that this build does not know how to read. Producer-side
+// receipts are tagged with z.literal(1) today; when v2 lands, the list grows
+// and the predicate inside receiptToCalibrationSummary branches by version.
+export class UnsupportedReceiptVersionError extends ResearchOSError {
+  constructor(
+    public readonly supportedVersions: readonly number[],
+    public readonly receivedVersion?: number,
+    public readonly receiptPath?: string,
+  ) {
+    const supportedList = supportedVersions.join(', ');
+    const seen =
+      typeof receivedVersion === 'number' ? `${receivedVersion}` : 'unknown';
+    const where = receiptPath ? ` at ${receiptPath}` : '';
+    super(
+      `Receipt schema_version ${seen} is unknown${where}. Supported: ${supportedList}. Upgrade research-os to read newer receipts, or downgrade the producer.`,
+      'UNSUPPORTED_RECEIPT_VERSION',
+      `Supported receipt schema versions: ${supportedList}.`,
+    );
+    this.name = 'UnsupportedReceiptVersionError';
+  }
+}
+
+// B-C-002: structured errors raised from review/promote/calibration/reviewers
+// paths. Replaces raw `throw new Error(...)` so callers (CLI, harness, future
+// MCP shim) can programmatically distinguish failure classes.
+
+export class ReviewerCascadeFailedError extends ResearchOSError {
+  constructor(public readonly failedReviewers: readonly string[]) {
+    super(
+      `Multi-pass review: every reviewer failed. ${failedReviewers.join(' | ')}`,
+      'REVIEWER_CASCADE_FAILED',
+      `Failed reviewers: ${failedReviewers.map((r) => r.split(':')[0]).join(', ')}. Inspect each error and re-run.`,
+      undefined,
+      true,
+    );
+    this.name = 'ReviewerCascadeFailedError';
+  }
+}
+
+export class ReviewerProfileInvalidError extends ResearchOSError {
+  constructor(public readonly profileName: string) {
+    super(
+      `Invalid profile name "${profileName}". Use a kebab/snake-case slug.`,
+      'REVIEW_PROFILE_INVALID',
+      'Profile names must be kebab-case (a-z, 0-9, hyphen, underscore).',
+      undefined,
+      false,
+    );
+    this.name = 'ReviewerProfileInvalidError';
+  }
+}
+
+export class ReviewerProfileNotFoundError extends ResearchOSError {
+  constructor(
+    public readonly profileName: string,
+    public readonly knownNames: readonly string[],
+    public readonly profilePath?: string,
+  ) {
+    const knownList = knownNames.length > 0 ? knownNames.join(', ') : '(none)';
+    const where = profilePath ? ` at ${profilePath}` : '';
+    super(
+      `Profile "${profileName}" not found${where}. Run \`research-os review --profile ${profileName}\` first.`,
+      'REVIEW_PROFILE_NOT_FOUND',
+      `known profiles: ${knownList}.`,
+    );
+    this.name = 'ReviewerProfileNotFoundError';
+  }
+}
+
+export class CalibrationReceiptMalformedError extends ResearchOSError {
+  constructor(
+    public readonly receiptPath: string,
+    public readonly reason: string,
+  ) {
+    super(
+      `Invalid calibration receipt at ${receiptPath}: ${reason}`,
+      'CALIBRATION_RECEIPT_MALFORMED',
+      `Receipt path: ${receiptPath}. Re-run \`research-os calibrate\` or repair the file by hand.`,
+    );
+    this.name = 'CalibrationReceiptMalformedError';
+  }
+}
+
+export class NoReviewerAvailableError extends ResearchOSError {
+  constructor() {
+    super(
+      'No reviewer available. The HeuristicReviewer should always be available — this indicates a bug.',
+      'NO_REVIEWER_AVAILABLE',
+      'File an issue: the heuristic reviewer is supposed to be unconditionally available.',
+    );
+    this.name = 'NoReviewerAvailableError';
+  }
+}

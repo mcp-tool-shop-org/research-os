@@ -56,6 +56,7 @@
 - [ ] `[desktop]` SKIP: not a desktop app
 - [ ] `[all]` Translations (polyglot-mcp, 8 languages: ja, zh, es, fr, hi, it, pt-BR + source en) — must run BEFORE `npm publish` and BEFORE `gh release create` per the canonical release workflow. README.md changes (status block, version badge) are staged together with refreshed README.{ja,zh,es,fr,hi,it,pt-BR}.md in a single release commit; the tag is created against that commit so GitHub visitors never see stale translations at a release tag. Translations execute locally on TranslateGemma 12B (zero API cost) via `node E:/AI/polyglot-mcp/scripts/translate-all.mjs <readme-path>`.
 - [ ] `[all]` GitHub repo metadata (description, homepage, topics) — verify before tagging. Description matches the README one-liner, homepage points at the landing page, topics cover the primary use case + ecosystem.
+- [x] `[all]` Indexer schema-version migration contract (B-A-003) — v1.0 contract: bumping `SCHEMA_VERSION` in `src/indexer/schema.ts` requires deleting `.research-os/index.sqlite` on next run. Read-side enforcement + additive `ALTER TABLE` migrations are deferred to post-v1.0. Documented inline at the constant declaration and in CHANGELOG `[Unreleased]`. Until enforcement lands, treat this as a release-note disclosure: when SCHEMA_VERSION bumps, the release notes for that version must include a `BREAKING: delete .research-os/index.sqlite` instruction.
 
 ## E. Identity (soft gate — does not block ship)
 

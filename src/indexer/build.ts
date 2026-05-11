@@ -27,29 +27,59 @@ import {
 } from '../review/schema.js';
 
 import { openIndexDb, indexDbPath } from './db.js';
-import type { IndexBuildOptions, IndexBuildSummary } from './types.js';
+import type { IndexBuildOptions, IndexBuildSummary, IndexBuildWarning } from './types.js';
 
 function relPath(packPath: string, abs: string): string {
   return relative(packPath, abs).split('\\').join('/');
 }
 
+/**
+ * B-A-002 — per-line resilient JSONL reader. One malformed JSON line or one
+ * Zod parse failure used to abort the entire `research-os index` build. It now
+ * pushes a structured `malformed_jsonl` warning (1-based line number, pack-
+ * relative path, error message) and continues with the next line. Sibling
+ * readers (`excerpts/ledger.ts:27`, `discover/run.ts:74`, `triage/run.ts`,
+ * `density/run.ts`) already skip-malformed; this brings the indexer in line.
+ */
 async function tryReadJsonl<T>(
   packPath: string,
   rel: string,
   parse: (raw: unknown) => T,
+  warnings: IndexBuildWarning[],
 ): Promise<T[]> {
   const path = join(packPath, rel);
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: T[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
     if (!line.trim()) continue;
-    out.push(parse(JSON.parse(line)));
+    try {
+      out.push(parse(JSON.parse(line)));
+    } catch (err) {
+      warnings.push({
+        kind: 'malformed_jsonl',
+        path: rel,
+        line: i + 1,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
   }
   return out;
 }
 
-async function readSourceCards(packPath: string): Promise<SourceCard[]> {
+/**
+ * B-A-002 — per-file resilient source-card reader. Before this, one malformed
+ * `evidence/source-cards/*.json` aborted the entire build. It now pushes a
+ * `malformed_source_card` warning and continues with the next file. Healthy
+ * cards from the same section still index.
+ */
+async function readSourceCards(
+  packPath: string,
+  warnings: IndexBuildWarning[],
+): Promise<SourceCard[]> {
   const dir = join(packPath, 'evidence', 'source-cards');
   if (!existsSync(dir)) return [];
   const { readdir } = await import('node:fs/promises');
@@ -57,8 +87,18 @@ async function readSourceCards(packPath: string): Promise<SourceCard[]> {
   const cards: SourceCard[] = [];
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
-    const text = await readFile(join(dir, entry), 'utf8');
-    cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    const abs = join(dir, entry);
+    try {
+      const text = await readFile(abs, 'utf8');
+      cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    } catch (err) {
+      warnings.push({
+        kind: 'malformed_source_card',
+        path: relPath(packPath, abs),
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
   }
   return cards;
 }
@@ -84,6 +124,7 @@ async function indexSection(args: {
   counts: IndexBuildSummary;
 }): Promise<void> {
   const { db, packPath, research, sectionId, now, counts } = args;
+  const warnings = counts.warnings;
 
   const section = research.sections.find((s) => s.id === sectionId);
   if (!section) throw new SectionNotFoundError(sectionId);
@@ -205,16 +246,33 @@ async function indexSection(args: {
   };
 
   // Sources (cards) — only those tagged for this section
-  const allCards = await readSourceCards(packPath);
+  const allCards = await readSourceCards(packPath, warnings);
   const sectionSourceIds = new Set<string>();
   const sourcesJsonlPath = join(sectionDir, 'sources.jsonl');
   if (existsSync(sourcesJsonlPath)) {
     const text = await readFile(sourcesJsonlPath, 'utf8');
     recordArtifact('sources_jsonl', relPath(packPath, sourcesJsonlPath), text);
-    for (const line of text.split(/\r?\n/)) {
+    // B-A-002 — per-line try/catch on the section-local sources.jsonl manifest.
+    // One bad line was previously silently swallowed only when it was empty;
+    // a malformed JSON line would throw and abort indexSection. Now record a
+    // warning and continue.
+    const sourcesJsonlRel = relPath(packPath, sourcesJsonlPath);
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
       if (!line.trim()) continue;
-      const entry = JSON.parse(line) as { source_id?: string };
-      if (typeof entry.source_id === 'string') sectionSourceIds.add(entry.source_id);
+      try {
+        const entry = JSON.parse(line) as { source_id?: string };
+        if (typeof entry.source_id === 'string') sectionSourceIds.add(entry.source_id);
+      } catch (err) {
+        warnings.push({
+          kind: 'malformed_jsonl',
+          path: sourcesJsonlRel,
+          line: i + 1,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
     }
   }
   for (const card of allCards) {
@@ -245,6 +303,7 @@ async function indexSection(args: {
     packPath,
     `sections/${sectionId}/claims.jsonl`,
     (r) => ClaimSchema.parse(r),
+    warnings,
   );
   const claimsArtifact = relPath(packPath, join(sectionDir, 'claims.jsonl'));
   if (existsSync(join(sectionDir, 'claims.jsonl'))) {
@@ -277,6 +336,7 @@ async function indexSection(args: {
     packPath,
     `sections/${sectionId}/contradictions.jsonl`,
     (r) => ContradictionSchema.parse(r),
+    warnings,
   );
   const contradictionsArtifact = relPath(packPath, join(sectionDir, 'contradictions.jsonl'));
   if (existsSync(join(sectionDir, 'contradictions.jsonl'))) {
@@ -308,6 +368,7 @@ async function indexSection(args: {
     packPath,
     `audits/${sectionId}-findings.jsonl`,
     (r) => ReviewFindingSchema.parse(r),
+    warnings,
   );
   const findingsArtifact = relPath(packPath, join(packPath, 'audits', `${sectionId}-findings.jsonl`));
   const findingsAbs = join(packPath, 'audits', `${sectionId}-findings.jsonl`);
@@ -342,6 +403,7 @@ async function indexSection(args: {
     packPath,
     `sections/${sectionId}/claim-reviews.jsonl`,
     (r) => ClaimReviewSchema.parse(r),
+    warnings,
   );
   const reviewsArtifact = relPath(packPath, join(sectionDir, 'claim-reviews.jsonl'));
   const reviewsAbs = join(sectionDir, 'claim-reviews.jsonl');
@@ -394,6 +456,7 @@ async function indexSection(args: {
     packPath,
     'evidence/fetch-log.jsonl',
     (r) => FetchReceiptSchema.parse(r),
+    warnings,
   );
   const fetchLogAbs = join(packPath, 'evidence', 'fetch-log.jsonl');
   if (existsSync(fetchLogAbs)) {
@@ -487,12 +550,29 @@ export async function build(options: IndexBuildOptions): Promise<IndexBuildSumma
     gateResults: 0,
     fetchReceipts: 0,
     artifacts: 0,
+    warnings: [],
   };
 
   try {
     for (const sid of targets) {
-      await indexSection({ db, packPath, research, sectionId: sid, now, counts });
-      counts.sectionsIndexed += 1;
+      // B-A-002 — per-section try/catch. One bad section must not block
+      // healthy sections from indexing. Per-line and per-file recovery in
+      // tryReadJsonl + readSourceCards already absorbs the common malformed-
+      // artifact paths; this outer catch is the backstop for anything that
+      // bubbles up (SQL prepare/run errors, unexpected I/O errors against
+      // the section directory). We push a structured `section_index_failed`
+      // warning and move on.
+      try {
+        await indexSection({ db, packPath, research, sectionId: sid, now, counts });
+        counts.sectionsIndexed += 1;
+      } catch (err) {
+        counts.warnings.push({
+          kind: 'section_index_failed',
+          section_id: sid,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
     }
     await indexPackAuditRollups(db, packPath, now);
   } finally {

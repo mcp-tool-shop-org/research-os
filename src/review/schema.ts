@@ -87,6 +87,12 @@ export const ReviewSnapshotSchema = z.object({
   llm_findings_rejected_ungrounded: z.number().int().nonnegative(),
   promoted_to_reviewed: z.boolean(),
   reviewer_options: ReviewerOptionsSchema.optional(),
+  // B-C-004: optional profile-lineage breadcrumb. Mirrors ClaimReviewSchema's
+  // F-53 additive-optional pattern. Present = operator can cross-check this
+  // review against review-active.json + sections/<id>/reviews/<profile>/ by
+  // a single name. Absent = legacy snapshot from pre-B-C-004 build (parses
+  // cleanly; no migration needed).
+  profile: z.string().optional(),
 });
 
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;

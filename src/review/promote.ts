@@ -1,9 +1,14 @@
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, writeFile, appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
-import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
+import {
+  PackNotFoundError,
+  ReviewerProfileInvalidError,
+  ReviewerProfileNotFoundError,
+  SectionNotFoundError,
+} from '../errors.js';
 import { ResearchYamlSchema } from '../intake/schema.js';
 import {
   DEFAULT_PROFILE,
@@ -55,16 +60,28 @@ export async function promote(options: PromoteOptions): Promise<PromoteResult> {
   if (!existsSync(join(packPath, 'sections', options.sectionId)))
     throw new SectionNotFoundError(options.sectionId);
   if (!isValidProfileName(options.profile)) {
-    throw new Error(
-      `Invalid profile name "${options.profile}". Use a kebab/snake-case slug.`,
-    );
+    // B-C-002: structured invalid-profile-name error.
+    throw new ReviewerProfileInvalidError(options.profile);
   }
   const dir = profileDir(packPath, options.sectionId, options.profile);
   const reviewJsonPath = join(dir, 'review.json');
   if (!existsSync(reviewJsonPath)) {
-    throw new Error(
-      `Profile "${options.profile}" not found at ${dir}. Run \`research-os review --profile ${options.profile}\` first.`,
-    );
+    // B-C-002: enumerate sibling reviews/ directories so the structured
+    // error can offer known-profile suggestions to the operator.
+    const reviewsRoot = join(packPath, 'sections', options.sectionId, 'reviews');
+    let knownNames: string[] = [];
+    if (existsSync(reviewsRoot)) {
+      try {
+        const entries = await readdir(reviewsRoot, { withFileTypes: true });
+        knownNames = entries
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .sort();
+      } catch {
+        knownNames = [];
+      }
+    }
+    throw new ReviewerProfileNotFoundError(options.profile, knownNames, dir);
   }
 
   // Load the profile's snapshot to discover reviewer/method for the receipt.

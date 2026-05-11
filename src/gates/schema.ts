@@ -94,6 +94,21 @@ export const SectionGateResultSchema = z.object({
     overgen_risks_blocking: z.number().int().nonnegative(),
   }),
   next_actions: z.array(z.string()),
+  // B-C-005: per-line malformed-JSONL warnings collected while reading gate
+  // inputs. Additive-optional (.default([])) so pre-B-C-005 gate JSONs parse
+  // cleanly. Mirrors the src/audit/run.ts skip-malformed pattern. Named
+  // `malformed_jsonl_warnings` to avoid colliding with the existing
+  // `warnings: GateCheckResult[]` (gate-check warn-status results).
+  malformed_jsonl_warnings: z
+    .array(
+      z.object({
+        path: z.string(),
+        line: z.number().int().nonnegative(),
+        reason: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 export type SectionGateResult = z.infer<typeof SectionGateResultSchema>;

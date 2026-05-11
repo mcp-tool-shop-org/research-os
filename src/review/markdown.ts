@@ -21,6 +21,13 @@ export function renderReviewMarkdown(snapshot: ReviewSnapshot): string {
   lines.push(`# Adversarial Review: ${snapshot.section_id}`);
   lines.push('');
   lines.push(`**Reviewer:** ${snapshot.reviewer} (${snapshot.review_method})`);
+  // B-C-004: render the profile breadcrumb when present so operators can
+  // trace the review back to a named profile + active-profile record.
+  // Absent profile = pre-B-C-004 snapshot OR implicit default; we omit the
+  // line cleanly rather than render an empty value.
+  if (snapshot.profile) {
+    lines.push(`**Profile:** ${snapshot.profile}`);
+  }
   lines.push(`**Reviewed at:** ${snapshot.reviewed_at}`);
   lines.push(`**Candidate claims:** ${snapshot.candidate_claims}`);
   lines.push(`**Findings:** ${snapshot.findings.length} (block: ${snapshot.severity_counts.block ?? 0}, warn: ${snapshot.severity_counts.warn ?? 0}, info: ${snapshot.severity_counts.info ?? 0})`);

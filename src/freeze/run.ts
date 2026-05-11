@@ -28,6 +28,8 @@ import { renderFreezeReceiptMarkdown, renderFreezeRefusalMarkdown } from './mark
 import {
   FreezeReceiptPayloadSchema,
   FreezeRefusalPayloadSchema,
+  type FreezeReasonCode,
+  type FreezeRefusalReason,
 } from './schema.js';
 import type {
   ArtifactHash,
@@ -72,11 +74,25 @@ interface RefusalContext {
   blockingReasons: string[];
   missingArtifacts: string[];
   invalidArtifacts: Array<{ path: string; error: string }>;
+  // B-C-003: structured records that pair the human prose with a stable
+  // reason_code. Downstream consumers (buildRefusalNextActions, future
+  // MCP/CLI rendering) switch on reason_code instead of substring-matching
+  // prose.
+  reasonRecords: FreezeRefusalReason[];
 }
 
-function noteRefusal(ctx: RefusalContext, reason: string, blocking = true): void {
+// B-C-003: noteRefusal now requires a reason_code. Each call site passes the
+// stable code that classifies WHICH gate failed; prose still flows through
+// reasons[]/blocking_reasons[] verbatim for legacy consumers.
+function noteRefusal(
+  ctx: RefusalContext,
+  reason_code: FreezeReasonCode,
+  reason: string,
+  blocking = true,
+): void {
   ctx.reasons.push(reason);
   if (blocking) ctx.blockingReasons.push(reason);
+  ctx.reasonRecords.push({ reason_code, reason, blocking });
 }
 
 async function tryReadJson<T>(
@@ -105,6 +121,7 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
     blockingReasons: [],
     missingArtifacts: [],
     invalidArtifacts: [],
+    reasonRecords: [],
   };
   let research: ResearchYaml;
   try {
@@ -125,13 +142,21 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   for (const rel of REQUIRED_PACK_ARTIFACTS) {
     if (!existsSync(join(packPath, rel))) {
       refusal.missingArtifacts.push(rel);
-      noteRefusal(refusal, `Required artifact missing: ${rel}.`);
+      noteRefusal(
+        refusal,
+        'FREEZE_MISSING_REQUIRED_ARTIFACT',
+        `Required artifact missing: ${rel}.`,
+      );
     }
   }
   for (const rel of SYNTHESIS_FILES) {
     if (!existsSync(join(packPath, rel))) {
       refusal.missingArtifacts.push(rel);
-      noteRefusal(refusal, `Synthesis artifact missing: ${rel}. Run \`research-os synth workspace\` after the pack reaches synthesis_ready.`);
+      noteRefusal(
+        refusal,
+        'FREEZE_MISSING_SYNTHESIS_ARTIFACT',
+        `Synthesis artifact missing: ${rel}. Run \`research-os synth workspace\` after the pack reaches synthesis_ready.`,
+      );
     }
   }
 
@@ -156,15 +181,27 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
 
   if (refusal.invalidArtifacts.length > 0) {
     for (const ia of refusal.invalidArtifacts) {
-      noteRefusal(refusal, `Canonical artifact failed to parse: ${ia.path}: ${ia.error}`);
+      noteRefusal(
+        refusal,
+        'FREEZE_MALFORMED_ARTIFACT',
+        `Canonical artifact failed to parse: ${ia.path}: ${ia.error}`,
+      );
     }
   }
 
   if (packAudit && packAudit.verdict !== 'ready_for_synthesis') {
-    noteRefusal(refusal, `Pack audit verdict is "${packAudit.verdict}", not "ready_for_synthesis".`);
+    noteRefusal(
+      refusal,
+      'FREEZE_PACK_AUDIT_NOT_READY',
+      `Pack audit verdict is "${packAudit.verdict}", not "ready_for_synthesis".`,
+    );
   }
   if (handoff && handoff.mode !== 'synthesis_ready') {
-    noteRefusal(refusal, `Cowork handoff mode is "${handoff.mode}", not "synthesis_ready".`);
+    noteRefusal(
+      refusal,
+      'FREEZE_HANDOFF_NOT_READY',
+      `Cowork handoff mode is "${handoff.mode}", not "synthesis_ready".`,
+    );
   }
 
   // Citation analysis
@@ -253,14 +290,26 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
 
   if (existsSync(finalReportAbs) && finalReportText.trim().length > 0) {
     if (citationsInFinal.length === 0 && acceptedClaimIds.length > 0) {
-      noteRefusal(refusal, 'final-report.md contains no [claim:...] citations even though accepted claims exist.');
+      noteRefusal(
+        refusal,
+        'FREEZE_FINAL_REPORT_NO_CITATIONS',
+        'final-report.md contains no [claim:...] citations even though accepted claims exist.',
+      );
     }
   }
   if (unknownCitations.length > 0) {
-    noteRefusal(refusal, `Synthesis cites unknown claim_id(s) not present in the pack: ${unknownCitations.join(', ')}.`);
+    noteRefusal(
+      refusal,
+      'FREEZE_UNKNOWN_CLAIM_CITED',
+      `Synthesis cites unknown claim_id(s) not present in the pack: ${unknownCitations.join(', ')}.`,
+    );
   }
   if (repairCitations.length > 0) {
-    noteRefusal(refusal, `Synthesis cites claim(s) that are in repair or rejected state: ${repairCitations.join(', ')}.`);
+    noteRefusal(
+      refusal,
+      'FREEZE_REPAIR_CLAIM_CITED',
+      `Synthesis cites claim(s) that are in repair or rejected state: ${repairCitations.join(', ')}.`,
+    );
   }
 
   // F-C002: cite-allowed = accepted only. A claim that exists in claims.jsonl
@@ -281,6 +330,7 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   if (unacceptedCitations.length > 0) {
     noteRefusal(
       refusal,
+      'FREEZE_UNACCEPTED_CITED',
       `Synthesis cites claim(s) that have no acceptance decision (cite-allowed = accepted only): ${unacceptedCitations.join(', ')}.`,
     );
   }
@@ -294,7 +344,11 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
       if (decisionBriefText.includes(c.contradiction_id)) disclosedIn.push('synthesis/decision-brief.md');
       if (finalReportText.includes(c.contradiction_id)) disclosedIn.push('synthesis/final-report.md');
       if (disclosedIn.length === 0) {
-        noteRefusal(refusal, `Unresolved contradiction ${c.contradiction_id} not disclosed in decision-brief.md or final-report.md.`);
+        noteRefusal(
+          refusal,
+          'FREEZE_UNRESOLVED_CONTRADICTION_UNDISCLOSED',
+          `Unresolved contradiction ${c.contradiction_id} not disclosed in decision-brief.md or final-report.md.`,
+        );
       }
       unresolvedContradictionRefs.push({
         contradiction_id: c.contradiction_id,
@@ -317,7 +371,11 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
       if (disclosedInBrief.length > 0) disclosedIn.push('synthesis/decision-brief.md');
       if (disclosedInFinal.length > 0) disclosedIn.push('synthesis/final-report.md');
       if (disclosedIn.length === 0) {
-        noteRefusal(refusal, `Waiver "${w.family}.${w.applied_to}" is not disclosed in decision-brief.md or final-report.md.`);
+        noteRefusal(
+          refusal,
+          'FREEZE_WAIVER_UNDISCLOSED',
+          `Waiver "${w.family}.${w.applied_to}" is not disclosed in decision-brief.md or final-report.md.`,
+        );
       }
       waiversDisclosed.push({
         family: w.family,
@@ -332,7 +390,11 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   // Section status — every section must have a gate audit on file
   for (const section of research.sections) {
     if (!existsSync(join(packPath, 'audits', `${section.id}-gate.json`))) {
-      noteRefusal(refusal, `Section ${section.id} has no gate result on file.`);
+      noteRefusal(
+        refusal,
+        'FREEZE_MISSING_GATE',
+        `Section ${section.id} has no gate result on file.`,
+      );
       refusal.missingArtifacts.push(`audits/${section.id}-gate.json`);
     }
   }
@@ -498,6 +560,7 @@ async function writeRefusal(args: {
     verdict: 'refused',
     reasons: args.refusal.reasons,
     blocking_reasons: args.refusal.blockingReasons,
+    reason_records: args.refusal.reasonRecords,
     missing_artifacts: args.refusal.missingArtifacts,
     invalid_artifacts: args.refusal.invalidArtifacts,
     next_actions: nextActions,
@@ -529,38 +592,50 @@ async function writeRefusal(args: {
   };
 }
 
+// B-C-003: stable code → next-action mapping. Switching on reason_code lets
+// downstream consumers reason about refusal types without parsing prose. Add
+// new codes here when noteRefusal grows a new reason_code value.
+const NEXT_ACTION_BY_CODE: Record<FreezeReasonCode, string> = {
+  FREEZE_FINAL_REPORT_NO_CITATIONS:
+    'Edit synthesis/final-report.md to cite accepted claims via [claim:clm_...] references.',
+  FREEZE_UNKNOWN_CLAIM_CITED:
+    'Replace any [claim:...] citation in synthesis with a claim_id that exists in the pack.',
+  FREEZE_REPAIR_CLAIM_CITED:
+    'Remove citations to repair/rejected claims from synthesis or repair them via review.',
+  FREEZE_UNACCEPTED_CITED:
+    'Remove citations to unaccepted claims from synthesis, or run `research-os review` to accept them first.',
+  FREEZE_UNRESOLVED_CONTRADICTION_UNDISCLOSED:
+    'Disclose every unresolved contradiction by id in decision-brief.md or final-report.md.',
+  FREEZE_WAIVER_UNDISCLOSED:
+    'Disclose each active waiver by family.applied_to in decision-brief.md or final-report.md.',
+  FREEZE_MISSING_GATE:
+    'Run `research-os gate <section>` for any section without a gate audit.',
+  FREEZE_MISSING_REQUIRED_ARTIFACT:
+    'Run `research-os audit` after addressing repair items; freeze requires verdict=ready_for_synthesis.',
+  FREEZE_MISSING_SYNTHESIS_ARTIFACT:
+    'Run `research-os synth workspace` to lay out the synthesis area (it refuses unless mode=synthesis_ready).',
+  FREEZE_MALFORMED_ARTIFACT:
+    'Repair the malformed canonical artifact reported above (zod will not parse a corrupt file).',
+  FREEZE_PACK_AUDIT_NOT_READY:
+    'Run `research-os audit` after addressing repair items; freeze requires verdict=ready_for_synthesis.',
+  FREEZE_HANDOFF_NOT_READY:
+    'Run `research-os cowork handoff` after the pack reaches synthesis_ready.',
+};
+
+// B-C-003: derive next-action list from structured reason_records. The
+// switch is on the stable reason_code enum, not substring-matching prose.
+// Forward-compat: if a refusal record arrives with an unrecognized
+// reason_code (post-upgrade payload read by a downgrade), fall back to the
+// generic "re-run audit" action rather than dropping it silently.
 function buildRefusalNextActions(refusal: RefusalContext): string[] {
   const actions = new Set<string>();
-  for (const r of refusal.reasons) {
-    if (r.includes('pack-audit') || r.includes('Pack audit')) {
-      actions.add('Run `research-os audit` after addressing repair items; freeze requires verdict=ready_for_synthesis.');
-    }
-    if (r.includes('handoff') || r.includes('Cowork handoff')) {
-      actions.add('Run `research-os cowork handoff` after the pack reaches synthesis_ready.');
-    }
-    if (r.includes('synth') || r.includes('Synthesis')) {
-      actions.add('Run `research-os synth workspace` to lay out the synthesis area (it refuses unless mode=synthesis_ready).');
-    }
-    if (r.includes('final-report')) {
-      actions.add('Edit synthesis/final-report.md to cite accepted claims via [claim:clm_...] references.');
-    }
-    if (r.includes('unknown claim_id')) {
-      actions.add('Replace any [claim:...] citation in synthesis with a claim_id that exists in the pack.');
-    }
-    if (r.includes('repair or rejected')) {
-      actions.add('Remove citations to repair/rejected claims from synthesis or repair them via review.');
-    }
-    if (r.includes('contradiction') && r.includes('not disclosed')) {
-      actions.add('Disclose every unresolved contradiction by id in decision-brief.md or final-report.md.');
-    }
-    if (r.includes('Waiver') && r.includes('not disclosed')) {
-      actions.add('Disclose each active waiver by family.applied_to in decision-brief.md or final-report.md.');
-    }
-    if (r.includes('gate result on file')) {
-      actions.add('Run `research-os gate <section>` for any section without a gate audit.');
-    }
-    if (r.includes('failed to parse')) {
-      actions.add('Repair the malformed canonical artifact reported above (zod will not parse a corrupt file).');
+  for (const record of refusal.reasonRecords) {
+    if (record.reason_code && record.reason_code in NEXT_ACTION_BY_CODE) {
+      actions.add(NEXT_ACTION_BY_CODE[record.reason_code]);
+    } else {
+      // Forward-compat: unknown code (or absent code from a legacy payload)
+      // gets the generic action so the operator still sees a next step.
+      actions.add('Re-run `research-os audit` to surface a fresh next-actions list.');
     }
   }
   if (actions.size === 0) {

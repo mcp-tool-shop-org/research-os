@@ -322,14 +322,26 @@ describe('indexer.build', () => {
     }
   });
 
-  it('fails loudly on malformed JSONL (zod validation)', async () => {
+  it('B-A-002: records a malformed_jsonl warning instead of throwing on a bad JSONL line', async () => {
+    // Pre-B-A-002 this aborted the entire build for the pack. The new
+    // resilient path records a structured warning, skips the bad line, and
+    // still indexes the rest of the section. See B-A-002 task spec — sibling
+    // readers (excerpts/ledger.ts, discover/run.ts, triage/run.ts,
+    // density/run.ts) all skip-malformed; this brings the indexer in line.
     await fixture({});
     await writeFile(
       join(packPath, 'sections', '01-test', 'claims.jsonl'),
       '{"not_a_claim": true}\n',
       'utf8',
     );
-    await expect(build({ packPath, all: true })).rejects.toThrow();
+    const summary = await build({ packPath, all: true });
+    expect(summary.sectionsIndexed).toBe(1);
+    expect(summary.warnings.length).toBeGreaterThanOrEqual(1);
+    const jsonl = summary.warnings.find(
+      (w) => w.kind === 'malformed_jsonl' && w.path?.endsWith('claims.jsonl'),
+    );
+    expect(jsonl).toBeDefined();
+    expect(jsonl?.line).toBe(1);
   });
 
   it('clears stale rows for a section when re-indexed with a smaller artifact set', async () => {

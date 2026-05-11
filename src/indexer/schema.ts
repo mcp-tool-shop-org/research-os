@@ -1,3 +1,20 @@
+/**
+ * Index DB schema version. Written to the `meta` table on every `applySchema`
+ * pass; surfaces via `setMeta('schema_version', ...)` further down this file.
+ *
+ * **v1.0 contract — B-A-003 disclosure path:**
+ *   Bumping `SCHEMA_VERSION` requires deleting `.research-os/index.sqlite` on
+ *   next run. There is no automatic migration yet: the read path does not
+ *   compare stored vs current and there are no `ALTER TABLE` migrations
+ *   wired up. A toolchain running against an older-version DB would silently
+ *   coexist via `INSERT OR REPLACE` against `IF NOT EXISTS` tables, producing
+ *   inconsistent column sets on read.
+ *
+ *   Read-side enforcement (`readSchemaVersion` + `INDEX_SCHEMA_NEWER_THAN_TOOL`
+ *   refusal + additive `ALTER TABLE` migrations) is the post-v1.0 fix tracked
+ *   under B-A-003. Until then, the version field is informational — the v1.0
+ *   contract is "delete-and-rebuild on bump." Documented in `SHIP_GATE.md`.
+ */
 export const SCHEMA_VERSION = 1;
 
 export const DDL_STATEMENTS: string[] = [

@@ -36,18 +36,34 @@ import type {
   Verdict,
 } from './types.js';
 
+// B-C-005: per-line skip-malformed pattern (mirrors src/audit/run.ts). A
+// single malformed JSONL line no longer crashes the entire gate run with an
+// opaque ZodError; the gate result instead carries a `warnings[]` array of
+// {path, line, reason} records the operator can inspect.
 async function readJsonl<T>(
   packPath: string,
   rel: string,
   parse: (raw: unknown) => T,
+  warnings: Array<{ path: string; line: number; reason: string }>,
 ): Promise<T[]> {
   const path = join(packPath, rel);
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: T[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
     if (!line.trim()) continue;
-    out.push(parse(JSON.parse(line)));
+    try {
+      out.push(parse(JSON.parse(line)));
+    } catch (err) {
+      warnings.push({
+        path: rel,
+        // 1-based line number for operator readability
+        line: i + 1,
+        reason: err instanceof Error ? err.message : 'parse error',
+      });
+    }
   }
   return out;
 }
@@ -287,13 +303,16 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
   const section = research.sections.find((s) => s.id === options.sectionId);
   if (!section) throw new SectionNotFoundError(options.sectionId);
 
-  const claims = await readJsonl<Claim>(packPath, `sections/${options.sectionId}/claims.jsonl`, (r) => ClaimSchema.parse(r));
+  // B-C-005: per-line warnings collector — fed to every readJsonl call so
+  // one malformed line in any input no longer kills the whole gate run.
+  const malformedWarnings: Array<{ path: string; line: number; reason: string }> = [];
+  const claims = await readJsonl<Claim>(packPath, `sections/${options.sectionId}/claims.jsonl`, (r) => ClaimSchema.parse(r), malformedWarnings);
   const candidateClaims = claims.filter((c) => c.review_state === 'candidate');
   const sources = await readSourceCards(packPath);
-  const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
-  const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
-  const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r));
-  const resolutions = await readJsonl<ContradictionResolution>(packPath, `sections/${options.sectionId}/contradiction-resolutions.jsonl`, (r) => ContradictionResolutionSchema.parse(r));
+  const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r), malformedWarnings);
+  const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r), malformedWarnings);
+  const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r), malformedWarnings);
+  const resolutions = await readJsonl<ContradictionResolution>(packPath, `sections/${options.sectionId}/contradiction-resolutions.jsonl`, (r) => ContradictionResolutionSchema.parse(r), malformedWarnings);
 
   const input: GateInput = {
     research,
@@ -341,6 +360,10 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
     freshness_summary: summarizeFreshness(input),
     scope_integrity_summary: summarizeScopeIntegrity(input),
     next_actions: buildNextActions(finalResults),
+    // B-C-005: surface skip-malformed warnings on the gate result. Named
+    // `malformed_jsonl_warnings` to avoid colliding with the existing
+    // `warnings` field that lists warn-status GateCheckResults.
+    malformed_jsonl_warnings: malformedWarnings,
   });
 
   const auditsDir = join(packPath, 'audits');

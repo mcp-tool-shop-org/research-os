@@ -4,7 +4,11 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
-import { PackNotFoundError, SectionNotFoundError } from '../errors.js';
+import {
+  PackNotFoundError,
+  ReviewerCascadeFailedError,
+  SectionNotFoundError,
+} from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml, type Section } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ContradictionSchema, type Contradiction } from '../contradictions/schema.js';
@@ -296,7 +300,11 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     // Reviewer-level failure (e.g. Ollama HTTP error). Fall back to heuristic if available.
     const heuristic = reviewers.find((r) => r.name === 'heuristic');
     if (!heuristic || heuristic === reviewer) {
-      throw new Error(`Reviewer "${reviewer.name}" failed and no fallback available: ${result.error}`);
+      // B-C-002: structured cascade-failed error. Includes the failing
+      // reviewer name + error so callers can distinguish from generic errors.
+      throw new ReviewerCascadeFailedError([
+        `${reviewer.name}:${result.error}`,
+      ]);
     }
     return reviewWithSpecificReviewer({
       packPath,
@@ -419,9 +427,8 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
   }
 
   if (allDrafts.length === 0 && failedReviewers.length === args.reviewers.length) {
-    throw new Error(
-      `Multi-pass review: every reviewer failed. ${failedReviewers.join(' | ')}`,
-    );
+    // B-C-002: every reviewer failed in multi-pass mode.
+    throw new ReviewerCascadeFailedError(failedReviewers);
   }
 
   // Dedup findings by (sorted claim_ids, category, summary prefix). Two
@@ -465,7 +472,10 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     briefText: args.briefText,
   });
   if (!result.ok) {
-    throw new Error(`Fallback reviewer "${args.reviewer.name}" also failed: ${result.error}`);
+    // B-C-002: structured cascade-failed error from the fallback reviewer path.
+    throw new ReviewerCascadeFailedError([
+      `${args.reviewer.name}:${result.error}`,
+    ]);
   }
   return finalizeReview({
     packPath: args.packPath,
@@ -571,6 +581,10 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     llm_findings_rejected_ungrounded: args.llmFindingsRejected,
     promoted_to_reviewed: promoted,
     reviewer_options: args.reviewer_options,
+    // B-C-004: stamp the profile that produced this snapshot. Omit when the
+    // implicit DEFAULT_PROFILE is in play so default-profile snapshots stay
+    // byte-identical to legacy (preserves frozen-pack byte stability).
+    profile: args.profile !== DEFAULT_PROFILE ? args.profile : undefined,
   });
 
   // ALWAYS write the profile-scoped artifacts: even non-active runs leave a

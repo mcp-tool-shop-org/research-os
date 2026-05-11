@@ -102,26 +102,180 @@ The historical-accuracy framing is preserved here so the next swarm doesn't inhe
     it. An operator with a hand-curated source ledger but no `research.yaml` entry could
     have it silently overwritten. Wave 2 adds it.
 
+### Fixes — Stage B (proactive resilience) Phase 3 amend wave
+
+Stage B Phase 1 audit identified 9 v1.0 blockers + 3 release-doc fixes + 27 post-v1
+backlog items. Phase 3 amend wave landed 8 of the 9 v1.0 blockers (npm publish
+`--provenance` was scope-downed to v1.x — see "Known limitations" below) plus all 3
+release-doc fixes. Wave 3 narrative below preserves the structural rationale so the
+shape of each fix is reviewable, not just the surface.
+
+#### v1.0 blockers closed in Wave 3
+
+  - **`gather.ts` partial-write resilience (B-A-001).** Stage A's A-008 batched-flush
+    optimization moved the source-id append seam from per-iteration durable to
+    end-of-loop durable. A `fetchOnce` throw mid-loop dropped per-URL receipts AND lost
+    in-flight source-ids because the final flush never ran. Wave 3 wraps each per-URL
+    body in a try/catch that: writes a synthetic failure receipt, flushes the
+    accumulated source-id batch immediately so prior successes become durable, and
+    continues with the next URL. A-008's batched-flush performance win is preserved on
+    the happy path. Three-case regression in `test/sources/gather-partial-write-recovery.test.ts`.
+  - **Indexer malformed-record isolation (B-A-002).** One malformed JSONL tail line or
+    one bad `evidence/source-cards/*.json` used to crash the entire `research-os index`
+    build. Wave 3 wraps `tryReadJsonl` per-line and `readSourceCards` per-file with
+    structured `malformed_jsonl` / `malformed_source_card` warnings (1-based line
+    number, pack-relative path, reason). The outer `build()` wraps each `indexSection`
+    in try/catch with a `section_index_failed` warning — one bad section no longer
+    blocks healthy sections. Three-case regression in
+    `test/indexer/build-malformed-resilience.test.ts` proves: (1) a malformed line on a
+    healthy section still indexes the valid line, (2) a malformed source-card file
+    still indexes the healthy ones, (3) per-section isolation across A/B/C.
+  - **Calibration receipt schema forward-compat (B-C-001).** `CalibrationReceiptSchema`
+    + `AggregateCalibrationReceiptSchema` declared `schema_version: z.literal(1)`. A
+    future v2 would have repeated F-53's reactive retrofit pattern. Wave 3 keeps the
+    `z.literal(1)` form (zod3 `z.union` requires ≥2 literals) but adds a
+    `SUPPORTED_RECEIPT_VERSIONS` constant + a `lookup.ts` wrapper that throws
+    `UnsupportedReceiptVersionError` (code `UNSUPPORTED_RECEIPT_VERSION`) for unknown
+    versions. When v2 lands, the swap is: add `z.literal(2)` to the schema's union, add
+    `2` to the supported list, branch in `receiptToCalibrationSummary`. The dispatch
+    wrapper is the load-bearing seam.
+  - **Review/promote structured errors (B-C-002).** 7+ raw `Error` throws across
+    `src/review/{run,promote,reviewers/index}.ts` + `src/calibration/lookup.ts` were
+    indistinguishable to callers. Wave 3 introduces 5 ResearchOSError subclasses:
+    `ReviewerCascadeFailedError` (retryable=true), `ReviewerProfileInvalidError`,
+    `ReviewerProfileNotFoundError` (carries known-names list in hint),
+    `CalibrationReceiptMalformedError`, `NoReviewerAvailableError`. CLI's existing
+    `reportError` already surfaces `<CODE>: <message>` + hint to stderr — no CLI
+    rendering changes needed. End-to-end CLI test via `execFileSync` in
+    `test/review-error-classes.test.ts`.
+  - **Freeze refusal `reason_code` (B-C-003, TWO touchpoints).** Wave 1 + the C-002
+    freeze tightening produced an `FreezeRefusalPayload` whose `reasons[]` were prose
+    strings and whose `next_actions[]` were derived by substring-matching the prose in
+    `buildRefusalNextActions` — one reword silently breaks every downstream consumer.
+    Wave 3 lands both touchpoints atomically: (1) **schema** adds 12 stable codes
+    (`FREEZE_FINAL_REPORT_NO_CITATIONS`, `FREEZE_UNKNOWN_CLAIM_CITED`,
+    `FREEZE_UNRESOLVED_CONTRADICTION_UNDISCLOSED`, `FREEZE_WAIVER_UNDISCLOSED`,
+    `FREEZE_REPAIR_CLAIM_CITED`, `FREEZE_UNACCEPTED_CITED`, `FREEZE_MISSING_GATE`,
+    `FREEZE_MISSING_REQUIRED_ARTIFACT`, `FREEZE_MISSING_SYNTHESIS_ARTIFACT`,
+    `FREEZE_MALFORMED_ARTIFACT`, `FREEZE_PACK_AUDIT_NOT_READY`,
+    `FREEZE_HANDOFF_NOT_READY`) via `FreezeReasonCodeSchema` enum + new
+    `reason_records[]` on `FreezeRefusalPayloadSchema` (additive-optional with
+    `.default([])`). `noteRefusal` signature changes to `(ctx, reason_code,
+    reason_message, blocking?)`; 10 call sites migrated. (2) **Consumer**
+    `buildRefusalNextActions` is rewritten via `NEXT_ACTION_BY_CODE` lookup table —
+    **0** `.includes(` calls remain in the function body (verified by grep in the
+    regression test). A forward-compat fallback returns a generic "Re-run audit" when
+    a reason_code is unknown or absent (legacy payload safety). Stage A's
+    `FREEZE_UNACCEPTED_CITED` refusal now carries its stable code.
+  - **`research_os_version` scaffold drift (B-E-001).** `src/intake/scaffold.ts` had a
+    hardcoded `PACKAGE_VERSION = '0.1.0'` constant that wrote `research_os_version:
+    '0.1.0'` into every newly-scaffolded `research.yaml` regardless of which release
+    produced it. Wave 3 deletes the constant and imports `RESEARCH_OS_VERSION` from
+    `src/index.ts`. Three-case regression in `test/intake/version-sync.test.ts`
+    asserts direct, round-trip, and package.json↔RESEARCH_OS_VERSION sync (subsumes
+    POST-v1 B-E-007). **See "Known limitations" below for the historical disclosure.**
+  - **CI action SHA-pinning + least-privilege permissions (B-E-002).** All workflow
+    actions in `.github/workflows/{ci,pages}.yml` (4 invocations) are pinned to full
+    commit SHAs with the version tag in a trailing comment, eliminating the mutable-
+    tag supply-chain surface that the tj-actions/changed-files 2025 incident exploited.
+    `ci.yml` gains `permissions: contents: read` as the default-deny baseline (jobs
+    can opt in to more). `pages.yml` permissions (`id-token: write`, `pages: write`)
+    were already correct and stay untouched.
+  - **Dependabot ecosystem coverage (B-E-003).** `.github/dependabot.yml` previously
+    covered only the root `npm /` lockfile. Wave 3 adds two entries: `npm /site` (the
+    Astro/Starlight docs site lockfile, published to GitHub Pages — a vulnerability
+    in a transitive Astro dep would otherwise ship to the live handbook URL without
+    auto-PR), and `github-actions /` (so the SHA-pinned actions from B-E-002 get
+    automated update PRs from Dependabot instead of stagnating).
+
+#### Release-doc fixes (folded into Wave 3)
+
+  - **Indexer `SCHEMA_VERSION` contract disclosed (B-A-003).** Read-side enforcement
+    (compare stored vs current, refuse on newer-than-tool, additive `ALTER TABLE`
+    migrations) sprawled beyond Stage B scope. Wave 3 takes the disclosure path: an
+    inline doc comment at `src/indexer/schema.ts:1` explains the v1.0 contract
+    ("bumping `SCHEMA_VERSION` requires deleting `.research-os/index.sqlite` on next
+    run") and a `SHIP_GATE.md` Section D entry records the same contract for
+    release-time review. Future SCHEMA_VERSION bumps include a `BREAKING: delete
+    .research-os/index.sqlite` instruction in that version's release notes.
+  - **Profile lineage on review snapshot (B-C-004).** `ReviewSnapshotSchema` records
+    `reviewer_options` (Exp6 Session 2) and `reviewer` name but not which named
+    `profile` produced them — same options shape could come from multiple profiles.
+    Wave 3 adds `profile?: string` (additive-optional) and `finalizeReview` stamps it
+    only when `profile !== DEFAULT_PROFILE` so the 4-pack byte-identity guarantee is
+    preserved (default-profile snapshots stay unchanged). `review.md` renders
+    `**Profile:** <name>` when present, omits cleanly when absent.
+  - **`gates/run.ts` skip-malformed (B-C-005).** Gate previously crashed on a single
+    malformed line in any of its input JSONLs (`audit/run.ts`'s `readJsonl` already
+    tolerated). Wave 3 mirrors the audit pattern: per-line try/catch, structured
+    warnings on `SectionGateResult.malformed_jsonl_warnings` (separate field from the
+    pre-existing `warnings: GateCheckResult[]` to avoid the name collision).
+
+### Known limitations — historical disclosure for v1.0
+
+**`research_os_version: "0.1.0"` in pre-v1.0 frozen packs.** During Wave 3, a forensic
+audit of the four research-packs published under v0.3.3 / v0.4.0 / v0.5.0 / v0.6.0
+confirmed they all carry `research_os_version: "0.1.0"` in their `pack.manifest.json`
++ `pack/research.yaml` due to the `PACKAGE_VERSION = '0.1.0'` hardcode in
+`src/intake/scaffold.ts` (fixed in this release, see B-E-001). Audit JSONs inside
+these packs carry their contemporary versions (`0.2.0` / `0.3.1` / `0.3.2`) because
+audit-emit paths used the live `RESEARCH_OS_VERSION` export. The 4-pack byte-identical
+regression continues to PASS because verify-pack hashes the frozen artifacts as-is —
+which means the regression has been validating that the frozen falsehood reproduces.
+**Affected packs (frozen, no re-freezing):**
+
+- `368d2361…` research-os-self-dogfood (manifest+yaml: 0.1.0; audits: 0.1.0)
+- `d71943c6…` comfyui-workflow-durability (manifest: 0.1.1; yaml: 0.1.0; audits: 0.1.0)
+- `6511a044…` xrpl-creator-token-durability (manifest+yaml: 0.1.0; audits: mixed 0.2.0+0.3.1)
+- `55a65792…` godot-export-runtime-durability (manifest+yaml: 0.1.0; audits: 0.3.2)
+
+Frozen pack receipts and sha256 fingerprints are unchanged. New packs scaffolded under
+v1.0+ stamp the contemporary `RESEARCH_OS_VERSION` correctly.
+
+**npm package provenance not wired (B-E-004 deferred to v1.x).** v1.0 ships without
+`npm publish --provenance` attestation. Real provenance requires migrating publish
+out of local advisor sessions into a GitHub Actions workflow with OIDC, which
+conflicts with the established translation-before-publish discipline (TranslateGemma
+12B runs locally; CI runners don't carry the model). Migration to a CI-based publish
+flow with the translation handoff worked out is planned for v1.x. Until then, v1.0
+npm tarballs verify only via the package-shasum (no sigstore attestation).
+
+**DNS-rebinding TOCTOU in `gather` SSRF guard.** Disclosed in `SECURITY.md`
+"Known limitations" (Wave 2 A-RE-003). Acceptable threat-model fit for
+operator-curated URL lists; post-v1.0 hardening via custom dispatcher.
+
+**Indexer schema-version migration model.** Per B-A-003 disclosure path (see above):
+v1.0 contract is "delete `.research-os/index.sqlite` on `SCHEMA_VERSION` bump."
+Read-side enforcement is post-v1.0.
+
 ### Tests
 
-- **Wave 1:** 47 regression tests (713 → 760 PASS), covering 14 required-regression vectors.
-- **Wave 2:** 8 additional regression tests (760 → 768 PASS). Wave 2 tests follow a new
-  doctrine rule that emerged from Wave 1's escape: regression tests must verify the fix
-  path end-to-end through the actual caller, not just unit-test the new helper, and must
-  demonstrate that the deprecated/replaced API is no longer reachable on the relevant code
-  path (or is removed entirely). The `gather-appender-integration.test.ts` asserts the old
-  appender API is absent from the public re-export; the `verify-cross-section-map.test.ts`
-  asserts every entry of `SYNTHESIS_FILES` is in the allowlist (the single-source invariant).
+- **Wave 1:** 47 regression tests (713 → 760 PASS), 14 required-regression vectors.
+- **Wave 2:** 8 additional regression tests (760 → 768 PASS). Introduced the
+  end-to-end-through-actual-caller doctrine rule (regression tests must exercise the
+  fix path through the real caller, not just unit-test new helpers; if a fix
+  introduces a replacement API, the test must demonstrate the old API is dead).
+- **Wave 3:** 41+ additional regression tests (768 → 809 PASS). Covers gather
+  partial-write recovery (3 cases through real `gather()`), indexer
+  malformed-record + per-section isolation (3 cases through real `build()`),
+  calibration receipt forward-compat (10 cases including end-to-end through
+  `loadReceiptForPack` + `receiptToCalibrationSummary`), review error classes (9
+  cases including CLI integration via `execFileSync`), freeze reason_code (9 cases
+  including substring-match-elimination grep proof), profile lineage (2 cases),
+  gates skip-malformed (3 cases), intake version-sync (3 cases subsuming POST-v1
+  B-E-007).
 
 ### Verified
 
-- Lint + typecheck + build + tests: PASS at **768/768**.
+- Lint + typecheck + build + tests: PASS at **809/809** (763 baseline + 46 Wave 1
+  + 5 Wave 2 + 41 Wave 3 net new — minor counting differences absorbed by Wave 2
+  pre-existing-test inversions and Wave 3 fixture cleanups).
 - 4-pack regression: byte-identical PASS on all 4 published research packs
-  (`368d2361…` research-os-self-dogfood, `d71943c6…` comfyui-workflow-durability,
-  `6511a044…` xrpl-creator-token-durability, `55a65792…` godot-export-runtime-durability).
-- No `trusted_baseline` promotion; no reviewer profile status changes; no gate / freeze /
-  synthesis-law changes beyond the precise C-002 freeze accepted-only citation fix and the
-  `SYNTHESIS_FILES` export from freeze.
+  (`368d2361…` / `d71943c6…` / `6511a044…` / `55a65792…`).
+- No `trusted_baseline` promotion; no reviewer profile status changes; no gate /
+  freeze / synthesis-law changes beyond the precise C-002 freeze accepted-only
+  citation fix, the `SYNTHESIS_FILES` export from freeze (Wave 2), and the
+  `reason_code` additions on freeze refusal payloads (Wave 3).
 
 ## [0.6.0] — 2026-05-10 — deterministic reviewer baseline
 

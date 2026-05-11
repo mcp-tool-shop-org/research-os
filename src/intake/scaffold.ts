@@ -5,10 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { stringify as yamlStringify } from 'yaml';
 
 import { PackExistsError, TemplateNotFoundError } from '../errors.js';
+import { RESEARCH_OS_VERSION } from '../index.js';
 import { ResearchYamlSchema, type ResearchYaml } from './schema.js';
 import type { InitOptions, InitResult } from './types.js';
-
-const PACKAGE_VERSION = '0.1.0';
 
 export function slugify(input: string): string {
   const normalized = input
@@ -53,7 +52,7 @@ async function copyTreeRelative(srcDir: string, destDir: string, written: string
 
 export function buildResearchYaml(options: InitOptions): ResearchYaml {
   const draft = {
-    research_os_version: PACKAGE_VERSION,
+    research_os_version: RESEARCH_OS_VERSION,
     created_at: new Date().toISOString(),
     topic: options.topic,
     decision: options.decision ?? '',

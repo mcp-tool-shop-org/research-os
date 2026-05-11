@@ -39,6 +39,19 @@ export const DecisionVocabBarSchema = z.object({
   passed: z.boolean(),
 });
 
+// B-C-001: SUPPORTED_RECEIPT_VERSIONS is the canonical list of receipt schema
+// versions this build can read. When v2 lands, append 2 here AND swap the
+// z.literal(1) below for z.union([z.literal(1), z.literal(2)]) (and branch
+// inside receiptToCalibrationSummary). The two changes land together; this
+// constant is the single source of truth that lookup.ts wraps to throw a
+// structured UnsupportedReceiptVersionError for unknown versions.
+// Note: zod3 z.union requires >= 2 literals, so today the schema field is
+// z.literal(1); the structural readiness comes from SUPPORTED_RECEIPT_VERSIONS
+// + the lookup.ts wrapper (UnsupportedReceiptVersionError dispatch), not from
+// a single-element union form. The list-based check in lookup.ts is the
+// load-bearing forward-compat seam.
+export const SUPPORTED_RECEIPT_VERSIONS = [1] as const;
+
 // schema_version: 1 — additive-optional additions (Exp6 Session 2):
 //   reviewer_options: optional sampling params used during this calibration run.
 //   Absent = stochastic run (pre-v0.6 compat preserved). Present = keys explicitly set.

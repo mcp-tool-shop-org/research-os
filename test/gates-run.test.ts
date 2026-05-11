@@ -464,14 +464,24 @@ describe('gate (end-to-end)', () => {
     expect(updatedYaml.sections.find((s) => s.id === '01-test')?.status).toBe('draft');
   });
 
-  it('refuses malformed JSONL', async () => {
+  it('tolerates malformed JSONL: surfaces per-line warnings instead of crashing (B-C-005)', async () => {
     await makeFixture({});
     await writeFile(
       join(packPath, 'sections', '01-test', 'claims.jsonl'),
       '{"not_a_claim": true}\n',
       'utf8',
     );
-    await expect(gate({ sectionId: '01-test', packPath })).rejects.toThrow();
+    // B-C-005: gate no longer rejects on a single malformed line — the
+    // tolerance pattern from src/audit/run.ts is mirrored here. The result
+    // now carries a `malformed_jsonl_warnings[]` array with the
+    // {path, line, reason} record(s).
+    const result = await gate({ sectionId: '01-test', packPath });
+    expect(result.malformed_jsonl_warnings.length).toBeGreaterThan(0);
+    const w = result.malformed_jsonl_warnings.find((x) =>
+      x.path.includes('claims.jsonl'),
+    );
+    expect(w).toBeDefined();
+    expect(w!.line).toBeGreaterThan(0);
   });
 
   it('rejects when section is missing', async () => {

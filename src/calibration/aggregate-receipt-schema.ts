@@ -37,6 +37,15 @@ export const AggregateDecisionVocabBarSchema = z.object({
   passed: z.boolean(),
 });
 
+// B-C-001: SUPPORTED_AGGREGATE_RECEIPT_VERSIONS is the canonical list of
+// aggregate-receipt schema versions this build can read. When v2 lands,
+// append 2 here AND swap the z.literal(1) below for
+// z.union([z.literal(1), z.literal(2)]) (and branch inside the aggregate
+// reader). Zod3's z.union requires >= 2 literals, so today the schema field
+// remains z.literal(1); forward-compat dispatch lives in the consumer
+// wrapper, not in the schema alone.
+export const SUPPORTED_AGGREGATE_RECEIPT_VERSIONS = [1] as const;
+
 export const AggregateCalibrationReceiptSchema = z.object({
   schema_version: z.literal(1),
   receipt_kind: z.literal('aggregate'), // discriminates from single-run receipt

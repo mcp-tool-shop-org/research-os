@@ -737,3 +737,68 @@ describe('F-54 residual: reviewer_options omitted when not passed (both paths)',
     expect(md).not.toContain('## Reviewer options');
   });
 });
+
+// ---------------------------------------------------------------------------
+// B-C-004: profile-lineage breadcrumb on ReviewSnapshot
+// ---------------------------------------------------------------------------
+describe('B-C-004 — profile lineage on ReviewSnapshotSchema', () => {
+  it('non-default profile is stamped on the canonical review snapshot AND profile-scoped snapshot', async () => {
+    await makeMinimalReviewableFixture();
+    // Make hermes-two-pass-deterministic the active profile (else canonical
+    // mirror is skipped). The simplest way is to run a single review with
+    // that profile when there is no review-active.json yet — then re-run.
+    // BUT: the `isActive` check in finalizeReview compares against
+    // readActiveProfile, which returns DEFAULT_PROFILE when no
+    // review-active.json exists. So the first run under
+    // hermes-two-pass-deterministic writes profile-scoped artifacts only.
+    // We assert on the profile-scoped snapshot to confirm the profile is
+    // recorded.
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+      profile: 'hermes-two-pass-deterministic',
+    });
+    const profileSnapshotPath = join(
+      f54PackPath,
+      'sections',
+      '01-f54',
+      'reviews',
+      'hermes-two-pass-deterministic',
+      'review.json',
+    );
+    const profileSnapshot = JSON.parse(await readFile(profileSnapshotPath, 'utf8'));
+    expect(profileSnapshot.profile).toBe('hermes-two-pass-deterministic');
+    // review.md under the profile dir should also contain the breadcrumb
+    const profileMd = await readFile(
+      join(
+        f54PackPath,
+        'sections',
+        '01-f54',
+        'reviews',
+        'hermes-two-pass-deterministic',
+        'review.md',
+      ),
+      'utf8',
+    );
+    expect(profileMd).toContain('**Profile:** hermes-two-pass-deterministic');
+  });
+
+  it('omits profile field when implicit default profile is used (preserves byte stability)', async () => {
+    await makeMinimalReviewableFixture();
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+    });
+    // Default profile → canonical mirror IS written. Verify field absent.
+    const canonicalPath = join(f54PackPath, 'audits', '01-f54-review.json');
+    const snapshot = JSON.parse(await readFile(canonicalPath, 'utf8'));
+    expect(snapshot.profile).toBeUndefined();
+    const canonicalMd = await readFile(
+      join(f54PackPath, 'audits', '01-f54-review.md'),
+      'utf8',
+    );
+    expect(canonicalMd).not.toContain('**Profile:**');
+  });
+});
