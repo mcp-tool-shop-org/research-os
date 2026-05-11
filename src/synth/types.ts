@@ -85,6 +85,12 @@ export interface CrossSectionMap {
 
 export interface WorkspaceOptions {
   packPath?: string;
+  /**
+   * v0.7.1 — when set, `workspace` delegates to the section-scoped synthesis
+   * path. Lets `synth workspace --section <id>` be the alias-spelling of
+   * `synth section <id>`, per the kickoff's CLI shape contract.
+   */
+  sectionId?: string;
 }
 
 export interface WorkspaceSummary {
@@ -97,4 +103,29 @@ export interface WorkspaceSummary {
   claimClusters: number;
   scopeOverlaps: number;
   crossSectionContradictions: number;
+}
+
+export interface SectionSynthesisOptions {
+  sectionId: string;
+  packPath?: string;
+}
+
+export interface SectionSynthesisSummary {
+  packPath: string;
+  sectionId: string;
+  packMode: string;
+  notFreezableAsPack: true;
+  notPublishableAsPack: true;
+  acceptedClaims: number;
+  sourceCount: number;
+  waiversApplied: number;
+  gateVerdict: string | null;
+  jsonPath: string;
+  markdownPath: string;
+  /**
+   * Defensive cross-check: section-state's accepted_claim_ids should be a
+   * subset of the pack-level accepted_claim_ids. If this is false, the
+   * handoff producer has a bug — surface it without failing the run.
+   */
+  acceptedIdsCrossCheckOk: boolean;
 }

@@ -2,6 +2,49 @@
 
 All notable changes to `research-os` are documented here.
 
+## [Unreleased]
+
+### Section-level synthesis + gate effective-publisher
+
+Two slices earned by the fresh-pack product proof at
+`local-first-vs-cloud-research` (closeout at
+`E:/AI/local-first-vs-cloud-research/PRODUCT_PROOF_CLOSEOUT.md`):
+
+- **Section-level synthesis** — new `research-os synth section <section-id>`
+  (and the alias-spelling `research-os synth workspace --section <section-id>`)
+  produces a lawful partial-synthesis artifact for a single gate-eligible
+  section while the parent pack is in `repair_required` mode. Failed sections
+  stay preserved as evidence; the pack as a whole remains
+  **not-freezable** and **not-publishable**. Output lives at
+  `sections/<id>/synthesis/section-brief.md` + `section-synthesis.json`. The
+  pack-level `synth workspace`, `freeze`, and `pack publish` paths are
+  unchanged and continue to refuse the pack until every section is ready.
+  Refuses cleanly with `SECTION_NOT_SYNTHESIS_ELIGIBLE` when the named
+  section is not gate-eligible.
+
+- **Gate honors effective publisher / source_type via the override ledger.**
+  `min_independent_publishers` and `primary_sources_required` now resolve each
+  card through `getEffectivePublisher` / `getEffectiveSourceType` so
+  operator-applied corrections via `source-card audit --apply` flow through
+  to the gate. Previously the gate read `card.publisher` /
+  `card.source_type` directly and ignored the override ledger. Backward
+  compatible: existing fixtures without an override ledger produce identical
+  gate output before and after. Source-type override (e.g. `docs → primary`)
+  is honored equivalently.
+
+Regression coverage: 16 new tests (917 total). Live verification against
+`E:/AI/local-first-vs-cloud-research/`:
+- Section 06 `min_independent_publishers` now reports `5 independent
+  publisher(s)` and passes (W3C + DVC + The Turing Way + arXiv.org + Claude),
+  matching the override-aware count. The pack-level
+  `min_independent_publishers` section_waiver becomes structurally
+  unnecessary; its audit-trail value remains.
+- `research-os synth section 06-evidence-custody-curated` produces a
+  47-claim, 4-source partial synthesis at
+  `sections/06-evidence-custody-curated/synthesis/`. Section 01 is
+  untouched. `pack freeze` continues to refuse the pack as a whole.
+- 4-pack frozen-receipt regression byte-identical.
+
 ## [0.7.0] — 2026-05-11 — Dogfood Swarm Hardening
 
 v0.7.0 hardens `research-os` after a full dogfood swarm: safer fetches, stronger pack publishing, resilient malformed-input handling, structured recovery errors, progress feedback, clearer operator docs, and preserved frozen-pack verification. This is a hardening release, not a v1 product release. v1 readiness work continues; v1 will require a fresh end-to-end pack proof produced by the current toolchain, a clean operator happy-path guide, a recovery guide validated against real failures, a simplified reviewer-trust story, and release copy that leads with product value rather than caveat inventory.

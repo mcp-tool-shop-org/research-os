@@ -1,4 +1,5 @@
 export { workspace } from './run.js';
+export { sectionSynthesis, SectionNotSynthesisEligibleError } from './section-run.js';
 export { deriveCrossSectionMap } from './derive.js';
 export {
   renderCrossSectionMapMarkdown,
@@ -29,4 +30,6 @@ export type {
   ForbiddenInput,
   WorkspaceOptions,
   WorkspaceSummary,
+  SectionSynthesisOptions,
+  SectionSynthesisSummary,
 } from './types.js';

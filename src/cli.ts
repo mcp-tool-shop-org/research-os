@@ -28,7 +28,10 @@ import {
   syncRepoKnowledge,
 } from './indexer/index.js';
 import { handoff as coworkHandoff } from './cowork/index.js';
-import { workspace as synthWorkspace } from './synth/index.js';
+import {
+  workspace as synthWorkspace,
+  sectionSynthesis as synthSection,
+} from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
 import { invalidateExtraction, invalidateReview } from './invalidate/index.js';
@@ -959,10 +962,40 @@ const synthCmd = program
 
 synthCmd
   .command('workspace')
-  .description('Create the synthesis workspace; refuses unless cowork handoff mode is synthesis_ready')
+  .description(
+    'Create the synthesis workspace; refuses unless cowork handoff mode is synthesis_ready. ' +
+      'With --section <id>, produces a partial section-scoped synthesis for a single gate-eligible section ' +
+      'in a repair_required pack (alias-spelling of `research-os synth section <id>`).',
+  )
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--section <id>',
+    'Produce section-scoped synthesis for this section only. The pack remains not-freezable and not-publishable.',
+  )
   .action(async (opts) => {
     try {
+      const sectionId = opts.section as string | undefined;
+      if (sectionId) {
+        const result = await synthSection({ sectionId, packPath: opts.pack });
+        process.stdout.write(`synthesis section: PARTIAL\n`);
+        process.stdout.write(`  section:                  ${result.sectionId}\n`);
+        process.stdout.write(`  pack mode:                ${result.packMode}\n`);
+        process.stdout.write(`  gate verdict:             ${result.gateVerdict ?? '(none)'}\n`);
+        process.stdout.write(`  accepted claims:          ${result.acceptedClaims}\n`);
+        process.stdout.write(`  sources cited:            ${result.sourceCount}\n`);
+        process.stdout.write(`  waivers disclosed:        ${result.waiversApplied}\n`);
+        process.stdout.write(`  not freezable as pack:    ${result.notFreezableAsPack}\n`);
+        process.stdout.write(`  not publishable as pack:  ${result.notPublishableAsPack}\n`);
+        process.stdout.write(`  json:                     ${result.jsonPath}\n`);
+        process.stdout.write(`  markdown:                 ${result.markdownPath}\n`);
+        if (!result.acceptedIdsCrossCheckOk) {
+          process.stdout.write(
+            `\nwarning: section accepted_claim_ids drift from pack-wide accepted_claim_ids in the cowork handoff. ` +
+              `Re-run \`research-os cowork handoff\` to refresh.\n`,
+          );
+        }
+        return;
+      }
       const result = await synthWorkspace({ packPath: opts.pack });
       if (result.refused) {
         process.stdout.write(`synthesis workspace: REFUSED\n`);
@@ -978,6 +1011,40 @@ synthCmd
       process.stdout.write(`  scope overlaps:               ${result.scopeOverlaps}\n`);
       process.stdout.write(`  cross-section contradictions: ${result.crossSectionContradictions}\n`);
       for (const f of result.filesWritten) process.stdout.write(`  wrote: ${f}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+synthCmd
+  .command('section')
+  .description(
+    'Produce a partial section-scoped synthesis for a single gate-eligible section in a ' +
+      'repair_required pack. Output goes to sections/<id>/synthesis/. The pack as a whole remains ' +
+      'not-freezable and not-publishable.',
+  )
+  .argument('<section>', 'Section id, e.g. "06-evidence-custody-curated"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (section: string, opts) => {
+    try {
+      const result = await synthSection({ sectionId: section, packPath: opts.pack });
+      process.stdout.write(`synthesis section: PARTIAL\n`);
+      process.stdout.write(`  section:                  ${result.sectionId}\n`);
+      process.stdout.write(`  pack mode:                ${result.packMode}\n`);
+      process.stdout.write(`  gate verdict:             ${result.gateVerdict ?? '(none)'}\n`);
+      process.stdout.write(`  accepted claims:          ${result.acceptedClaims}\n`);
+      process.stdout.write(`  sources cited:            ${result.sourceCount}\n`);
+      process.stdout.write(`  waivers disclosed:        ${result.waiversApplied}\n`);
+      process.stdout.write(`  not freezable as pack:    ${result.notFreezableAsPack}\n`);
+      process.stdout.write(`  not publishable as pack:  ${result.notPublishableAsPack}\n`);
+      process.stdout.write(`  json:                     ${result.jsonPath}\n`);
+      process.stdout.write(`  markdown:                 ${result.markdownPath}\n`);
+      if (!result.acceptedIdsCrossCheckOk) {
+        process.stdout.write(
+          `\nwarning: section accepted_claim_ids drift from pack-wide accepted_claim_ids in the cowork handoff. ` +
+            `Re-run \`research-os cowork handoff\` to refresh.\n`,
+        );
+      }
     } catch (err) {
       reportError(err);
     }

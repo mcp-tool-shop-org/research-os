@@ -10,6 +10,8 @@ import { ContradictionSchema, type Contradiction } from '../contradictions/schem
 import { ContradictionResolutionSchema, type ContradictionResolution } from '../contradictions/resolution-schema.js';
 import { FetchReceiptSchema, SourceCardSchema, type FetchReceipt, type SourceCard } from '../sources/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
+import { readOverrides } from '../sources/source-card-overrides.js';
+import { getEffectivePublisher, getEffectiveSourceType } from '../sources/effective-card.js';
 
 import {
   checkClaimIntegrity,
@@ -102,23 +104,29 @@ function summarizeSourceCounts(input: GateInput): SourceCounts {
   const cards = input.sources;
   const sectionCards = cards.filter((c) => c.section_id === input.section.id);
   const failed = input.receipts.filter((r) => r.fetch_outcome !== 'ok').length;
+  const overrides = input.overrides ?? [];
   const publishers = new Set(
-    cards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
+    cards
+      .map((c) => getEffectivePublisher(c, overrides))
+      .filter((p): p is string => typeof p === 'string'),
   );
   const sectionPublishers = new Set(
-    sectionCards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
+    sectionCards
+      .map((c) => getEffectivePublisher(c, overrides))
+      .filter((p): p is string => typeof p === 'string'),
   );
+  const effectiveType = (c: SourceCard): string => getEffectiveSourceType(c, overrides);
   return {
     total: cards.length,
-    primary: cards.filter((c) => c.source_type === 'primary').length,
-    secondary: cards.filter((c) => c.source_type === 'secondary').length,
-    forum: cards.filter((c) => c.source_type === 'forum').length,
-    benchmark: cards.filter((c) => c.source_type === 'benchmark').length,
-    docs: cards.filter((c) => c.source_type === 'docs').length,
-    unknown: cards.filter((c) => c.source_type === 'unknown').length,
+    primary: cards.filter((c) => effectiveType(c) === 'primary').length,
+    secondary: cards.filter((c) => effectiveType(c) === 'secondary').length,
+    forum: cards.filter((c) => effectiveType(c) === 'forum').length,
+    benchmark: cards.filter((c) => effectiveType(c) === 'benchmark').length,
+    docs: cards.filter((c) => effectiveType(c) === 'docs').length,
+    unknown: cards.filter((c) => effectiveType(c) === 'unknown').length,
     independent_publishers: publishers.size,
     failed_fetches: failed,
-    section_primary: sectionCards.filter((c) => c.source_type === 'primary').length,
+    section_primary: sectionCards.filter((c) => effectiveType(c) === 'primary').length,
     section_independent_publishers: sectionPublishers.size,
   };
 }
@@ -313,6 +321,10 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r), malformedWarnings);
   const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r), malformedWarnings);
   const resolutions = await readJsonl<ContradictionResolution>(packPath, `sections/${options.sectionId}/contradiction-resolutions.jsonl`, (r) => ContradictionResolutionSchema.parse(r), malformedWarnings);
+  // Source-card override ledger — applied at read time via the effective-card
+  // helpers (getEffectivePublisher / getEffectiveSourceType). Missing ledger
+  // file is fine; readOverrides returns [].
+  const overrides = await readOverrides(packPath);
 
   const input: GateInput = {
     research,
@@ -324,6 +336,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
     contradictions,
     claimReviews,
     resolutions,
+    overrides,
   };
 
   const rawResults: GateCheckResult[] = [

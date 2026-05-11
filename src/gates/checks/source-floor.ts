@@ -1,10 +1,12 @@
 import type { GateCheckResult, GateInput } from '../types.js';
+import { getEffectivePublisher, getEffectiveSourceType } from '../../sources/effective-card.js';
 
 export function checkSourceFloor(input: GateInput): GateCheckResult[] {
   const cfg = input.research.gates.source_floor;
   const results: GateCheckResult[] = [];
   const cards = input.sources;
   const sectionCards = cards.filter((c) => c.section_id === input.section.id);
+  const overrides = input.overrides ?? [];
 
   // min_sources
   const sourceCount = cards.length;
@@ -28,12 +30,20 @@ export function checkSourceFloor(input: GateInput): GateCheckResult[] {
     });
   }
 
-  // min_independent_publishers — pack-wide accumulation; section-scoped count shown for operator awareness
+  // min_independent_publishers — pack-wide accumulation; section-scoped count
+  // shown for operator awareness. Publishers are resolved through the source-card
+  // override ledger: an operator-applied `new_publisher` override takes precedence
+  // over the raw extracted `card.publisher`. Effective null still excluded from
+  // the count (preserves prior filter semantics).
   const publishers = new Set(
-    cards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
+    cards
+      .map((c) => getEffectivePublisher(c, overrides))
+      .filter((p): p is string => typeof p === 'string'),
   );
   const sectionPublishers = new Set(
-    sectionCards.map((c) => c.publisher).filter((p): p is string => typeof p === 'string'),
+    sectionCards
+      .map((c) => getEffectivePublisher(c, overrides))
+      .filter((p): p is string => typeof p === 'string'),
   );
   if (publishers.size < cfg.min_independent_publishers) {
     results.push({
@@ -55,16 +65,22 @@ export function checkSourceFloor(input: GateInput): GateCheckResult[] {
     });
   }
 
-  // primary_sources_required — pack-wide accumulation; section-scoped count shown for operator awareness
-  const primaryCount = cards.filter((c) => c.source_type === 'primary').length;
-  const sectionPrimaryCount = sectionCards.filter((c) => c.source_type === 'primary').length;
+  // primary_sources_required — pack-wide accumulation; section-scoped count
+  // shown for operator awareness. Source type is resolved through the override
+  // ledger so an operator-applied `new_source_type: "primary"` correction is
+  // counted alongside raw primaries.
+  const primaryCards = cards.filter((c) => getEffectiveSourceType(c, overrides) === 'primary');
+  const primaryCount = primaryCards.length;
+  const sectionPrimaryCount = sectionCards.filter(
+    (c) => getEffectiveSourceType(c, overrides) === 'primary',
+  ).length;
   if (primaryCount < cfg.primary_sources_required) {
     results.push({
       family: 'source_floor',
       check: 'primary_sources_required',
       status: 'fail',
       detail: `Found ${primaryCount} primary source(s); minimum ${cfg.primary_sources_required} required. Pre-waiver. (pack-wide=${primaryCount}, section-scoped=${sectionPrimaryCount})`,
-      evidence: cards.filter((c) => c.source_type === 'primary').map((c) => c.source_id),
+      evidence: primaryCards.map((c) => c.source_id),
       blocks_synthesis: true,
     });
   } else {

@@ -47,6 +47,29 @@ async function readSourceCards(packPath: string): Promise<SourceCard[]> {
 }
 
 export async function workspace(options: WorkspaceOptions): Promise<WorkspaceSummary> {
+  // v0.7.1: `workspace({ sectionId })` is the alias-spelling of section-scoped
+  // synthesis. The path here delegates to sectionSynthesis and projects the
+  // section-summary into the existing WorkspaceSummary shape so the CLI can
+  // describe the result consistently regardless of which spelling was used.
+  if (options.sectionId) {
+    const { sectionSynthesis } = await import('./section-run.js');
+    const result = await sectionSynthesis({
+      sectionId: options.sectionId,
+      packPath: options.packPath,
+    });
+    return {
+      packPath: result.packPath,
+      mode: result.packMode,
+      refused: false,
+      refusalReason: null,
+      filesWritten: [result.jsonPath, result.markdownPath],
+      acceptedClaims: result.acceptedClaims,
+      claimClusters: 0,
+      scopeOverlaps: 0,
+      crossSectionContradictions: 0,
+    };
+  }
+
   const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
   const yamlPath = join(packPath, 'research.yaml');
   if (!existsSync(yamlPath)) throw new PackNotFoundError(packPath);

@@ -4,6 +4,7 @@ import type { ClaimReview } from '../review/schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
 import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
+import type { SourceCardOverride } from '../sources/source-card-overrides-schema.js';
 
 export type GateFamily =
   | 'source_floor'
@@ -120,6 +121,14 @@ export interface GateInput {
   /** Resolution ledger — latest-wins per contradiction_id. Optional for backward compat. */
   resolutions?: ContradictionResolution[];
   claimReviews: ClaimReview[];
+  /**
+   * Source-card override ledger — appended via `source-card audit --apply`.
+   * Read at gate time so min_independent_publishers / primary_sources_required
+   * use the effective view of a card, not its raw extracted metadata.
+   * Optional with default [] for backward compat with fixtures that predate
+   * the override ledger.
+   */
+  overrides?: SourceCardOverride[];
 }
 
 export interface RunGateOptions {
