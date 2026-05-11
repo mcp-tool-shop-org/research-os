@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,9 +151,9 @@ Esta es la alternativa estructural a *búsqueda → resumen → informe detallad
 
 ## Calibración de revisores
 
-La versión v0.5.0 hace que la calibración de revisores sea más robusta. Un perfil de revisor no se considera confiable simplemente porque se ejecutó una vez; obtiene un estado a través de informes estructurados de fallos simulados y agregación de múltiples ejecuciones.
+La versión 0.5.0 hace que la calibración de los revisores sea más robusta. Un perfil de revisor no se considera confiable simplemente porque se ejecutó una vez; obtiene un estado a través de informes estructurados de fallos simulados y agregación de múltiples ejecuciones. La versión 0.6.0 agrega opciones de revisor deterministas a la ruta de revisión de producción y al sistema de calibración.
 
-**Actualmente, ningún perfil se considera como una "línea de base confiable".** Los informes canónicos en el repositorio muestran `hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. Esto es intencional: la confianza se gana a través de evidencia repetida de fallos simulados, no se asume.
+**Actualmente, no se admite ningún perfil como "línea de base confiable".** Los informes canónicos en el repositorio muestran `hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`. Esto es intencional: la confianza se gana a través de evidencia repetida de fallos simulados, no se asume. El informe `hermes-two-pass-deterministic` tiene una brecha en el modelo y la capacidad (se producen 2 de 6 tipos de decisiones; se requieren 3 de 6) que no es un problema de varianza.
 
 Los informes de calibración se encuentran en `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`. Cada informe registra los resultados de PASADO/FALLIDO en siete categorías, cuatro etiquetas de estado (`trusted_baseline`, `conditional_pass`, `failed`, `comparison_only`), y revela honestamente qué aspectos no puede probar la prueba (`needs_contradiction_mapping` no es accesible desde `seeded-v1`). Consulte [CHANGELOG.md](CHANGELOG.md).
 
@@ -164,13 +164,21 @@ node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile he
 # Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
 node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
 
+# Deterministic multi-run calibration (temperature + seed explicit in receipt)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass \
+  --temperature 0 --seed 7 --runs 3 --profile hermes-two-pass-deterministic
+
 # Promote a section's review — auto-populates calibration_summary from pack-relative receipt
 research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 ```
 
 Cuando se utiliza `--runs <n>`, los informes de cada ejecución se escriben en `<profile>/runs/run-NNN.json` y se escribe un informe agregado (con barras basadas en la mediana y detección de fallos recurrentes) en `<profile>/seeded-v1.{json,md}`. El informe agregado incluye `receipt_kind: 'aggregate'` para distinguirlo de los informes de ejecución individual. El modo de ejecución individual (`--runs 1` o omitido) conserva el comportamiento de escritura directa existente.
 
+**Perfiles de revisor deterministas:** Utilice `review_profiles.<name>.reviewer_options` en `research.yaml` para incluir los parámetros de muestreo de Ollama, como `temperature` y `seed`, en cada instancia de `OllamaInternReviewer` en la ruta de revisión de producción. El perfil `hermes-two-pass-deterministic` se proporciona como un ejemplo integrado. Consulte [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) y la [página del manual de calibración de revisores](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
 ## Estado
+
+**v0.6.0:** Publicada en npm como `@mcptoolshop/research-os@0.6.0`, 10 de mayo de 2026. La versión 0.6.0 finaliza el Experimento 6 con evidencia de la confianza del revisor: research-os ahora puede producir una línea de base canónica de modelo reproducible y atribuible. Incluye: opciones de revisor deterministas en la ruta de revisión de producción (`review_profiles.<name>.reviewer_options` en `research.yaml`); compatibilidad hacia atrás del esquema de "gate" para artefactos congelados anteriores a la versión 0.3.3 (F-53); la salida de la revisión revela las condiciones de muestreo directamente en `review.json` y `review.md` (F-54); informe agregado determinista canónico incluido (`hermes-two-pass-deterministic`, `temperature:0, seed:7`). **No se admite ninguna línea de base confiable.** `hermes-two-pass-deterministic=failed` (brecha en el modelo y la capacidad en el vocabulario de decisiones, no varianza). **Hermes no se promociona a "línea de base confiable".** La ganancia es el mecanismo, no un informe de éxito. No se realizaron cambios en los "gates", la congelación ni las leyes de síntesis. Los cuatro paquetes congelados verifican su identidad de bytes. 713/713 pruebas de vitest superadas. Consulte [CHANGELOG.md](CHANGELOG.md) y [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md).
 
 **v0.5.0** — publicado en npm como `@mcptoolshop/research-os@0.5.0`, 10 de mayo de 2026. La versión v0.5.0 hace que la calibración de revisores sea más robusta. Un perfil de revisor no se considera confiable simplemente porque se ejecutó una vez; obtiene un estado a través de informes estructurados de fallos simulados y agregación de múltiples ejecuciones. Incluye: esquema de informe de calibración estructurado (`seeded-v1.{json,md}`, validado con Zod, cuatro etiquetas de estado); entorno de ejecución para múltiples ejecuciones (`--runs <n>`, aislamiento por ejecución, barras de PASADO/FALLIDO basadas en la mediana, degradación por fallos recurrentes); barra de vocabulario de decisiones consciente de la arquitectura; búsqueda de informes relativa al paquete en `review-promote`. **No se admite ninguna línea de base confiable:** `hermes-two-pass=failed` (agregado, 3 ejecuciones), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. research-os ahora puede negarse a confiar en un perfil de revisor cuando los fallos simulados repetidos no respaldan la confianza. **No se realizan cambios en las puertas, la congelación o las leyes de síntesis. Los cuatro paquetes congelados existentes verifican la integridad de los bytes.** 671/671 pruebas de vitest superadas. Consulte [CHANGELOG.md](CHANGELOG.md).
 

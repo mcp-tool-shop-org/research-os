@@ -171,6 +171,53 @@ cannot be measured against this fixture. Fixture expansion is deferred to v0.6.
 
 ---
 
+## Deterministic reviewer profile
+
+v0.6.0 adds `reviewer_options` to `ReviewProfilePresetSchema`, allowing operators to
+carry `temperature`, `seed`, and other Ollama sampling parameters into every
+`OllamaInternReviewer` construction via `research.yaml` profile config — no manual
+flag injection required.
+
+```yaml
+review_profiles:
+  hermes-two-pass-deterministic:
+    mode: two_pass
+    general_model: hermes3:8b
+    critic_model: hermes3:8b
+    review_window: 30
+    reviewer_options:
+      temperature: 0
+      seed: 7
+```
+
+**Using the profile:**
+
+```bash
+research-os review <section> \
+  --preset hermes-two-pass-deterministic \
+  --profile hermes-two-pass-deterministic
+```
+
+The `hermes-two-pass-deterministic` preset ships as a built-in in `DEFAULT_REVIEW_PROFILES`
+(status: `experimental`). Add it to your pack's `research.yaml` under `review_profiles`
+to activate it, or rely on the built-in default if your pack does not override
+`review_profiles`.
+
+**Deterministic settings reduce variance but do NOT guarantee trust.** The canonical
+`hermes-two-pass-deterministic` aggregate receipt shows `failed` — a structural model-
+capability gap in decision vocabulary (2/6 decisions produced; requires 3/6). Deterministic
+settings make the per-run data stable and self-documenting; they do not improve the
+model's decision-vocabulary coverage.
+
+**What the receipt discloses:** `review.json` carries `reviewer_options` directly on the
+snapshot; `review.md` renders a `## Reviewer options` section with stable key order
+(`num_ctx, temperature, seed, top_p, top_k, repeat_penalty`). The receipt is
+self-documenting without requiring a secondary profile lookup.
+
+**Full evidence trail:** [`docs/experiment-6-proof.md`](../../../experiment-6-proof.md)
+
+---
+
 ## Auto-population in `review-promote`
 
 When `review-promote` is called without explicit `--calibration-*` flags, it

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -151,9 +151,9 @@ discover
 
 ## 评审员校准
 
-v0.5.0版本使评审员校准更加可靠。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有预设错误的测试结果和多次运行的聚合来获得信任状态。
+v0.5.0版本使评审器校准更加可靠。评审器配置文件不会因为只运行一次而被信任，而是通过结构化的、带有模拟错误的反馈和多次运行的聚合来获得信任状态。v0.6.0版本为生产环境的评审流程和校准工具添加了确定性的评审器选项。
 
-**目前没有任何配置文件被认为是`trusted_baseline`（可信基线）。** 仓库中的标准测试结果显示`hermes-two-pass=failed`（失败），`mistral-nemo-two-pass=conditional_pass`（条件通过），`hermes-single-pass=comparison_only`（仅供比较）。这是有意为之：信任是通过反复的、带有预设错误的结果来获得的，而不是默认信任。
+**目前没有任何配置文件被认为是“可信任的基准”。** 仓库中的标准反馈显示：`hermes-two-pass=failed`（失败），`mistral-nemo-two-pass=conditional_pass`（条件通过），`hermes-single-pass=comparison_only`（仅进行比较），`hermes-two-pass-deterministic=failed`（失败）。这是有意为之：信任是通过重复的、带有模拟错误的数据获得的，而不是默认信任。`hermes-two-pass-deterministic`反馈存在结构上的模型能力差距（产生了2/6种决策类型，需要3/6种），这并非是方差问题。
 
 校准结果文件位于`calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`。每个结果文件记录了针对七个方面的PASS/FAIL（通过/失败）结果，四个状态标签（`trusted_baseline`、`conditional_pass`、`failed`、`comparison_only`），并诚实地披露了测试框架无法测试的内容（`needs_contradiction_mapping`无法从`seeded-v1`访问）。请参阅[CHANGELOG.md](CHANGELOG.md)。
 
@@ -164,13 +164,21 @@ node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile he
 # Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
 node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
 
+# Deterministic multi-run calibration (temperature + seed explicit in receipt)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass \
+  --temperature 0 --seed 7 --runs 3 --profile hermes-two-pass-deterministic
+
 # Promote a section's review — auto-populates calibration_summary from pack-relative receipt
 research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 ```
 
 当使用`--runs <n>`参数时，每个运行的结果文件会被写入到`<profile>/runs/run-NNN.json`，并且会生成一个聚合结果文件（包含基于中位数的PASS/FAIL结果，以及重复失败检测），写入到`<profile>/seeded-v1.{json,md}`。聚合结果文件包含`receipt_kind: 'aggregate'`，用于区分单次运行的结果文件。单次运行模式（`--runs 1`或省略）会保留现有的直接写入行为。
 
+**确定性的评审器配置文件**——在`research.yaml`文件中，使用`review_profiles.<name>.reviewer_options`来将`temperature`（温度）、`seed`（种子）和其他Ollama采样参数传递到生产环境评审流程中的每个`OllamaInternReviewer`实例。`hermes-two-pass-deterministic`配置文件作为内置示例提供。请参阅[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)以及[评审器校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+
 ## 状态
+
+**v0.6.0**——已发布到npm，版本号为`@mcptoolshop/research-os@0.6.0`，发布日期为2026年5月10日。v0.6.0版本完成了实验6，并提供了评审器信任的证据：research-os现在可以生成可重复、可追溯的标准模型基准。包含内容：在生产环境的评审流程中，添加了确定性的评审器选项（`review_profiles.<name>.reviewer_options`，位于`research.yaml`文件中）；为预v0.3.3版本的冻结资源（F-53）提供了向后兼容的schema；评审输出直接在`review.json`和`review.md`文件中显示采样条件（F-54）；提交了标准的、确定性的聚合反馈（`hermes-two-pass-deterministic`，`temperature:0, seed:7`）。**目前没有任何可信任的基准。** `hermes-two-pass-deterministic=failed`（决策词汇表中的结构模型能力差距，而非方差问题）。**Hermes没有被提升为“可信任的基准”。** 关键在于机制，而不是通过了反馈。没有对gate、freeze或合成规则进行任何更改。所有四个冻结包都具有完全相同的字节标识。713/713个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)以及[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)。
 
 **v0.5.0** — 发布到npm，版本号为`@mcptoolshop/research-os@0.5.0`，发布日期：2026-05-10。v0.5.0版本使评审员校准更加可靠。评审员配置文件不会因为只运行一次而被信任，而是通过结构化的、带有预设错误的测试结果和多次运行的聚合来获得信任状态。包含：结构化的校准结果模式（`seeded-v1.{json,md}`，经过Zod验证，包含四个状态标签）；多运行测试框架（`--runs <n>`，每个运行隔离，基于中位数的PASS/FAIL结果，重复失败降级）；能够感知架构的决策词汇表；在`review-promote`中进行包相关的结果文件查找。**没有可信的基线：** `hermes-two-pass=failed`（聚合，3次运行），`mistral-nemo-two-pass=conditional_pass`，`hermes-single-pass=comparison_only`。research-os现在可以拒绝信任评审员配置文件，当反复的、带有预设错误的测试结果不支持信任时。**没有对网关、冻结或合成规则的更改。所有四个现有的冻结包都以字节级别的相同方式进行验证。** 671/671个vitest测试通过。请参阅[CHANGELOG.md](CHANGELOG.md)。
 

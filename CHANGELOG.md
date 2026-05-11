@@ -2,6 +2,125 @@
 
 All notable changes to `research-os` are documented here.
 
+## [0.6.0] — 2026-05-10 — deterministic reviewer baseline
+
+v0.6.0 closes Experiment 6 with reviewer-trust evidence: research-os can now produce a
+reproducible, attributable canonical-model baseline. The real review path carries
+deterministic reviewer options from profile config, legacy gate artifacts parse, review
+outputs disclose sampling conditions, and the v0.1 self-dogfood pack was reviewed through
+the production CLI under explicit Hermes conditions. **Hermes is NOT promoted to trusted
+baseline.** The win is the mechanism, not a passing receipt.
+
+**No trusted baseline admitted.** The canonical `hermes-two-pass-deterministic` receipt
+shows `failed` — a structural model-capability gap in decision vocabulary (2/6 decisions
+produced, requires 3/6), not a variance problem. The mechanism works precisely because
+it does not manufacture trust when trust is not earned.
+
+### What shipped (three commits atop v0.5.0)
+
+**Session 2 (`40af0a9`) — reviewer options as receipt-backed inputs**
+
+- `src/review/reviewer-options-schema.ts` — `ReviewerOptionsSchema` (6 optional fields:
+  `num_ctx`, `temperature`, `seed`, `top_p`, `top_k`, `repeat_penalty`).
+- `src/review/reviewers/ollama-intern.ts` — constructor accepts `reviewer_options`; merged
+  via `!== undefined` guards (load-bearing: `temperature: 0` is not dropped as falsy).
+- `src/calibration/receipt-schema.ts` + `aggregate-receipt-schema.ts` — `reviewer_options`
+  field added to both schemas (optional, additive, backward-compatible).
+- `src/calibration/receipt.ts` / `aggregate.ts` — `## Reviewer options` section rendered
+  when present.
+- `scripts/reviewer-calibration.mjs` — 6 new CLI flags (`--temperature`, `--seed`,
+  `--top-p`, `--top-k`, `--num-ctx`, `--repeat-penalty`); numeric validation; options
+  captured once and reused across all N runs.
+- Canonical deterministic aggregate: `hermes-two-pass-deterministic/seeded-v1.{json,md}`,
+  `reviewer_options: {"temperature":0,"seed":7}`, status: **`failed`** (3/3 runs stable,
+  byte-identical; recurring failures: `per_category_any_flag_floor`,
+  `decision_vocab_completeness`).
+
+**Session 3 (`a8e9e9c`) — production review profile config**
+
+- `src/intake/schema.ts` — `reviewer_options` field on `ReviewProfilePresetSchema`;
+  `hermes-two-pass-deterministic` profile added to `DEFAULT_REVIEW_PROFILES`
+  (`mode: two_pass`, `temperature: 0`, `seed: 7`, status: `experimental`).
+  The existing `hermes-two-pass` profile is NOT modified.
+- `src/cli.ts` — `reviewerOptions` extracted from preset; passed to all 3
+  `OllamaInternReviewer` constructions. The production `research-os review` path now
+  carries deterministic conditions from `research.yaml` profile config.
+
+**Session 5 (`682bd0e`) — F-53 + F-54 fixes**
+
+- **F-53 (gate JSON schema backward compat):** `section_primary` and
+  `section_independent_publishers` are now `.optional().default(0)` in
+  `SectionGateResultSchema`. Pre-v0.3.3 gate JSONs (frozen v0.1 packs) that omit these
+  fields parse cleanly with default 0. Fresh gate runs continue to write both fields.
+- **F-54 (reviewer_options on review.json + review.md):** `ReviewSnapshotSchema` now
+  carries `reviewer_options`; `RunReviewOptions` carries `reviewer_options?`;
+  `finalizeReview` stamps it onto the snapshot; `review.md` renders a `## Reviewer
+  options` section when set (stable key order; omitted when absent).
+- Golden section 03 rerun on fresh scratch pack: ran without gate-JSON rename (F-53 proof),
+  disclosed `reviewer_options` in `review.json` and `review.md` (F-54 proof), source pack
+  byte-identical. Production path confirmed end-to-end.
+
+### Frictions closed
+
+- **F-53** — `SectionGateResultSchema` rejected pre-v0.3.3 gate JSONs missing
+  `section_primary` / `section_independent_publishers`. Fix: `.optional().default(0)`.
+  Backward-compatible; fresh gate runs unaffected.
+- **F-54** — `reviewer_options` (temperature, seed) were not disclosed in `review.json`
+  or `review.md`. Only trace was the `profile` field → secondary lookup. Fix: 5
+  touchpoints stamp the options directly onto the review snapshot and render them in
+  the Markdown artifact.
+
+### Documented findings (not blockers)
+
+- **F-51 (P3)** — Ollama `seed` is advisory: first inference after process spawn differs
+  from subsequent inferences in the same session. Mitigated by `--runs N` aggregation.
+  Disclosed in every receipt via `unreachable_decisions` and the Session 1 audit doc.
+- **F-52 (P2)** — `per_category_any_flag_floor` is a recurring failure under deterministic
+  single-process mode (`--runs 3`). `unsupported_claim` any-flag = 0/3 in all 3 runs.
+  Cross-session seed variance (separate process invocations) may differ; the canonical
+  multi-run evidence is consistent. Not a blocker; a documented calibration finding.
+
+### Canonical receipt statuses at v0.6.0
+
+| Profile | Status | Notes |
+|---|---|---|
+| `hermes-two-pass` | `failed` | Aggregate, 3 runs (v0.5.0 canonical — unchanged). |
+| `mistral-nemo-two-pass` | `conditional_pass` | Aggregate, 3 runs (v0.5.0 canonical — unchanged). |
+| `hermes-single-pass` | `comparison_only` | Single-run (v0.5.0 canonical — unchanged). |
+| `hermes-two-pass-deterministic` | `failed` | NEW — aggregate, 3 deterministic runs (`temperature:0, seed:7`). Recurring: `per_category_any_flag_floor`, `decision_vocab_completeness`. |
+
+### Compatibility
+
+- All 4 frozen packs verify byte-identical against v0.3.3 baselines.
+  - `368d23613783ef48b36cccd814463b3f413d514eb7a37792653142ef1fd5d466` (dogfood)
+  - `d71943c6444d4bb5ba38ae577089498d119b95f00caed8f068f0ee09c79038eb` (ComfyUI)
+  - `6511a044aa15fa4de30a0dfc82b811947e1f57a1563fd1d7ba013a64725259a5` (XRPL)
+  - `55a65792caed9c026e76d4913c939a0f656a777a0a130e0b8a0d29ad6cf41235` (Godot)
+- No gate-law, freeze-law, or synthesis-law changes.
+- `ReviewerOptionsSchema` fields are all optional; existing receipts parse cleanly.
+- `ReviewSnapshotSchema.reviewer_options` is optional; existing review snapshots parse
+  cleanly.
+- `SectionGateResultSchema` additions are `.optional().default(0)`; existing and new gate
+  JSONs both parse correctly.
+
+### Out of scope
+
+- `seeded-v1` fixture expansion (`needs_contradiction_mapping` remains unreachable).
+- Prompt tuning or system-prompt coaching for decision-vocabulary expansion.
+- phi3:14b calibration.
+- Any gate, freeze, or synthesis-law change.
+
+### Test surface
+
+- 671 (v0.5.0) → 698 (Session 2, +27) → 706 (Session 3, +8) → 713 (Session 5, +7).
+- **Cumulative (Experiments 5+6):** 620 (v0.4.0) → 713 (+93 total). Experiment 5 added
+  51 tests; Experiment 6 added 42.
+- New test files: `test/reviewer-options.test.ts` (27 tests, Session 2),
+  `test/review-cli-preset.test.ts` (8 tests, Session 3),
+  `test/gates-schema.test.ts` (2 tests, Session 5, F-53),
+  `test/review-schema.test.ts` additions (3 tests, Session 5, F-54),
+  `test/review-markdown.test.ts` additions (2 tests, Session 5, F-54).
+
 ## [0.5.0] — 2026-05-10 — reviewer calibration as durable trust contract
 
 ### F-50 stabilization (Session 5)

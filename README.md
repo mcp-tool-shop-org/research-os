@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version 0.5.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -153,12 +153,15 @@ This is the structural alternative to *search → summarize → pretty report*. 
 
 v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because
 it ran once; it earns a status through structured seeded-failure receipts and
-multi-run aggregation.
+multi-run aggregation. v0.6.0 adds deterministic reviewer options to the production
+review path and calibration harness.
 
 **No profile is currently admitted as `trusted_baseline`.** The canonical receipts
 in the repo show `hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`,
-`hermes-single-pass=comparison_only`. This is intentional: trust is earned through
-repeated seeded-failure evidence, not assumed.
+`hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`. This is
+intentional: trust is earned through repeated seeded-failure evidence, not assumed.
+The `hermes-two-pass-deterministic` receipt has a structural model-capability gap
+(2/6 decision types produced; requires 3/6) that is not a variance problem.
 
 Calibration receipts live at `calibration/reviewer-profiles/<profile>/seeded-v1.{json,md}`.
 Each receipt records PASS/FAIL against seven bars, four status labels
@@ -173,6 +176,10 @@ node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile he
 # Multi-run aggregate calibration (canonical evidence — 3 runs, median-based PASS/FAIL)
 node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass --profile hermes-two-pass --runs 3
 
+# Deterministic multi-run calibration (temperature + seed explicit in receipt)
+node scripts/reviewer-calibration.mjs --model hermes3:8b --two-pass \
+  --temperature 0 --seed 7 --runs 3 --profile hermes-two-pass-deterministic
+
 # Promote a section's review — auto-populates calibration_summary from pack-relative receipt
 research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 ```
@@ -183,7 +190,16 @@ to `<profile>/seeded-v1.{json,md}`. The aggregate receipt carries `receipt_kind:
 to discriminate from single-run receipts. Single-run mode (`--runs 1` or omitted) preserves
 the existing direct-write behavior.
 
+**Deterministic reviewer profiles** — use `review_profiles.<name>.reviewer_options` in
+`research.yaml` to carry `temperature`, `seed`, and other Ollama sampling parameters
+into every `OllamaInternReviewer` construction in the production review path. The
+`hermes-two-pass-deterministic` profile ships as a built-in example. See
+[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) and the
+[reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
 ## Status
+
+**v0.6.0** — published to npm as `@mcptoolshop/research-os@0.6.0`, 2026-05-10. v0.6.0 closes Experiment 6 with reviewer-trust evidence: research-os can now produce a reproducible, attributable canonical-model baseline. Ships: deterministic reviewer options on the production review path (`review_profiles.<name>.reviewer_options` in `research.yaml`); gate schema backward compatibility for pre-v0.3.3 frozen artifacts (F-53); review output discloses sampling conditions directly on `review.json` and `review.md` (F-54); canonical deterministic aggregate receipt committed (`hermes-two-pass-deterministic`, `temperature:0, seed:7`). **No trusted baseline admitted.** `hermes-two-pass-deterministic=failed` (structural model-capability gap in decision vocabulary, not variance). **Hermes is not promoted to `trusted_baseline`.** The win is the mechanism, not a passing receipt. No gate, freeze, or synthesis-law changes. All four frozen packs verify-pack byte-identically. 713/713 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md).
 
 **v0.5.0** — published to npm as `@mcptoolshop/research-os@0.5.0`, 2026-05-10. v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because it ran once; it earns a status through structured seeded-failure receipts and multi-run aggregation. Ships: structured calibration receipt schema (`seeded-v1.{json,md}`, Zod-validated, four status labels); multi-run harness (`--runs <n>`, per-run isolation, median-based PASS/FAIL bars, recurring-failure demotion); architecture-aware decision-vocab bar; pack-relative receipt lookup in `review-promote`. **No trusted baseline admitted:** `hermes-two-pass=failed` (aggregate, 3 runs), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. research-os can now refuse to trust a reviewer profile when repeated seeded failures do not support trust. **No gate, freeze, or synthesis-law changes. All four frozen packs verify-pack byte-identically.** 671/671 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
 

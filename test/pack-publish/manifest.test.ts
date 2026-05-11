@@ -21,7 +21,7 @@ describe('deriveManifest', () => {
     const manifest = deriveManifest(packDir, 'test-package');
 
     expect(manifest.name).toBe('test-package');
-    expect(manifest.research_os_version).toBe('0.5.0');
+    expect(manifest.research_os_version).toBe('0.6.0');
     expect(manifest.frozen_at).toBe('2026-05-09T12:00:00.000Z');
     expect(manifest.sections).toHaveLength(1);
     expect(manifest.sections[0].id).toBe('01-test');

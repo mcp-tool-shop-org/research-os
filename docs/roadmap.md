@@ -150,15 +150,30 @@ the API-stability test.
 
 ## 6. Hermes3 baseline
 
+**Status: CLOSED 2026-05-10.** Experiment 6 closed 2026-05-10. Proof: [`docs/experiment-6-proof.md`](experiment-6-proof.md).
+
+**Outcome: canonical Hermes baseline produced with caveats.** The real review path carries deterministic reviewer options from profile config, legacy gate artifacts parse, review outputs disclose sampling conditions, and the v0.1 self-dogfood pack was reviewed through the production CLI under explicit Hermes conditions. **Hermes is NOT promoted to `trusted_baseline`.** The aggregate deterministic calibration receipt (`hermes-two-pass-deterministic`) shows `failed` — a structural model-capability gap in decision vocabulary (2/6 decisions produced, requires 3/6), not a variance problem. The win is the mechanism, not a passing receipt.
+
+**v0.6.0 (2026-05-10)** — deterministic reviewer options on the production review path; gate schema backward compat (F-53); review output discloses sampling conditions (F-54); canonical deterministic aggregate receipt committed. No trusted baseline admitted. All four frozen packs byte-identical. 713/713 vitest passing.
+
 **The question.** The dogfood pack used `mistral-nemo:12b` because `hermes3:8b` wasn't pulled on this rig. What does a clean dogfood run on the canonical default model look like?
 
 **Done looks like.** A second freeze receipt for `research-os-packs/research-os-spec/` (or a sibling pack on the same topic) generated with the canonical reviewer + extractor stack. The two receipts are diffed; meaningful divergences become findings or — if none — confirmation that the model substitution didn't bias the proof.
 
-**Likely shape.** `ollama pull hermes3:8b`. Re-run the chain with `OLLAMA_INTERN_MODEL=hermes3:8b`. Compare receipt fingerprints. Diff per-section accepted-claim counts. Diff per-section dispositioned counts. The diff is its own evidence.
-
-**Why it matters.** The cleanest v1.0 story includes a dogfood proof on the canonical model stack. The current proof is honest — it discloses the substitution — but a hermes3-based receipt removes the disclosure entirely.
+**What the experiment found.** The hermes3:8b deterministic baseline reviewed all 8 sections of the v0.1 self-dogfood pack (329 claims, 252 accepted, 76.6% acceptance rate). The model's decision-vocabulary ceiling is a structural gap: 2/6 decisions produced consistently. The baseline is reproducible and attributable. Hermes is not trusted. See `docs/experiment-6-proof.md` for the full evidence trail.
 
 ---
+
+## v1.0 — release/readiness decision
+
+All six experiments are now closed (Experiments 1–6, 2026-05-09 through 2026-05-10). v1.0 is no longer a list of open experiments — it is a release decision. The remaining gates before v1.0:
+
+- **Experiment 4 (extractor provenance gap)** — closed in v0.4.0 (2026-05-10). Gate output reports both section-scoped and pack-wide source counts; F-43 closed. The extractor provenance gap (gate counts accepted claims without asking which extractor produced them) remains documented in `docs/roadmap.md` as an open design question — a v1.0 candidate.
+- **Experiment 5 (reviewer calibration generalized)** — closed in v0.5.0 (2026-05-10). Three canonical receipts shipped; no trusted baseline admitted; multi-run median aggregation is the trust artifact.
+- **Experiment 6 (Hermes3 baseline)** — closed in v0.6.0 (2026-05-10). Deterministic mechanism proven; Hermes not trusted.
+- At least one external operator runs a pack to freeze without intervention — this has not been confirmed yet.
+
+v1.0 is not a calendar date. When the extractor-provenance design question is resolved and at least one external operator has run a pack to freeze, the v1.0 arc begins.
 
 ## Versioning posture until v1.0
 
@@ -167,7 +182,8 @@ the API-stability test.
 | **v0.1.x** | Patch fixes, friction-log triage, documentation, README polish, translations. |
 | **v0.2.0** | Additive behavior changes — new commands, new flags, new optional schema fields. |
 | **v0.3.0+** | Each release lands one of the milestones above as a meaningful capability. |
-| **v1.0.0** | All six milestones closed **and** at least one external user has run a pack to freeze without intervention. |
+| **v0.6.0** | Experiment 6 closure — deterministic reviewer baseline mechanism. |
+| **v1.0.0** | Extractor-provenance design question resolved **and** at least one external operator has run a pack to freeze without intervention. Not a calendar date. |
 
 The six milestones don't need to ship in numerical order. The order above is the recommended sequence; the architecture lock holds regardless of which experiment is closed next.
 
