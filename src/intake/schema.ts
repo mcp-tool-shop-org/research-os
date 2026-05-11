@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ReviewerOptionsSchema } from '../review/reviewer-options-schema.js';
 
 export const SectionStatusSchema = z.enum([
   'draft',
@@ -100,6 +101,7 @@ export const ReviewProfilePresetSchema = z.object({
     .enum(['calibrated_baseline', 'experimental', 'deprecated'])
     .default('experimental'),
   notes: z.string().nullable().default(null),
+  reviewer_options: ReviewerOptionsSchema.optional(),
 });
 
 export const DEFAULT_REVIEW_PROFILES: Record<string, z.input<typeof ReviewProfilePresetSchema>> = {
@@ -115,6 +117,16 @@ export const DEFAULT_REVIEW_PROFILES: Record<string, z.input<typeof ReviewProfil
     status: 'calibrated_baseline',
     notes:
       'Calibrated baseline as of v0.1. 0% good-claim FPR on the seeded fixture; bad-claim any-flag recall 9/13 (69%). Smaller window required because hermes3:8b at 4-bit on a 5080 cannot complete 25-claim windows within a 3-minute budget.',
+  },
+  'hermes-two-pass-deterministic': {
+    general_model: 'hermes3:8b',
+    critic_model: 'hermes3:8b',
+    review_window: 30,
+    mode: 'two_pass',
+    status: 'experimental',
+    notes:
+      'Deterministic Hermes baseline (temperature=0, seed=7). seeded-v1 canonical receipt: failed (recurring per_category_any_flag_floor + decision_vocab_completeness — F-52, F-49). See calibration/reviewer-profiles/hermes-two-pass-deterministic/seeded-v1.md.',
+    reviewer_options: { temperature: 0, seed: 7 },
   },
 };
 

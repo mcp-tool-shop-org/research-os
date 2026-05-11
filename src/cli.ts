@@ -40,6 +40,7 @@ import {
 import { ResearchOSError } from './errors.js';
 import { RESEARCH_OS_VERSION } from './index.js';
 import { loadReceiptForPack, receiptPathForPack } from './calibration/lookup.js';
+import type { ReviewerOptions } from './review/reviewer-options-schema.js';
 
 function reportError(err: unknown): never {
   if (err instanceof ResearchOSError) {
@@ -643,6 +644,7 @@ program
             critic_model?: string | null;
             review_window?: number | null;
             mode?: 'general' | 'two_pass';
+            reviewer_options?: ReviewerOptions | undefined;
           }
         | undefined;
       if (opts.preset) {
@@ -678,6 +680,7 @@ program
         (opts.reviewWindow as number | undefined) ?? preset?.review_window ?? undefined;
       const twoPass =
         Boolean(opts.twoPassLlm) || (preset?.mode === 'two_pass' ? true : false);
+      const reviewerOptions = preset?.reviewer_options ?? undefined;
 
       const reviewers = opts.heuristicOnly
         ? [new HeuristicReviewer()]
@@ -687,11 +690,13 @@ program
                 mode: 'general',
                 model: generalModel ?? undefined,
                 claimsPerWindow: reviewWindow,
+                reviewer_options: reviewerOptions,
               }),
               new OllamaInternReviewer({
                 mode: 'narrow_critic',
                 model: criticModel ?? undefined,
                 claimsPerWindow: reviewWindow,
+                reviewer_options: reviewerOptions,
               }),
               new HeuristicReviewer(),
             ]
@@ -700,6 +705,7 @@ program
                 new OllamaInternReviewer({
                   model: generalModel ?? undefined,
                   claimsPerWindow: reviewWindow,
+                  reviewer_options: reviewerOptions,
                 }),
                 new HeuristicReviewer(),
               ]
