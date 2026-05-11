@@ -1,4 +1,5 @@
 import type { ReviewSnapshot } from './schema.js';
+import type { ReviewerOptions } from './reviewer-options-schema.js';
 
 const SEVERITY_GLYPH: Record<string, string> = {
   info: '[INFO]',
@@ -28,6 +29,17 @@ export function renderReviewMarkdown(snapshot: ReviewSnapshot): string {
 
   lines.push('> Adversarial review judges research integrity. It does not synthesize, rewrite source truth, or erase extraction history. Decisions below are review truth — claims.jsonl is unchanged.');
   lines.push('');
+
+  const opts = snapshot.reviewer_options as ReviewerOptions | undefined;
+  if (opts && Object.keys(opts).length > 0) {
+    lines.push('## Reviewer options');
+    lines.push('');
+    const KEY_ORDER = ['num_ctx', 'temperature', 'seed', 'top_p', 'top_k', 'repeat_penalty'] as const;
+    for (const key of KEY_ORDER) {
+      if (opts[key] !== undefined) lines.push(`- ${key}: ${opts[key]}`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Effective decisions');
   lines.push('');

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ReviewerOptionsSchema } from './reviewer-options-schema.js';
 
 export const FindingCategorySchema = z.enum([
   'unsupported_claim',
@@ -85,6 +86,7 @@ export const ReviewSnapshotSchema = z.object({
   severity_counts: z.record(FindingSeveritySchema, z.number().int().nonnegative()),
   llm_findings_rejected_ungrounded: z.number().int().nonnegative(),
   promoted_to_reviewed: z.boolean(),
+  reviewer_options: ReviewerOptionsSchema.optional(),
 });
 
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;

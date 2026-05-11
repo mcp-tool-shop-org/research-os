@@ -24,6 +24,7 @@ import {
   profileDir,
   readActiveProfile,
 } from './profiles.js';
+import type { ReviewerOptions } from './reviewer-options-schema.js';
 
 import {
   defaultReviewers,
@@ -444,6 +445,7 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     llmFindingsRejected,
     profile: args.options.profile ?? DEFAULT_PROFILE,
     research: args.research,
+    reviewer_options: args.options.reviewer_options,
   });
 }
 
@@ -474,6 +476,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     llmFindingsRejected: 0,
     profile: args.options.profile ?? DEFAULT_PROFILE,
     research: args.research,
+    reviewer_options: args.options.reviewer_options,
   });
 }
 
@@ -489,6 +492,8 @@ interface FinalizeArgs {
   // v0.3.1+: research context for resolving active section-scoped waivers.
   // Filtered against args.sectionId before passing to deriveClaimReviews.
   research: ResearchYaml;
+  // v0.5+: sampling options from the active preset; stamped onto review.json.
+  reviewer_options?: ReviewerOptions;
 }
 
 async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
@@ -564,6 +569,7 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     severity_counts: severityCounts,
     llm_findings_rejected_ungrounded: args.llmFindingsRejected,
     promoted_to_reviewed: promoted,
+    reviewer_options: args.reviewer_options,
   });
 
   // ALWAYS write the profile-scoped artifacts: even non-active runs leave a

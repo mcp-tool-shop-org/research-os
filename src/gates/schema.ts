@@ -70,8 +70,8 @@ export const SectionGateResultSchema = z.object({
     unknown: z.number().int().nonnegative(),
     independent_publishers: z.number().int().nonnegative(),
     failed_fetches: z.number().int().nonnegative(),
-    section_primary: z.number().int().nonnegative(),
-    section_independent_publishers: z.number().int().nonnegative(),
+    section_primary: z.number().int().nonnegative().optional().default(0),
+    section_independent_publishers: z.number().int().nonnegative().optional().default(0),
   }),
   contradiction_counts: z.object({
     total: z.number().int().nonnegative(),

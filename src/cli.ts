@@ -717,6 +717,7 @@ program
         triagedOnly: opts.triagedOnly,
         multiPass: twoPass,
         profile: opts.profile as string | undefined,
+        reviewer_options: reviewerOptions,
       });
       process.stdout.write(`review complete\n`);
       process.stdout.write(`  section:                ${result.sectionId}\n`);

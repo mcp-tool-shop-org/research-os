@@ -1,4 +1,5 @@
 import type { Claim } from '../claims/schema.js';
+import type { ReviewerOptions } from './reviewer-options-schema.js';
 import type { Contradiction } from '../contradictions/schema.js';
 import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { Excerpt } from '../sources/excerpts/schema.js';
@@ -96,6 +97,9 @@ export interface RunReviewOptions {
   // This way, A/B reviewer experiments are evidence, not section truth,
   // until explicitly promoted via `research-os review promote`.
   profile?: string;
+  // Reviewer sampling options (temperature, seed, etc.) extracted from the
+  // active preset. Stamped onto review.json for direct disclosure.
+  reviewer_options?: ReviewerOptions;
 }
 
 export interface RunReviewSummary {

@@ -88,22 +88,44 @@ describe('ClaimReviewSchema', () => {
   });
 });
 
+const baseSnapshot = {
+  section_id: '01-landscape',
+  reviewer: 'heuristic' as const,
+  review_method: 'heuristic_field_and_grounding_checks',
+  reviewed_at: '2026-05-06T22:00:00.000Z',
+  candidate_claims: 0,
+  findings: [],
+  claim_reviews: [],
+  decision_counts: {},
+  severity_counts: {},
+  llm_findings_rejected_ungrounded: 0,
+  promoted_to_reviewed: false,
+};
+
 describe('ReviewSnapshotSchema', () => {
   it('parses an empty snapshot', () => {
-    expect(() =>
-      ReviewSnapshotSchema.parse({
-        section_id: '01-landscape',
-        reviewer: 'heuristic',
-        review_method: 'heuristic_field_and_grounding_checks',
-        reviewed_at: '2026-05-06T22:00:00.000Z',
-        candidate_claims: 0,
-        findings: [],
-        claim_reviews: [],
-        decision_counts: {},
-        severity_counts: {},
-        llm_findings_rejected_ungrounded: 0,
-        promoted_to_reviewed: false,
-      }),
-    ).not.toThrow();
+    expect(() => ReviewSnapshotSchema.parse(baseSnapshot)).not.toThrow();
+  });
+
+  it('F-54: parses legacy snapshot without reviewer_options (backward compat)', () => {
+    const result = ReviewSnapshotSchema.parse(baseSnapshot);
+    expect(result.reviewer_options).toBeUndefined();
+  });
+
+  it('F-54: parses snapshot with reviewer_options: { temperature: 0, seed: 7 }', () => {
+    const result = ReviewSnapshotSchema.parse({
+      ...baseSnapshot,
+      reviewer_options: { temperature: 0, seed: 7 },
+    });
+    expect(result.reviewer_options).toEqual({ temperature: 0, seed: 7 });
+  });
+
+  it('F-54 load-bearing: temperature: 0 is preserved (not dropped as falsy)', () => {
+    const result = ReviewSnapshotSchema.parse({
+      ...baseSnapshot,
+      reviewer_options: { temperature: 0, seed: 7 },
+    });
+    expect(result.reviewer_options?.temperature).toBe(0);
+    expect(result.reviewer_options?.temperature).not.toBeUndefined();
   });
 });

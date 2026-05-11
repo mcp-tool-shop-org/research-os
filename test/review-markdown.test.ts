@@ -59,6 +59,22 @@ describe('renderReviewMarkdown', () => {
     expect(md).toContain('clm_aaaaaaaaaaaa_heuristic_1');
   });
 
+  it('F-54: renders "Reviewer options" section when reviewer_options is set', () => {
+    const withOpts = ReviewSnapshotSchema.parse({
+      ...baseSnapshot,
+      reviewer_options: { temperature: 0, seed: 7 },
+    });
+    const md = renderReviewMarkdown(withOpts);
+    expect(md).toContain('## Reviewer options');
+    expect(md).toContain('- temperature: 0');
+    expect(md).toContain('- seed: 7');
+  });
+
+  it('F-54: omits "Reviewer options" section when reviewer_options is absent', () => {
+    const md = renderReviewMarkdown(baseSnapshot);
+    expect(md).not.toContain('## Reviewer options');
+  });
+
   it('renders claim review decisions with glyph labels', () => {
     const populated = ReviewSnapshotSchema.parse({
       ...baseSnapshot,
