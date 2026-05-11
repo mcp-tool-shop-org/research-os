@@ -506,7 +506,7 @@ claimCmd
       process.stdout.write(`  claims per 1k words:    ${a.claims_per_1k_words.toFixed(2)}\n`);
       process.stdout.write(`  weak-scope claims:      ${a.weak_scope_count}\n`);
       process.stdout.write(`  generic-scope claims:   ${a.generic_scope_count}\n`);
-      process.stdout.write(`  near-duplicate clusters:${a.near_duplicate_clusters.length}\n`);
+      process.stdout.write(`  near-duplicate clusters: ${a.near_duplicate_clusters.length}\n`);
       process.stdout.write(`  flags:                  ${a.flags.length}\n`);
       for (const f of a.flags) {
         process.stdout.write(`    [${f.severity}] ${f.type}: ${f.message}\n`);
@@ -996,7 +996,7 @@ program
       process.stdout.write(`  orphan claims:            ${result.orphans}\n`);
       process.stdout.write(`  stale sources:            ${result.staleSources}\n`);
       process.stdout.write(`  weak sources:             ${result.weakSources}\n`);
-      process.stdout.write(`  unresolved contradictions:${result.unresolvedContradictions}\n`);
+      process.stdout.write(`  unresolved contradictions: ${result.unresolvedContradictions}\n`);
       process.stdout.write(`  scope-widening risks:     ${result.scopeWideningRisks}\n`);
       process.stdout.write(`  source-diversity gaps:    ${result.sourceDiversityGaps}\n`);
       process.stdout.write(`  files written:            ${result.filesWritten.length}\n`);

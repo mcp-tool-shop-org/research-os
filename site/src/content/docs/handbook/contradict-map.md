@@ -2,7 +2,7 @@
 title: contradict map
 description: Detect contradiction candidates among a section's claims, with an explicit choice between heuristic and LLM detectors.
 sidebar:
-  order: 8
+  order: 11
 ---
 
 `research-os contradict map` detects contradiction candidates among a section's
@@ -148,3 +148,7 @@ explicit input to the command, not a function of the surrounding shell.
   operator guidance.
 - [`research-packs/docs/operator-playbook.md`](https://github.com/mcp-tool-shop-org/research-packs/blob/main/docs/operator-playbook.md)
   — canonical operator playbook in the archive monorepo.
+
+:::tip[Recovery]
+For partial-failure scenarios — including LLM-unavailable refusal modes — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

@@ -134,3 +134,7 @@ research-os freeze
 ```
 
 The freeze receipt fingerprints every canonical and synthesis artifact. If it passes, the research is locked and traceable. If it refuses, you get concrete repair instructions.
+
+:::tip[Recovery]
+For partial-failure scenarios — including freeze refusal recovery, gather failures, and review cascade — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

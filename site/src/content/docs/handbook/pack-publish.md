@@ -33,6 +33,10 @@ Exit 0 = admission-contract PASS. Exit 2 = refused (nothing written).
 | `--force` | no | false | `--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output. |
 | `--dry-run` | no | false | Derive and print plan; write nothing |
 
+:::caution[Destructive: `--force`]
+`--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output.
+:::
+
 ---
 
 ## What it produces
@@ -125,3 +129,7 @@ Full receipt: [`docs/pack-publish-dogfood.md`](https://github.com/mcp-tool-shop-
 
 [`docs/pack-publish.md`](https://github.com/mcp-tool-shop-org/research-os/blob/master/docs/pack-publish.md)
 in the repository covers refusal cases, manifest shape, and implementation details.
+
+:::tip[Recovery]
+For partial-failure scenarios — including verify-fail after write — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

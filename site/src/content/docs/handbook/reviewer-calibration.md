@@ -2,7 +2,7 @@
 title: Reviewer Calibration
 description: How to calibrate a reviewer profile against the seeded-v1 fixture, interpret status labels, and enable auto-population of calibration_summary in review-promote.
 sidebar:
-  order: 7
+  order: 8
 ---
 
 v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because
@@ -214,7 +214,7 @@ snapshot; `review.md` renders a `## Reviewer options` section with stable key or
 (`num_ctx, temperature, seed, top_p, top_k, repeat_penalty`). The receipt is
 self-documenting without requiring a secondary profile lookup.
 
-**Full evidence trail:** [`docs/experiment-6-proof.md`](../../../experiment-6-proof.md)
+**Full evidence trail:** [`docs/experiment-6-proof.md`](https://github.com/mcp-tool-shop-org/research-os/blob/master/docs/experiment-6-proof.md)
 
 ---
 
@@ -239,3 +239,7 @@ research-os: Invalid calibration receipt at <path>: <reason>
 ```
 
 Do not delete the receipt to silence this — fix the receipt content.
+
+:::tip[Recovery]
+For partial-failure scenarios — including reviewer cascade failures and `--runs N` partial completion — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

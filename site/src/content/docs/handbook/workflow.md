@@ -101,3 +101,7 @@ Common repair paths:
 - **Active unresolved contradictions**: run `contradict resolve` with an appropriate status
 - **Gate failures**: run `gate <section>` after fixing the underlying issues — see `next_actions[]` in the gate report
 - **Accepted-claim floor failures**: gather more sources, re-extract, re-review until ≥ 3 accepted claims from ≥ 2 sources
+
+:::tip[Recovery]
+For partial-failure scenarios across the chain — gather, review cascade, index build, calibration, and freeze refusal — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

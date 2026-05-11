@@ -2,7 +2,7 @@
 title: Operator Playbook
 description: Operating doctrine for running research packs to freeze — source format preferences, discovery fallbacks, contradiction-detector selection, model-env discipline, and sampling protocol for large corpora.
 sidebar:
-  order: 5
+  order: 9
 ---
 
 This playbook distills operating doctrine earned by running v1 Experiment 1 (ComfyUI workflow durability) across 11 sessions and 8 sections to freeze. It is a living document — each arc contributes earned doctrine.

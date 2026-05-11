@@ -2,7 +2,7 @@
 title: Section-scoped source waivers
 description: Relax publisher-diversity / primary-source floors for sections where truth is structurally single-publisher; full audit-trail disclosure preserved.
 sidebar:
-  order: 9
+  order: 12
 ---
 
 > Use section-scoped source waivers when publisher diversity is structurally
@@ -214,3 +214,7 @@ inflates the section's warning count.
   — canonical operator playbook in the archive monorepo.
 - [Contradict map](/research-os/handbook/contradict-map/) — v0.3.0's
   `--detector` flag, the prior Experiment 3 fix.
+
+:::tip[Recovery]
+For partial-failure scenarios — including gate-failure repair and source-floor recovery — see the [Recovery runbook](/research-os/handbook/recovery/).
+:::

@@ -2,7 +2,7 @@
 title: Source-Card Audit
 description: Using `research-os source-card audit` to inspect source-type drift, surface missing publishers, and apply operator corrections via the override ledger.
 sidebar:
-  order: 6
+  order: 10
 ---
 
 The `source-card audit` command is the operator's primary tool for inspecting source-identity drift across a pack. It is read-only by default — safe to run at any time, including on frozen packs — and produces both a human-readable Markdown report and a machine-readable JSON artifact at `audits/source-card-audit.{md,json}`.

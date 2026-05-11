@@ -2,7 +2,7 @@
 title: Known Limitations
 description: Disclosed v1.0 known gaps — frozen-pack version stamp, npm provenance, indexer schema migration.
 sidebar:
-  order: 9
+  order: 6
 ---
 
 v1.0 ships with three known operator-visible limitations. Each is documented
@@ -75,6 +75,13 @@ but not enforced.
 index file before running `research-os index build`. The pack itself is
 unaffected — the indexer is an acceleration layer over evidence + claims, not
 the source of record (Law 8). Rebuilding is idempotent.
+
+:::caution[Destructive: deletes local index]
+`rm .research-os/index.sqlite` removes the local SQLite acceleration layer.
+The pack itself is unaffected (Law 8) and rebuilding via `research-os index build --all`
+is idempotent — but any pending query state held only in the index file is lost.
+Only run this on a documented `SCHEMA_VERSION` bump.
+:::
 
 ```bash
 # On SCHEMA_VERSION bump:

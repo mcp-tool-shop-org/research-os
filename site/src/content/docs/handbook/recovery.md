@@ -2,7 +2,7 @@
 title: Recovery Runbook
 description: Partial-failure recovery for review, gather, pack publish, index build, calibration, and freeze.
 sidebar:
-  order: 8
+  order: 5
 ---
 
 The long-running commands write to append-only ledgers and surface structured
@@ -104,9 +104,11 @@ research-os pack publish \
   --force
 ```
 
-**Caution.** `--force` clears and replaces the target package directory.
-Do not keep hand-authored files inside generated package output. Edit
-upstream artifacts (claims, sources, synthesis) or sibling files instead.
+:::caution[Destructive: `--force`]
+`--force` clears and replaces the target package directory. Do not keep hand-authored files inside generated package output.
+:::
+
+Edit upstream artifacts (claims, sources, synthesis) or sibling files instead.
 See [pack publish](/research-os/handbook/pack-publish/) for the full
 admission contract.
 
