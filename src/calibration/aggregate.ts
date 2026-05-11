@@ -1,4 +1,4 @@
-import type { Architecture, CalibrationReceipt, PassFail, PerCategoryRecall } from './receipt-schema.js';
+import type { Architecture, CalibrationReceipt, PassFail, PerCategoryRecall, ReviewerOptions } from './receipt-schema.js';
 import {
   AggregateCalibrationReceiptSchema,
   type AggregateCalibrationReceipt,
@@ -238,12 +238,16 @@ export function computeAggregateStatusLabel(input: {
 // opts.runFiles: relative paths for each run (e.g. 'runs/run-001.json').
 // opts.modeOverride: forward 'comparison_only' to status-label predicate.
 // opts.aggregatedAt: ISO timestamp (defaults to now).
+// opts.reviewerOptions: reviewer sampling options stamped on each per-run receipt.
+//   Captured once at harness startup and reused across all N runs. The aggregate
+//   carries the same object so consumers can reproduce the exact invocation.
 export function aggregateReceipts(
   runs: CalibrationReceipt[],
   opts: {
     runFiles: string[];
     modeOverride?: 'comparison_only';
     aggregatedAt?: string;
+    reviewerOptions?: ReviewerOptions;
   },
 ): AggregateCalibrationReceipt {
   if (runs.length === 0) throw new Error('aggregateReceipts: no runs provided');
@@ -345,7 +349,29 @@ export function aggregateReceipts(
     pass_fail: aggregatePassFail,
     recurring_bar_failures: recurringBarFailures,
     notes,
+    ...(opts.reviewerOptions && Object.keys(opts.reviewerOptions).length > 0 && {
+      reviewer_options: opts.reviewerOptions,
+    }),
   });
+}
+
+// Stable key order for reviewer_options rendering (matches single-run receipt).
+const REVIEWER_OPTIONS_KEY_ORDER = [
+  'num_ctx',
+  'temperature',
+  'seed',
+  'top_p',
+  'top_k',
+  'repeat_penalty',
+] as const;
+
+function buildReviewerOptionsSection(opts: AggregateCalibrationReceipt['reviewer_options']): string {
+  if (!opts) return '';
+  const lines = REVIEWER_OPTIONS_KEY_ORDER
+    .filter((k) => opts[k] !== undefined)
+    .map((k) => `- ${k}: ${opts[k]}`);
+  if (lines.length === 0) return '';
+  return `\n## Reviewer options\n\n${lines.join('\n')}\n`;
 }
 
 // Render the aggregate calibration receipt as compact Markdown.
@@ -415,6 +441,8 @@ export function buildAggregateReceiptMarkdown(r: AggregateCalibrationReceipt): s
   const notesSection =
     r.notes.length > 0 ? `\n## Notes\n\n${r.notes.map((n) => `- ${n}`).join('\n')}\n` : '';
 
+  const reviewerOptionsSection = buildReviewerOptionsSection(r.reviewer_options);
+
   return `# Calibration Receipt — ${r.profile_name} (aggregate, N=${r.runs_count} runs)
 
 - **Model:** ${r.model}
@@ -425,7 +453,7 @@ export function buildAggregateReceiptMarkdown(r: AggregateCalibrationReceipt): s
 - **Research-OS version:** ${r.research_os_version}
 - **Run count:** ${r.runs_count}
 - **Run files:** ${runFileList}
-
+${reviewerOptionsSection}
 ## Headline metrics (median across runs)
 
 - FP: median ${fp.median} / ${r.fixture_good_claims} (range ${fp.min}–${fp.max})

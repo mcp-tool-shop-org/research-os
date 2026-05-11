@@ -5,6 +5,7 @@ import type {
   PassFail,
   PerCategoryRecall,
   Recall,
+  ReviewerOptions,
   StatusLabel,
 } from './receipt-schema.js';
 
@@ -156,6 +157,28 @@ export function receiptToCalibrationSummary(receipt: CalibrationReceipt): {
   };
 }
 
+// Stable key order for reviewer_options rendering.
+// Keys are rendered only when explicitly set (omitted keys stay absent).
+const REVIEWER_OPTIONS_KEY_ORDER: (keyof ReviewerOptions)[] = [
+  'num_ctx',
+  'temperature',
+  'seed',
+  'top_p',
+  'top_k',
+  'repeat_penalty',
+];
+
+// Render a "Reviewer options" section when reviewer_options is present and non-empty.
+// Returns empty string when absent or empty (absence IS the disclosure for stochastic runs).
+function buildReviewerOptionsSection(opts: ReviewerOptions | undefined): string {
+  if (!opts) return '';
+  const lines = REVIEWER_OPTIONS_KEY_ORDER
+    .filter((k) => opts[k] !== undefined)
+    .map((k) => `- ${k}: ${opts[k]}`);
+  if (lines.length === 0) return '';
+  return `\n## Reviewer options\n\n${lines.join('\n')}\n`;
+}
+
 // Render a compact Markdown receipt. Operator proof artifact — no prose.
 export function buildReceiptMarkdown(r: CalibrationReceipt): string {
   const pct = (ratio: number) => `${Math.round(ratio * 100)}%`;
@@ -189,6 +212,8 @@ export function buildReceiptMarkdown(r: CalibrationReceipt): string {
   const notesSection =
     r.notes.length > 0 ? `\n## Notes\n\n${r.notes.map((n) => `- ${n}`).join('\n')}\n` : '';
 
+  const reviewerOptionsSection = buildReviewerOptionsSection(r.reviewer_options);
+
   return `# Calibration Receipt — ${r.profile_name}
 
 - **Model:** ${r.model}
@@ -198,7 +223,7 @@ export function buildReceiptMarkdown(r: CalibrationReceipt): string {
 - **Calibrated at:** ${r.calibrated_at}
 - **Research-OS version:** ${r.research_os_version}
 - **Runtime:** ${runtimeSec} seconds
-
+${reviewerOptionsSection}
 ## Headline metrics
 
 - FP: ${r.good_fp_count} / ${r.fixture_good_claims}

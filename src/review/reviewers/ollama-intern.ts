@@ -1,4 +1,6 @@
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
+import { ReviewerOptionsSchema } from '../reviewer-options-schema.js';
+import type { ReviewerOptions } from '../reviewer-options-schema.js';
 import type {
   DraftFinding,
   FindingCategory,
@@ -133,6 +135,11 @@ export interface OllamaReviewerConfig {
   // missing_not_constraint / temporal_mismatch.
   mode?: ReviewerMode;
   fetchImpl?: typeof fetch;
+  // Optional sampling parameters forwarded verbatim to Ollama /api/chat options.
+  // When absent: only num_ctx: 8192 is set (existing default behavior preserved).
+  // When present: merged over the num_ctx default. temperature: 0 is valid —
+  // use !== undefined checks, NOT truthiness, anywhere these values are read.
+  reviewer_options?: ReviewerOptions;
 }
 
 const DEFAULT_CLAIMS_PER_WINDOW = 30;
@@ -155,6 +162,7 @@ export class OllamaInternReviewer implements Reviewer {
   private readonly timeoutMs: number;
   private readonly claimsPerWindow: number;
   private readonly fetchImpl: typeof fetch;
+  readonly reviewerOptions: ReviewerOptions | undefined;
 
   constructor(config: OllamaReviewerConfig = {}) {
     this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
@@ -168,6 +176,9 @@ export class OllamaInternReviewer implements Reviewer {
       config.claimsPerWindow ??
       (envWindow ? parseInt(envWindow, 10) || DEFAULT_CLAIMS_PER_WINDOW : DEFAULT_CLAIMS_PER_WINDOW);
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
+    this.reviewerOptions = config.reviewer_options
+      ? ReviewerOptionsSchema.parse(config.reviewer_options)
+      : undefined;
   }
 
   async available(): Promise<boolean> {
@@ -225,7 +236,17 @@ export class OllamaInternReviewer implements Reviewer {
           // native window; review prompts with 20+ claims exceed that and
           // get silently truncated, which drops claim_ids and confuses the
           // model. Explicitly request 8K so paged windows fit cleanly.
-          options: { num_ctx: 8192 },
+          // Additional sampling params (temperature, seed, etc.) are merged
+          // from reviewerOptions when set. Use !== undefined throughout —
+          // temperature: 0 is valid and must not be dropped by truthiness.
+          options: {
+            num_ctx: this.reviewerOptions?.num_ctx ?? 8192,
+            ...(this.reviewerOptions?.temperature !== undefined && { temperature: this.reviewerOptions.temperature }),
+            ...(this.reviewerOptions?.seed !== undefined && { seed: this.reviewerOptions.seed }),
+            ...(this.reviewerOptions?.top_p !== undefined && { top_p: this.reviewerOptions.top_p }),
+            ...(this.reviewerOptions?.top_k !== undefined && { top_k: this.reviewerOptions.top_k }),
+            ...(this.reviewerOptions?.repeat_penalty !== undefined && { repeat_penalty: this.reviewerOptions.repeat_penalty }),
+          },
           messages: [
             {
               role: 'system',

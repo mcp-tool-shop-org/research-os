@@ -10,7 +10,7 @@
 // Usage:
 //   OLLAMA_HOST=http://127.0.0.1:11435 \
 //   OLLAMA_INTERN_MODEL=hermes3:8b \
-//   node scripts/reviewer-calibration.mjs [pack-out-dir] [--model <name>] [--two-pass] [--profile <name>] [--mode comparison-only] [--runs <n>]
+//   node scripts/reviewer-calibration.mjs [pack-out-dir] [--model <name>] [--two-pass] [--profile <name>] [--mode comparison-only] [--runs <n>] [--temperature <n>] [--seed <n>] [--top-p <n>] [--top-k <n>] [--repeat-penalty <n>] [--num-ctx <n>]
 //
 // --profile <name>   Profile name used for receipt path and record lineage.
 //                    If omitted, inferred from --model + --two-pass flag.
@@ -30,6 +30,14 @@
 //                    calibration/reviewer-profiles/<profile>/runs/run-NNN.json
 //                    and an aggregate seeded-v1.{json,md} at the profile root.
 //                    The fixture is rebuilt from scratch each run (per-run isolation).
+//
+// Sampling flags (all optional; omitted = Ollama/model defaults):
+// --temperature <n>  Sampling temperature (0..2). 0 = deterministic (greedy).
+// --seed <n>         RNG seed for reproducibility (advisory in Ollama).
+// --top-p <n>        Nucleus sampling threshold (0..1).
+// --top-k <n>        Top-K sampling (non-negative integer).
+// --repeat-penalty <n>  Repetition penalty (>= 0).
+// --num-ctx <n>      Context window override (positive integer; default 8192).
 //
 // The fixture pack is rebuilt on every run — it is purely a calibration
 // surface, not research truth.
@@ -55,7 +63,7 @@ import {
   buildReceiptMarkdown,
 } from '../dist/calibration/receipt.js';
 
-import { CalibrationReceiptSchema } from '../dist/calibration/receipt-schema.js';
+import { CalibrationReceiptSchema, ReviewerOptionsSchema } from '../dist/calibration/receipt-schema.js';
 
 import {
   aggregateReceipts,
@@ -82,6 +90,52 @@ const profileArg = profileIdx >= 0 ? args[profileIdx + 1] : undefined;
 const isComparisonOnly = args.includes('--mode') && args[args.indexOf('--mode') + 1] === 'comparison-only';
 const runsIdx = args.indexOf('--runs');
 const runsCount = runsIdx >= 0 ? Math.max(1, parseInt(args[runsIdx + 1], 10) || 1) : 1;
+
+// Sampling flags — numeric validation rejects NaN/Infinity/non-numeric.
+// Uses !== undefined checks throughout so temperature: 0 is preserved (load-bearing).
+function parseSamplingFlag(flagName, args) {
+  const idx = args.indexOf(flagName);
+  if (idx < 0) return undefined;
+  const raw = args[idx + 1];
+  if (raw === undefined || raw.startsWith('--')) {
+    console.error(`Error: ${flagName} requires a numeric value`);
+    process.exit(1);
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    console.error(`Error: ${flagName} value "${raw}" is not a valid finite number`);
+    process.exit(1);
+  }
+  return n;
+}
+
+const samplingTemperature = parseSamplingFlag('--temperature', args);
+const samplingSeed = parseSamplingFlag('--seed', args);
+const samplingTopP = parseSamplingFlag('--top-p', args);
+const samplingTopK = parseSamplingFlag('--top-k', args);
+const samplingRepeatPenalty = parseSamplingFlag('--repeat-penalty', args);
+const samplingNumCtx = parseSamplingFlag('--num-ctx', args);
+
+// Build ReviewerOptions from provided flags only (omitted keys stay absent).
+const rawReviewerOptions = {
+  ...(samplingTemperature !== undefined && { temperature: samplingTemperature }),
+  ...(samplingSeed !== undefined && { seed: samplingSeed }),
+  ...(samplingTopP !== undefined && { top_p: samplingTopP }),
+  ...(samplingTopK !== undefined && { top_k: samplingTopK }),
+  ...(samplingRepeatPenalty !== undefined && { repeat_penalty: samplingRepeatPenalty }),
+  ...(samplingNumCtx !== undefined && { num_ctx: samplingNumCtx }),
+};
+
+// Validate via Zod; exits with a clear error if any value is out of range.
+let reviewerOptions;
+if (Object.keys(rawReviewerOptions).length > 0) {
+  try {
+    reviewerOptions = ReviewerOptionsSchema.parse(rawReviewerOptions);
+  } catch (err) {
+    console.error('Error: invalid reviewer option value:', err.message ?? String(err));
+    process.exit(1);
+  }
+}
 
 // Profile name inference: model family (before ':'), strip trailing digits,
 // append architecture suffix. hermes3:8b + two-pass -> hermes-two-pass.
@@ -393,16 +447,18 @@ async function buildFixturePack() {
   return packPath;
 }
 
-async function runCalibration(packPath, mode, modelOverride) {
+async function runCalibration(packPath, mode, modelOverride, reviewerOpts) {
   const general = new OllamaInternReviewer({
     claimsPerWindow: 10,
     mode: 'general',
     model: modelOverride,
+    reviewer_options: reviewerOpts,
   });
   const narrow = new OllamaInternReviewer({
     claimsPerWindow: 10,
     mode: 'narrow_critic',
     model: modelOverride,
+    reviewer_options: reviewerOpts,
   });
   if (!(await general.available())) {
     console.error('LLM reviewer unavailable. Aborting.');
@@ -498,7 +554,7 @@ function computePerCategoryRecall(findingsByClaim) {
   return { perCategoryAnyFlag, perCategoryStrict };
 }
 
-async function reportRecallAndBuildReceipt(packPath, summary, runtimeMs) {
+async function reportRecallAndBuildReceipt(packPath, summary, runtimeMs, reviewerOpts) {
   const findingsPath = join(packPath, 'audits', '01-calibration-findings.jsonl');
   const text = existsSync(findingsPath) ? await readFile(findingsPath, 'utf8') : '';
   const findings = text
@@ -688,6 +744,7 @@ async function reportRecallAndBuildReceipt(packPath, summary, runtimeMs) {
     empty_or_malformed_responses: emptyOrMalformed,
     pass_fail: passFail,
     notes,
+    ...(reviewerOpts && Object.keys(reviewerOpts).length > 0 && { reviewer_options: reviewerOpts }),
   });
 
   return receipt;
@@ -712,6 +769,9 @@ async function persistReceipt(receipt) {
 (async () => {
   console.log(`Mode: ${mode} | Profile: ${profileName} | Model: ${modelForInference} | Runs: ${runsCount}`);
   if (isComparisonOnly) console.log(`Status override: comparison-only`);
+  if (reviewerOptions) {
+    console.log(`Reviewer options: ${JSON.stringify(reviewerOptions)}`);
+  }
 
   if (runsCount === 1) {
     // Single-run mode — existing behavior, no runs/ subdirectory.
@@ -719,15 +779,16 @@ async function persistReceipt(receipt) {
     console.log(`Building fixture at: ${outDir}`);
     const packPath = await buildFixturePack();
     console.log(`Fixture built. Running paged LLM review (${mode})...`);
-    const summary = await runCalibration(packPath, mode, modelOverride);
+    const summary = await runCalibration(packPath, mode, modelOverride, reviewerOptions);
     const runtimeMs = Date.now() - startMs;
-    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
+    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs, reviewerOptions);
     await persistReceipt(receipt);
     return;
   }
 
   // Multi-run mode — rebuild fixture per run (isolation), collect per-run receipts,
   // then aggregate and write seeded-v1.{json,md} with aggregate shape.
+  // reviewerOptions captured ONCE above and reused across all N runs (advisor-locked).
   const runReceipts = [];
   const profileDir = join(REPO_ROOT, 'calibration', 'reviewer-profiles', profileName);
   const runsDir = join(profileDir, 'runs');
@@ -740,10 +801,10 @@ async function persistReceipt(receipt) {
     const runStartMs = Date.now();
     const packPath = await buildFixturePack();
     console.log(`Fixture built. Running paged LLM review (${mode})...`);
-    const summary = await runCalibration(packPath, mode, modelOverride);
+    const summary = await runCalibration(packPath, mode, modelOverride, reviewerOptions);
     const runtimeMs = Date.now() - runStartMs;
 
-    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs);
+    const receipt = await reportRecallAndBuildReceipt(packPath, summary, runtimeMs, reviewerOptions);
 
     const runFile = join(runsDir, `run-${String(runNum).padStart(3, '0')}.json`);
     await writeFile(runFile, JSON.stringify(receipt, null, 2), 'utf8');
@@ -758,6 +819,7 @@ async function persistReceipt(receipt) {
   const aggregate = aggregateReceipts(runReceipts, {
     runFiles,
     modeOverride: isComparisonOnly ? 'comparison_only' : undefined,
+    reviewerOptions,
   });
 
   await mkdir(profileDir, { recursive: true });

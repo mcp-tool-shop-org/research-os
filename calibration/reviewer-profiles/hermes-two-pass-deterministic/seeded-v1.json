@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "aggregate",
+  "profile_name": "hermes-two-pass-deterministic",
+  "status": "failed",
+  "model": "hermes3:8b",
+  "architecture": "two-pass",
+  "fixture": "seeded-v1",
+  "fixture_total_claims": 18,
+  "fixture_good_claims": 5,
+  "fixture_bad_claims": 13,
+  "runs_count": 3,
+  "run_files": [
+    "runs/run-001.json",
+    "runs/run-002.json",
+    "runs/run-003.json"
+  ],
+  "aggregated_at": "2026-05-11T00:03:36.266Z",
+  "research_os_version": "0.5.0",
+  "good_fp_count": {
+    "median": 0,
+    "min": 0,
+    "max": 0,
+    "values": [
+      0,
+      0,
+      0
+    ]
+  },
+  "any_flag_recall_ratio": {
+    "median": 0.7692307692307693,
+    "min": 0.7692307692307693,
+    "max": 0.7692307692307693,
+    "values": [
+      0.7692307692307693,
+      0.7692307692307693,
+      0.7692307692307693
+    ]
+  },
+  "strict_recall_ratio": {
+    "median": 0.46153846153846156,
+    "min": 0.46153846153846156,
+    "max": 0.46153846153846156,
+    "values": [
+      0.46153846153846156,
+      0.46153846153846156,
+      0.46153846153846156
+    ]
+  },
+  "decisions_produced_count": {
+    "median": 2,
+    "min": 2,
+    "max": 2,
+    "values": [
+      2,
+      2,
+      2
+    ]
+  },
+  "runtime_ms": {
+    "median": 72944,
+    "min": 72638,
+    "max": 73093,
+    "values": [
+      73093,
+      72638,
+      72944
+    ]
+  },
+  "empty_or_malformed_responses": {
+    "median": 0,
+    "min": 0,
+    "max": 0,
+    "values": [
+      0,
+      0,
+      0
+    ]
+  },
+  "per_category_any_flag": {
+    "scope_widening": {
+      "median_ratio": 0.3333333333333333,
+      "min_ratio": 0.3333333333333333,
+      "max_ratio": 0.3333333333333333,
+      "total": 3,
+      "per_run_ratios": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    "unsupported_claim": {
+      "median_ratio": 0.6666666666666666,
+      "min_ratio": 0.6666666666666666,
+      "max_ratio": 0.6666666666666666,
+      "total": 3,
+      "per_run_ratios": [
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6666666666666666
+      ]
+    },
+    "definition_drift": {
+      "median_ratio": 1,
+      "min_ratio": 1,
+      "max_ratio": 1,
+      "total": 2,
+      "per_run_ratios": [
+        1,
+        1,
+        1
+      ]
+    },
+    "temporal_mismatch": {
+      "median_ratio": 1,
+      "min_ratio": 1,
+      "max_ratio": 1,
+      "total": 2,
+      "per_run_ratios": [
+        1,
+        1,
+        1
+      ]
+    },
+    "valid_but_low_value": {
+      "median_ratio": 1,
+      "min_ratio": 1,
+      "max_ratio": 1,
+      "total": 3,
+      "per_run_ratios": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "per_category_strict": {
+    "scope_widening": {
+      "median_ratio": 0.3333333333333333,
+      "min_ratio": 0.3333333333333333,
+      "max_ratio": 0.3333333333333333,
+      "total": 3,
+      "per_run_ratios": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    "unsupported_claim": {
+      "median_ratio": 0,
+      "min_ratio": 0,
+      "max_ratio": 0,
+      "total": 3,
+      "per_run_ratios": [
+        0,
+        0,
+        0
+      ]
+    },
+    "definition_drift": {
+      "median_ratio": 0.5,
+      "min_ratio": 0.5,
+      "max_ratio": 0.5,
+      "total": 2,
+      "per_run_ratios": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "temporal_mismatch": {
+      "median_ratio": 0.5,
+      "min_ratio": 0.5,
+      "max_ratio": 0.5,
+      "total": 2,
+      "per_run_ratios": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "valid_but_low_value": {
+      "median_ratio": 1,
+      "min_ratio": 1,
+      "max_ratio": 1,
+      "total": 3,
+      "per_run_ratios": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "decision_vocabulary": {
+    "accepted_for_synthesis": {
+      "median": 15,
+      "min": 15,
+      "max": 15,
+      "values": [
+        15,
+        15,
+        15
+      ]
+    },
+    "rejected": {
+      "median": 0,
+      "min": 0,
+      "max": 0,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    },
+    "needs_scope_repair": {
+      "median": 3,
+      "min": 3,
+      "max": 3,
+      "values": [
+        3,
+        3,
+        3
+      ]
+    },
+    "needs_source_repair": {
+      "median": 0,
+      "min": 0,
+      "max": 0,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    },
+    "needs_contradiction_mapping": {
+      "median": 0,
+      "min": 0,
+      "max": 0,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    },
+    "needs_human_review": {
+      "median": 0,
+      "min": 0,
+      "max": 0,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "decision_vocab_bar": {
+    "architecture": "two-pass",
+    "required": 3,
+    "median_produced": 2,
+    "passed": false
+  },
+  "unreachable_decisions": [
+    "needs_contradiction_mapping"
+  ],
+  "pass_fail": {
+    "fp_ceiling": "PASS",
+    "any_flag_recall_floor": "PASS",
+    "per_category_any_flag_floor": "FAIL",
+    "strict_recall_floor": "PASS",
+    "decision_vocab_completeness": "FAIL",
+    "latency_soft": "PASS",
+    "latency_hard": "PASS",
+    "empty_or_malformed": "PASS",
+    "overall": "FAIL"
+  },
+  "recurring_bar_failures": [
+    "per_category_any_flag_floor",
+    "decision_vocab_completeness"
+  ],
+  "notes": [
+    "Recurring bar failures (>= ceil(N/2) runs): per_category_any_flag_floor, decision_vocab_completeness"
+  ],
+  "reviewer_options": {
+    "temperature": 0,
+    "seed": 7
+  }
+}

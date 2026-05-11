@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { StatusLabelSchema, ArchitectureSchema } from './receipt-schema.js';
+import { StatusLabelSchema, ArchitectureSchema, ReviewerOptionsSchema } from './receipt-schema.js';
 
 export const AggregateMetricSchema = z.object({
   median: z.number(),
@@ -75,6 +75,10 @@ export const AggregateCalibrationReceiptSchema = z.object({
   recurring_bar_failures: z.array(z.string()),
 
   notes: z.array(z.string()),
+
+  // schema_version: 1 — additive-optional (Exp6 Session 2):
+  //   Same options object stamped on every per-run receipt. Absent = stochastic run.
+  reviewer_options: ReviewerOptionsSchema.optional(),
 });
 
 export type AggregateMetric = z.infer<typeof AggregateMetricSchema>;

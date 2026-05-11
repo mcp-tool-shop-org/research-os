@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { ReviewerOptionsSchema } from '../review/reviewer-options-schema.js';
+export { ReviewerOptionsSchema };
+export type { ReviewerOptions } from '../review/reviewer-options-schema.js';
 
 export const StatusLabelSchema = z.enum([
   'trusted_baseline',
@@ -36,6 +39,9 @@ export const DecisionVocabBarSchema = z.object({
   passed: z.boolean(),
 });
 
+// schema_version: 1 — additive-optional additions (Exp6 Session 2):
+//   reviewer_options: optional sampling params used during this calibration run.
+//   Absent = stochastic run (pre-v0.6 compat preserved). Present = keys explicitly set.
 export const CalibrationReceiptSchema = z.object({
   schema_version: z.literal(1),
   profile_name: z.string(),
@@ -61,6 +67,7 @@ export const CalibrationReceiptSchema = z.object({
   empty_or_malformed_responses: z.number().int().nonnegative(),
   pass_fail: PassFailSchema,
   notes: z.array(z.string()),
+  reviewer_options: ReviewerOptionsSchema.optional(),
 });
 
 export type StatusLabel = z.infer<typeof StatusLabelSchema>;
