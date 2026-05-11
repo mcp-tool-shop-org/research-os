@@ -52,6 +52,9 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
       sectionId: options.sectionId,
       packPath,
       fetchImpl: options.fetchImpl,
+      maxBytes: options.maxBytes,
+      timeoutMs: options.timeoutMs,
+      unsafeAllowAllHosts: options.unsafeAllowAllHosts,
     });
 
     let receiptToWrite = receipt;

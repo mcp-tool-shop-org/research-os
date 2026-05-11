@@ -208,7 +208,13 @@ describe('pack publish — refusal cases', () => {
     await expect(publish({ fromDir: packDir, toDir: pkgDir })).rejects.toThrow(/force/);
   });
 
-  it('preserves existing docs/how-to-read-this.md and warns', async () => {
+  it('D-001 part 1: --force clears the target so operator-authored how-to-read-this.md is REPLACED, not preserved', async () => {
+    // Behavior change: D-001 part 1 now requires `--force` to clear the
+    // target directory before re-writing. The previous "preserve operator
+    // content across runs" guarantee is intentionally removed — `--force`
+    // is now an unconditional clean. Operators that author content under
+    // docs/how-to-read-this.md must commit it to the source pack repo,
+    // not rely on the published artifact being a stable shell.
     const packDir = join(outerTmp, 'source');
     const pkgDir = join(outerTmp, 'packages/test-package');
     mkdirSync(packDir, { recursive: true });
@@ -223,12 +229,13 @@ describe('pack publish — refusal cases', () => {
     const customContent = '# Custom operator-authored how-to-read\n';
     writeFileSync(howToPath, customContent, 'utf8');
 
-    // Re-publish with --force
+    // Re-publish with --force — D-001 part 1 wipes pkgDir before re-write.
     const result = await publish({ fromDir: packDir, toDir: pkgDir, force: true });
 
-    // Custom content preserved
-    expect(readFileSync(howToPath, 'utf8')).toBe(customContent);
-    // Warning emitted
-    expect(result.warnings.some((w) => w.includes('how-to-read-this.md'))).toBe(true);
+    // Custom content is GONE — replaced by the freshly-generated scaffold.
+    expect(readFileSync(howToPath, 'utf8')).not.toBe(customContent);
+    expect(readFileSync(howToPath, 'utf8')).toContain('SCAFFOLD');
+    // No "preserved" warning — there was nothing on disk at write time.
+    expect(result.warnings.some((w) => w.includes('how-to-read-this.md'))).toBe(false);
   });
 });

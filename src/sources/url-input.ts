@@ -21,6 +21,29 @@ function isValidHttpUrl(candidate: string): boolean {
   }
 }
 
+/**
+ * A-009 — canonicalize a URL before dedup. Lowercases hostname, strips default
+ * ports, drops the fragment. Returns null when the URL cannot be parsed or
+ * uses a non-http(s) protocol.
+ */
+function canonicalizeUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    u.hostname = u.hostname.toLowerCase();
+    if (
+      (u.protocol === 'http:' && u.port === '80') ||
+      (u.protocol === 'https:' && u.port === '443')
+    ) {
+      u.port = '';
+    }
+    u.hash = '';
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 export function dedupeAndValidate(urls: string[]): { valid: string[]; invalid: string[] } {
   const seen = new Set<string>();
   const valid: string[] = [];
@@ -30,7 +53,11 @@ export function dedupeAndValidate(urls: string[]): { valid: string[]; invalid: s
       invalid.push(u);
       continue;
     }
-    const norm = u;
+    const norm = canonicalizeUrl(u);
+    if (norm === null) {
+      invalid.push(u);
+      continue;
+    }
     if (seen.has(norm)) continue;
     seen.add(norm);
     valid.push(norm);

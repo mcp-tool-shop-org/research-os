@@ -77,6 +77,7 @@ describe('gather (heuristic-only path)', () => {
     const summary = await gather({
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
       urls: [`${baseUrl}/article-1`, `${baseUrl}/article-2`],
       extractors: [new HeuristicExtractor()],
     });
@@ -113,6 +114,7 @@ describe('gather (heuristic-only path)', () => {
     const summary = await gather({
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
       urls: [`${baseUrl}/missing`],
       extractors: [new HeuristicExtractor()],
     });
@@ -151,6 +153,7 @@ describe('gather (heuristic-only path)', () => {
     const summary = await gather({
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
       urls: [`${baseUrl}/article-1`],
       extractors: [failingExtractor],
     });
@@ -180,6 +183,7 @@ describe('gather (heuristic-only path)', () => {
     const summary = await gather({
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
       urls: [`${baseUrl}/article-1`],
       extractors: [ollamaUnavail, new HeuristicExtractor()],
     });
@@ -234,6 +238,7 @@ describe('gather (heuristic-only path)', () => {
     const summary = await gather({
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
       urls: [`${baseUrl}/article-1`, `${baseUrl}/article-1`, `${baseUrl}/article-2`],
       extractors: [new HeuristicExtractor()],
     });

@@ -282,8 +282,9 @@ export class OllamaInternReviewer implements Reviewer {
     for (const raw of parsed.findings) {
       if (!raw || typeof raw !== 'object') continue;
       const r = raw as Record<string, unknown>;
-      const category = asEnum<FindingCategory>(r.category, VALID_CATEGORIES, 'overgeneralized_claim');
       if (!VALID_CATEGORIES.includes(r.category as FindingCategory)) continue;
+      // Validity check above guarantees r.category is a valid FindingCategory.
+      const category = r.category as FindingCategory;
       const summary = typeof r.summary === 'string' && r.summary.trim().length > 0 ? r.summary.trim() : null;
       if (!summary) continue;
       drafts.push({

@@ -62,7 +62,8 @@ export class OllamaInternExtractor implements Extractor {
       if (!res.ok) return false;
       const body = (await res.json()) as { models?: Array<{ name: string }> };
       const names = (body.models ?? []).map((m) => m.name);
-      return names.some((n) => n === this.model || n.startsWith(this.model.split(':')[0]));
+      const family = this.model.split(':')[0] ?? this.model;
+      return names.some((n) => n === this.model || n === family || n.startsWith(`${family}:`));
     } catch {
       return false;
     }

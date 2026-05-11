@@ -84,6 +84,7 @@ describe('fetchOnce', () => {
     const { receipt, rawText } = await fetchOnce(`${baseUrl}/ok-html`, {
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
     });
     FetchReceiptSchema.parse(receipt);
     expect(receipt.fetch_outcome).toBe('ok');
@@ -100,6 +101,7 @@ describe('fetchOnce', () => {
     const { receipt, rawText } = await fetchOnce(`${baseUrl}/notfound`, {
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
     });
     FetchReceiptSchema.parse(receipt);
     expect(receipt.fetch_outcome).toBe('http_error');
@@ -112,6 +114,7 @@ describe('fetchOnce', () => {
     const { receipt } = await fetchOnce('http://127.0.0.1:1/nope', {
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
     });
     FetchReceiptSchema.parse(receipt);
     expect(receipt.fetch_outcome).toBe('network_error');
@@ -123,6 +126,7 @@ describe('fetchOnce', () => {
     const { receipt } = await fetchOnce(`${baseUrl}/redirect`, {
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
     });
     expect(receipt.fetch_outcome).toBe('ok');
     expect(receipt.final_url).toBe(`${baseUrl}/ok-html`);
@@ -132,6 +136,7 @@ describe('fetchOnce', () => {
     const { receipt, rawText } = await fetchOnce(`${baseUrl}/binary`, {
       sectionId: '01-landscape',
       packPath,
+      unsafeAllowAllHosts: true,
     });
     FetchReceiptSchema.parse(receipt);
     expect(receipt.fetch_outcome).toBe('ok');

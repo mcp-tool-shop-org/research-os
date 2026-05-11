@@ -46,7 +46,7 @@
 ## D. Shipping Hygiene
 
 - [x] `[all]` `verify` script exists — `npm run build && npm run typecheck && npm run lint && npm run test` (2026-05-08)
-- [x] `[all]` Version in manifest matches git tag — v0.3.1 in package.json + RESEARCH_OS_VERSION; tag v0.3.1 created at release commit (2026-05-09)
+- [x] `[all]` Version in manifest matches git tag — `<package.json version>` matches the value exported as `RESEARCH_OS_VERSION`; matching git tag created at the release commit (see Release log below for shipped versions)
 - [x] `[all]` Dependency scanning runs in CI — `npm audit --audit-level=high` in .github/workflows/ci.yml (2026-05-08)
 - [x] `[all]` Automated dependency update mechanism exists — Dependabot weekly npm in .github/dependabot.yml (2026-05-08)
 - [x] `[npm]` `npm pack --dry-run` includes: dist/, README.md, CHANGELOG.md, LICENSE, SECURITY.md (2026-05-08)
@@ -54,8 +54,8 @@
 - [x] `[npm]` Lockfile committed — package-lock.json present (2026-05-08)
 - [ ] `[vsix]` SKIP: not a VS Code extension
 - [ ] `[desktop]` SKIP: not a desktop app
-- [ ] `[all]` SKIP: Translations (polyglot-mcp, 8 languages) — WAIVED for v0.3.1. README updated (status block, version badge); translations will be stale at release time. Advisor runs translations locally post-Session-B for both v0.3.0 + v0.3.1 README deltas at once (translation-workflow standing rule, 2026-05-09).
-- [ ] `[all]` SKIP: GitHub repo metadata (description, homepage, topics) — WAIVED for v0.3.1. Deferred to operator action post-release; not load-bearing for this release thesis.
+- [ ] `[all]` Translations (polyglot-mcp, 8 languages: ja, zh, es, fr, hi, it, pt-BR + source en) — must run BEFORE `npm publish` and BEFORE `gh release create` per the canonical release workflow. README.md changes (status block, version badge) are staged together with refreshed README.{ja,zh,es,fr,hi,it,pt-BR}.md in a single release commit; the tag is created against that commit so GitHub visitors never see stale translations at a release tag. Translations execute locally on TranslateGemma 12B (zero API cost) via `node E:/AI/polyglot-mcp/scripts/translate-all.mjs <readme-path>`.
+- [ ] `[all]` GitHub repo metadata (description, homepage, topics) — verify before tagging. Description matches the README one-liner, homepage points at the landing page, topics cover the primary use case + ecosystem.
 
 ## E. Identity (soft gate — does not block ship)
 
@@ -80,3 +80,19 @@ If a section doesn't apply, mark `SKIP:` with justification — don't leave it u
 ```
 - [ ] `[pypi]` SKIP: not a Python project
 ```
+
+---
+
+## Release log
+
+Each release lands here once tagged on master. Format: `vX.Y.Z (YYYY-MM-DD, <short sha>) — <one-line note>`.
+
+- v0.6.0 (2026-05-10, 298321f) — Experiment 6 closed: reviewer-options + deterministic single-pass calibration baseline produced with caveats. F-53/F-54 closed.
+- v0.5.0 (2026-05-09, c3ea4d3) — Reviewer calibration as durable trust contract. F-48/F-49/F-50 closed.
+- v0.4.0 (2026-05-08, 4399f94) — Source-truth discipline (Components A+B+D). F-27/F-47/F-46 closed.
+- v0.3.3 (2026-05-08, eaac1bc) — Gate-semantics clarity (F-43 + F-41).
+- v0.3.2 (2026-05-09, fc73a37) — F-36 closed: pack-publish closure-ledger reconciliation via getEffectiveAcceptedClaimIds.
+- v0.3.1 (2026-05-09, 5afc413) — Section-scoped source-floor waivers + reviewer acknowledgement.
+- v0.3.0 (2026-05-09, 08de7fb) — `contradict map --detector` flag (auto / heuristic / ollama-intern).
+- v0.2.0 (2026-05-08, de84068) — `research-os pack publish` (Experiment 2).
+- v0.1.x (earlier) — initial pipeline: discover → gather → claims → contradictions → review → freeze.

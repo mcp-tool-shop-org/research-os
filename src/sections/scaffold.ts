@@ -7,6 +7,7 @@ import {
   PackNotFoundError,
   SectionExistsError,
   InvalidSectionIdError,
+  ResearchOSError,
 } from '../errors.js';
 import {
   ResearchYamlSchema,
@@ -17,7 +18,26 @@ import {
 import { SectionGatesYamlSchema, type SectionGatesYaml } from './schema.js';
 import type { SectionAddOptions, SectionAddResult } from './types.js';
 
+/**
+ * D-005: section add accepts `force` to overwrite an on-disk section
+ * directory that drifted from research.yaml. We keep the public types
+ * file (`./types.ts`) untouched and widen the function-local parameter
+ * type here.
+ */
+interface SectionAddOptionsWithForce extends SectionAddOptions {
+  force?: boolean;
+}
+
 const SECTION_ID_PATTERN = /^[0-9]{2}-[a-z0-9-]+$/;
+
+/** D-005: artifact files we check for inside an existing section directory. */
+const SECTION_ARTIFACT_FILES = [
+  'brief.md',
+  'claims.jsonl',
+  'contradictions.md',
+  'open_questions.md',
+  'gates.yaml',
+];
 
 function briefStub(opts: SectionAddOptions): string {
   return `# Section: ${opts.id}
@@ -82,7 +102,7 @@ async function loadResearchYaml(packPath: string): Promise<{ yaml: ResearchYaml;
   return { yaml: parsed, path: yamlPath };
 }
 
-export async function add(options: SectionAddOptions): Promise<SectionAddResult> {
+export async function add(options: SectionAddOptionsWithForce): Promise<SectionAddResult> {
   if (!SECTION_ID_PATTERN.test(options.id)) {
     throw new InvalidSectionIdError(options.id);
   }
@@ -95,6 +115,26 @@ export async function add(options: SectionAddOptions): Promise<SectionAddResult>
 
   if (yaml.sections.some((s) => s.id === options.id)) {
     throw new SectionExistsError(options.id);
+  }
+
+  // D-005: even if research.yaml doesn't list this section, the on-disk
+  // directory might already contain artifact files from a prior aborted
+  // run or a hand-edited tree. Refuse rather than silently scaffolding
+  // over them — unless --force says otherwise.
+  const sectionPath = join(packPath, 'sections', options.id);
+  if (!options.force && existsSync(sectionPath)) {
+    const present = SECTION_ARTIFACT_FILES.filter((f) =>
+      existsSync(join(sectionPath, f)),
+    );
+    if (present.length > 0) {
+      throw new ResearchOSError(
+        `Section "${options.id}" directory already exists at ${sectionPath} but is missing from research.yaml. ` +
+          `Refusing to overwrite. Pass --force to overwrite, or delete the directory manually. ` +
+          `(found: ${present.join(', ')})`,
+        'SECTION_DIR_DRIFT',
+        `Pass --force to overwrite, or delete ${sectionPath} manually before running section add again.`,
+      );
+    }
   }
 
   const newSection: Section = SectionSchema.parse({
@@ -114,7 +154,6 @@ export async function add(options: SectionAddOptions): Promise<SectionAddResult>
     sections: [...yaml.sections, newSection],
   });
 
-  const sectionPath = join(packPath, 'sections', options.id);
   await mkdir(sectionPath, { recursive: true });
 
   const written: string[] = [];

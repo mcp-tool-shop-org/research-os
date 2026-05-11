@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // One-shot harness: run the paged LLM reviewer on a section, bypassing the
 // CLI's ladder. Exists because the CLI's pickReviewer fell through to
 // heuristic in repeated runs against the dogfood pack — this is a

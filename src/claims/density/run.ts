@@ -165,6 +165,9 @@ function buildFlags(audit: Omit<ClaimDensityAudit, 'flags'>): DensityFlag[] {
         s.claim_count >= SOURCE_DOMINANCE_MIN_PER_SOURCE &&
         s.share_of_section >= SOURCE_DOMINANCE_RATIO)
     ) {
+      // share_of_section is share of total claim-source attributions (sums to
+      // 1.0 across sources). 0.6 means this source carries >=60% of the
+      // section's attribution weight — block-severity over-dominance.
       const severity = s.claim_count >= 50 || s.share_of_section >= 0.6 ? 'block' : 'warn';
       flags.push({
         type: 'source_dominance',
@@ -298,6 +301,16 @@ export async function auditDensity(
   }
 
   // Per-source aggregations.
+  //
+  // share_of_section uses total CLAIM-SOURCE ATTRIBUTIONS as the denominator
+  // (sum over all sources of how many claims cite that source), not the unique
+  // claim count. With multi-source claims, attributions > claim count, and
+  // dividing by claim count makes per-source shares sum to >1.0. Using
+  // attributions as the denominator makes shares sum to exactly 1.0 ± epsilon.
+  const totalAttributions = allSourceIds.reduce(
+    (acc, sid) => acc + claims.filter((c) => c.source_ids.includes(sid)).length,
+    0,
+  );
   const perSource: PerSourceDensity[] = [];
   let totalWords = 0;
   let weakTotal = 0;
@@ -317,7 +330,7 @@ export async function auditDensity(
       source_word_count: words,
       claim_count: claimsHere.length,
       claims_per_1k_words: words > 0 ? (claimsHere.length / words) * 1000 : 0,
-      share_of_section: claims.length > 0 ? claimsHere.length / claims.length : 0,
+      share_of_section: totalAttributions > 0 ? claimsHere.length / totalAttributions : 0,
       weak_scope_count: weak,
       generic_scope_count: generic,
     });

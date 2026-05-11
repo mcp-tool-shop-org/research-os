@@ -163,6 +163,12 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
       return null;
     }
 
+    // JSON.parse('null') / '[]' / '"string"' all yield valid JSON that is not
+    // a usable object. Treat anything non-object as a soft failure.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+
     if (parsed.type === 'none' || !parsed.type) return null;
 
     const type = asEnum<ContradictionType>(parsed.type, VALID_TYPES, 'direct_conflict');

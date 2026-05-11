@@ -15,7 +15,7 @@ export const PerSourceDensitySchema = z.object({
   source_word_count: z.number().int().nonnegative(),
   claim_count: z.number().int().nonnegative(),
   claims_per_1k_words: z.number(),
-  share_of_section: z.number(), // 0..1
+  share_of_section: z.number(), // share of section's total claim-source attributions; sums to 1.0 ± epsilon across sources
   weak_scope_count: z.number().int().nonnegative(),
   generic_scope_count: z.number().int().nonnegative(),
 });

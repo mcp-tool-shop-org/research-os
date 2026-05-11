@@ -199,6 +199,12 @@ EXCERPT LEDGER END`;
       return { ok: false, error: 'Ollama response was not valid JSON' };
     }
 
+    // JSON.parse('null') / '[]' / '"string"' all yield valid JSON that is not
+    // a usable object. Guard before dereferencing parsed.claims.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false, error: 'Ollama response was not a JSON object' };
+    }
+
     if (!Array.isArray(parsed.claims)) {
       return { ok: false, error: 'Ollama response did not contain a claims array' };
     }

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
-import { join, basename, resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { join, basename, resolve, dirname } from 'node:path';
 import { deriveManifest } from './manifest.js';
 import { generateReadme } from './readme.js';
 import { generateHowToReadScaffold } from './how-to-read.js';
@@ -41,13 +42,32 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     );
   }
 
-  // 3. Check target: refuse if non-empty without --force
+  // 3. Check target: refuse if non-empty without --force.
+  //    D-001 part 1: with --force on a non-empty target, recursively remove
+  //    the target before re-creating it. Otherwise stale artifacts from a
+  //    previous publish can survive into the new pack and verify-pack
+  //    accepts them silently because the receipt only checks
+  //    fingerprinted-files-exist + re-hash, not the inverse direction.
   if (existsSync(toDir)) {
     const entries = readdirSync(toDir);
-    if (entries.length > 0 && !input.force) {
-      throw new Error(
-        `Target directory already exists and is non-empty: ${toDir}\n  Use --force to overwrite.`,
-      );
+    if (entries.length > 0) {
+      if (!input.force) {
+        throw new Error(
+          `Target directory already exists and is non-empty: ${toDir}\n  Use --force to overwrite.`,
+        );
+      }
+      // Sanity guard: never `rm` outside the parent that the caller passed
+      // us. The publish root is `dirname(toDir)`; a path like `<root>/../foo`
+      // would resolve outside it. After `resolve()` the path is canonical,
+      // so a startsWith check is safe.
+      const publishRoot = resolve(dirname(toDir));
+      const safeTarget = resolve(toDir);
+      if (!safeTarget.startsWith(publishRoot)) {
+        throw new Error(
+          `Refusing to --force-overwrite target outside publish root.\n  target: ${safeTarget}\n  root:   ${publishRoot}`,
+        );
+      }
+      await rm(safeTarget, { recursive: true, force: true });
     }
   }
 

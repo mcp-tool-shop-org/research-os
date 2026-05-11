@@ -12,7 +12,18 @@ sidebar:
 
 ## Install
 
-v0.1.0 is not yet published to npm. Install from source:
+```bash
+npm install -g @mcptoolshop/research-os
+```
+
+Confirm with:
+
+```bash
+research-os --version
+# 0.6.0
+```
+
+### From source (contributor option)
 
 ```bash
 git clone https://github.com/mcp-tool-shop-org/research-os.git

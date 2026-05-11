@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { PackManifestSchema } from './schema.js';
 
 // Inline equivalent of research-packs/scripts/verify-pack.mjs.
@@ -27,6 +27,60 @@ export interface VerifyResult {
 function sha256File(filePath: string): string {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
+
+/**
+ * D-001 part 2: walk `root` recursively and return every file path it contains,
+ * as POSIX-style paths relative to `root` (forward slashes — matches the style
+ * of `freeze-receipt.json` `path` fields). Skips hidden files (leading `.`),
+ * `node_modules/`, and `.git/`.
+ */
+function walkFiles(root: string): string[] {
+  const out: string[] = [];
+  function recurse(dir: string): void {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      if (name.startsWith('.')) continue;
+      if (name === 'node_modules') continue;
+      const full = join(dir, name);
+      let isDir: boolean;
+      try {
+        isDir = statSync(full).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) {
+        recurse(full);
+      } else {
+        const rel = relative(root, full).split(sep).join('/');
+        out.push(rel);
+      }
+    }
+  }
+  recurse(root);
+  return out;
+}
+
+/**
+ * Files at the published-package root that are produced by `pack publish`
+ * itself rather than fingerprinted in `freeze-receipt.json`. Anything in
+ * this set is NOT an orphan even though the receipt does not list it.
+ */
+const PUBLISH_GENERATED_PATHS = new Set<string>([
+  'pack.manifest.json',
+  'README.md',
+  'synthesis/final-report.md',
+  'synthesis/decision-brief.md',
+  'synthesis/working-report.md',
+  'docs/how-to-read-this.md',
+  // freeze-receipt.json lives under pack/ — included for parity with
+  // research-packs/scripts/verify-pack.mjs ignore set.
+  'pack/audits/freeze-receipt.json',
+]);
 
 export function verifyPack(packageDir: string): VerifyResult {
   // Step 1: Check admission-contract files
@@ -114,6 +168,33 @@ export function verifyPack(packageDir: string): VerifyResult {
       };
     }
     verified++;
+  }
+
+  // Step 5: D-001 part 2 — orphan-artifact detection. A "stale-artifact
+  // leak" can survive a `pack publish --force` if the target directory had
+  // files from a previous publish that the new pack doesn't write — the
+  // receipt hash check + per-fingerprint hash check both PASS (they only
+  // verify files-listed-exist-and-match, not the inverse) so a dirty package
+  // ships silently. Compare on-disk file set against fingerprinted set
+  // (plus the publish-generated allowlist) and FAIL on any extras.
+  const fingerprintedPackRelative = new Set<string>(
+    allFingerprints.map((e) => `pack/${e.path.replace(/\\/g, '/')}`),
+  );
+  const allOnDisk = walkFiles(packageDir);
+  const orphans: string[] = [];
+  for (const rel of allOnDisk) {
+    if (PUBLISH_GENERATED_PATHS.has(rel)) continue;
+    if (fingerprintedPackRelative.has(rel)) continue;
+    orphans.push(rel);
+  }
+  if (orphans.length > 0) {
+    const preview = orphans.slice(0, 5).join(', ');
+    const more = orphans.length > 5 ? ` (+${orphans.length - 5} more)` : '';
+    return {
+      pass: false,
+      reason: `Orphan artifact(s) present in pack: ${preview}${more}`,
+      name: m.name,
+    };
   }
 
   return { pass: true, name: m.name, artifactsVerified: verified, softWarnings };

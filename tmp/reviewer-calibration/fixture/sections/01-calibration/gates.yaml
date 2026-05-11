@@ -1,8 +1,0 @@
-section_id: 01-calibration
-purpose: Reviewer calibration with seeded good and bad claims.
-status: draft
-created_at: 2026-05-07T05:41:10.124Z
-max_time_minutes: 45
-min_sources: 8
-primary_sources_required: 2
-contradictions_required: true

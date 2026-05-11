@@ -90,33 +90,7 @@ async function indexSection(args: {
   const sectionDir = join(packPath, 'sections', sectionId);
   if (!existsSync(sectionDir)) throw new SectionNotFoundError(sectionId);
 
-  // Clear all existing rows for this section so re-index is clean
-  db.prepare('DELETE FROM sources WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM claims WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM contradictions WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM review_findings WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM claim_reviews WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM gate_results WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM fetch_receipts WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM artifacts WHERE section_id = ?').run(sectionId);
-  db.prepare('DELETE FROM facts_fts WHERE section_id = ?').run(sectionId);
-
-  // Section row
-  db.prepare(
-    `INSERT OR REPLACE INTO sections(section_id, purpose, status, max_time_minutes,
-       min_sources, primary_sources_required, contradictions_required, indexed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    section.id,
-    section.purpose,
-    section.status,
-    section.max_time_minutes,
-    section.min_sources,
-    section.primary_sources_required,
-    section.contradictions_required ? 1 : 0,
-    now,
-  );
-
+  // A-010 — prepare every per-row statement once at section start.
   const insertArtifact = db.prepare(
     `INSERT OR REPLACE INTO artifacts(artifact_id, artifact_type, section_id, path, sha256, bytes, indexed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -125,6 +99,88 @@ async function indexSection(args: {
     `INSERT INTO facts_fts(record_type, record_id, section_id, artifact_path, text)
      VALUES (?, ?, ?, ?, ?)`,
   );
+  const insertSource = db.prepare(
+    `INSERT OR REPLACE INTO sources(
+      source_id, section_id, url, publisher, source_type, relevance,
+      asserts, scope, not_field, fetched_at, published_at, artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertClaim = db.prepare(
+    `INSERT OR REPLACE INTO claims(
+      claim_id, section_id, source_ids_json, asserts, scope, not_field,
+      evidence_excerpt, confidence, extractor, extraction_method, review_state,
+      artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertContradiction = db.prepare(
+    `INSERT OR REPLACE INTO contradictions(
+      contradiction_id, section_id, type, severity, status, overlap_assessment,
+      claim_ids_json, source_ids_json, summary, detector, artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertFinding = db.prepare(
+    `INSERT OR REPLACE INTO review_findings(
+      finding_id, section_id, category, severity, claim_ids_json, source_ids_json,
+      summary, required_action, reviewer, artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertClaimReview = db.prepare(
+    `INSERT INTO claim_reviews(
+      claim_id, section_id, decision, reason, reviewer, created_at, artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertGateResult = db.prepare(
+    `INSERT OR REPLACE INTO gate_results(
+      section_id, verdict, synthesis_eligible,
+      failures_json, warnings_json, blocking_reasons_json, waivers_json, next_actions_json,
+      artifact_path, checked_at, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertFetchReceipt = db.prepare(
+    `INSERT OR REPLACE INTO fetch_receipts(
+      receipt_id, source_id, section_id, status, fetch_outcome, content_type,
+      sha256, fetched_at, raw_text_path, artifact_path, indexed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertSectionRow = db.prepare(
+    `INSERT OR REPLACE INTO sections(section_id, purpose, status, max_time_minutes,
+       min_sources, primary_sources_required, contradictions_required, indexed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const deleteSources = db.prepare('DELETE FROM sources WHERE section_id = ?');
+  const deleteClaims = db.prepare('DELETE FROM claims WHERE section_id = ?');
+  const deleteContradictions = db.prepare('DELETE FROM contradictions WHERE section_id = ?');
+  const deleteReviewFindings = db.prepare('DELETE FROM review_findings WHERE section_id = ?');
+  const deleteClaimReviews = db.prepare('DELETE FROM claim_reviews WHERE section_id = ?');
+  const deleteGateResults = db.prepare('DELETE FROM gate_results WHERE section_id = ?');
+  const deleteFetchReceipts = db.prepare('DELETE FROM fetch_receipts WHERE section_id = ?');
+  const deleteArtifacts = db.prepare('DELETE FROM artifacts WHERE section_id = ?');
+  const deleteFactsFts = db.prepare('DELETE FROM facts_fts WHERE section_id = ?');
+
+  // A-006 — wrap the section-scope DELETE-then-INSERT-section in a transaction.
+  db.transaction(() => {
+    deleteSources.run(sectionId);
+    deleteClaims.run(sectionId);
+    deleteContradictions.run(sectionId);
+    deleteReviewFindings.run(sectionId);
+    deleteClaimReviews.run(sectionId);
+    deleteGateResults.run(sectionId);
+    deleteFetchReceipts.run(sectionId);
+    deleteArtifacts.run(sectionId);
+    deleteFactsFts.run(sectionId);
+
+    insertSectionRow.run(
+      section.id,
+      section.purpose,
+      section.status,
+      section.max_time_minutes,
+      section.min_sources,
+      section.primary_sources_required,
+      section.contradictions_required ? 1 : 0,
+      now,
+    );
+  })();
+
   const recordArtifact = (artifactType: string, rel: string, content: string | null): void => {
     const sha = content === null ? null : fileSha256(content);
     insertArtifact.run(`${sectionId}:${artifactType}`, artifactType, sectionId, rel, sha, content === null ? null : Buffer.byteLength(content, 'utf8'), now);
@@ -147,12 +203,7 @@ async function indexSection(args: {
   for (const card of allCards) {
     if (!sectionSourceIds.has(card.source_id) && card.section_id !== sectionId) continue;
     const cardPath = relPath(packPath, join(packPath, 'evidence', 'source-cards', `${card.source_id}.json`));
-    db.prepare(
-      `INSERT OR REPLACE INTO sources(
-        source_id, section_id, url, publisher, source_type, relevance,
-        asserts, scope, not_field, fetched_at, published_at, artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertSource.run(
       card.source_id,
       sectionId,
       card.url,
@@ -184,13 +235,7 @@ async function indexSection(args: {
     recordArtifact('claims_jsonl', claimsArtifact, text);
   }
   for (const claim of claims) {
-    db.prepare(
-      `INSERT OR REPLACE INTO claims(
-        claim_id, section_id, source_ids_json, asserts, scope, not_field,
-        evidence_excerpt, confidence, extractor, extraction_method, review_state,
-        artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertClaim.run(
       claim.claim_id,
       sectionId,
       JSON.stringify(claim.source_ids),
@@ -222,12 +267,7 @@ async function indexSection(args: {
     recordArtifact('contradictions_jsonl', contradictionsArtifact, text);
   }
   for (const c of contradictions) {
-    db.prepare(
-      `INSERT OR REPLACE INTO contradictions(
-        contradiction_id, section_id, type, severity, status, overlap_assessment,
-        claim_ids_json, source_ids_json, summary, detector, artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertContradiction.run(
       c.contradiction_id,
       sectionId,
       c.type,
@@ -262,12 +302,7 @@ async function indexSection(args: {
   const findingById = new Map<string, ReviewFinding>();
   for (const f of findings) findingById.set(f.finding_id, f);
   for (const f of findingById.values()) {
-    db.prepare(
-      `INSERT OR REPLACE INTO review_findings(
-        finding_id, section_id, category, severity, claim_ids_json, source_ids_json,
-        summary, required_action, reviewer, artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertFinding.run(
       f.finding_id,
       sectionId,
       f.category,
@@ -298,11 +333,7 @@ async function indexSection(args: {
     recordArtifact('claim_reviews_jsonl', reviewsArtifact, text);
   }
   for (const r of reviews) {
-    db.prepare(
-      `INSERT INTO claim_reviews(
-        claim_id, section_id, decision, reason, reviewer, created_at, artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertClaimReview.run(
       r.claim_id,
       sectionId,
       r.decision,
@@ -323,13 +354,7 @@ async function indexSection(args: {
     const gateArtifact = relPath(packPath, join(packPath, 'audits', `${sectionId}-gate.json`));
     const gateText = await readFile(join(packPath, 'audits', `${sectionId}-gate.json`), 'utf8');
     recordArtifact('gate_json', gateArtifact, gateText);
-    db.prepare(
-      `INSERT OR REPLACE INTO gate_results(
-        section_id, verdict, synthesis_eligible,
-        failures_json, warnings_json, blocking_reasons_json, waivers_json, next_actions_json,
-        artifact_path, checked_at, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertGateResult.run(
       gate.section_id,
       gate.verdict,
       gate.synthesis_eligible ? 1 : 0,
@@ -359,12 +384,7 @@ async function indexSection(args: {
     recordArtifact('fetch_log_jsonl', relPath(packPath, fetchLogAbs), text);
   }
   for (const receipt of allReceipts.filter((r) => r.section_id === sectionId)) {
-    db.prepare(
-      `INSERT OR REPLACE INTO fetch_receipts(
-        receipt_id, source_id, section_id, status, fetch_outcome, content_type,
-        sha256, fetched_at, raw_text_path, artifact_path, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
+    insertFetchReceipt.run(
       receipt.receipt_id,
       receipt.source_id,
       receipt.section_id,

@@ -2,6 +2,70 @@
 
 All notable changes to `research-os` are documented here.
 
+## [Unreleased]
+
+### Behavior changes
+
+- **`pack publish --force` now replaces the target package directory unconditionally.**
+  Prior behavior preserved hand-edited generated files with a warning; that behavior was a
+  stale-artifact hiding place and is reverted. Do not keep hand-authored files inside
+  generated package output. Edit upstream artifacts (claims, sources, synthesis) or
+  sibling files instead.
+
+### Fixes
+
+- Stage A dogfood swarm wave 1 closes 12 HIGH, 14 MEDIUM, and 5 trivial LOW findings
+  across the source-acquisition, claims/contradictions, review/closure, CLI/pack-publish,
+  and tests/CI/docs domains. Headline items:
+  - `fetch.ts`: response-size cap (default 25 MB), request timeout (default 60 s),
+    charset-aware decoding (Content-Type + BOM sniff), SSRF guard on initial URL + post-
+    redirect URL (private/loopback/link-local refusal).
+  - Override-schema refine accepts publisher-only nulling (`new_publisher: null`) as
+    intended by the read path in `effective-card.ts`.
+  - Ollama-intern claim + contradiction extractors no longer null-deref on literal
+    `null` / array JSON responses; `contradict map` skips malformed `claims.jsonl` lines
+    instead of crashing.
+  - `contradictions/map.ts` `source_ids` are deterministically sorted on persistence.
+  - `claims/density` `share_of_section` denominator switched to total per-source
+    attributions; per-source shares now sum to 1.0 ± ε.
+  - F-54 fully closed — `reviewer_options` disclosure now lands on `review.json` +
+    `review.md` for BOTH single-pass and two-pass review paths (residual single-pass gap
+    surfaced and fixed in the swarm).
+  - Freeze cite-validation tightened — citations to claims with no review record are now
+    refused (cite-allowed = accepted only).
+  - `pack publish` parse errors carry `ResearchOSError(PACK_PARSE_ERROR)` with file +
+    line + actionable hint; `readClaimReviews` warnings flow through `deriveManifest`.
+  - `verify-pack` learns orphan-artifact detection (files on disk not fingerprinted in
+    `freeze-receipt.json`).
+  - `section add` refuses overwrite when on-disk section directory exists with content
+    but is absent from `research.yaml`; `--force` bypasses the guard.
+  - CLI numeric option coercers reject non-numeric input via `commander.InvalidArgumentError`.
+  - Site handbook install path updated to `npm install -g @mcptoolshop/research-os`
+    (previously told operators v0.1.0 was source-install-only).
+  - `SHIP_GATE.md` converted to evergreen language with a `## Release log` appendix; root
+    `tmp/` directory is now `.gitignore`'d (23 reviewer-calibration fixture files
+    untracked from index, files retained on disk for the calibration script to rebuild).
+
+### Tests
+
+- Adds 47 regression tests (713 → 760 PASS), covering 14 required-regression vectors plus
+  the broader fix surface. New test files: `test/sources/fetch-{size-cap,timeout,charset,
+  ssrf}.test.ts`, `test/sources/source-card-overrides-schema.test.ts`, `test/claims-
+  ollama-intern-null.test.ts`, `test/contradictions-ollama-intern-null.test.ts`,
+  `test/contradictions-map-malformed.test.ts`, `test/claims-density-shares-sum.test.ts`,
+  `test/freeze-unaccepted-citation.test.ts`, `test/pack-publish/publish-force-clears.
+  test.ts`, `test/pack-publish/verify-orphan-detection.test.ts`,
+  `test/cli/parse-int-validation.test.ts`.
+
+### Verified
+
+- Lint + typecheck + tests: PASS at 760/760.
+- 4-pack regression: byte-identical PASS on all 4 published research packs
+  (`368d2361…` research-os-self-dogfood, `d71943c6…` comfyui-workflow-durability,
+  `6511a044…` xrpl-creator-token-durability, `55a65792…` godot-export-runtime-durability).
+- No `trusted_baseline` promotion; no reviewer profile status changes; no gate / freeze /
+  synthesis-law changes beyond the precise C-002 freeze accepted-only citation fix.
+
 ## [0.6.0] — 2026-05-10 — deterministic reviewer baseline
 
 v0.6.0 closes Experiment 6 with reviewer-trust evidence: research-os can now produce a

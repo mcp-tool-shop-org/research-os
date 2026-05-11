@@ -339,6 +339,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     llmFindingsRejected,
     profile: options.profile ?? DEFAULT_PROFILE,
     research,
+    reviewer_options: options.reviewer_options,
   });
 }
 

@@ -27,7 +27,7 @@ export const FetchReceiptSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   title: z.string().nullable(),
   raw_text_path: z.string().nullable(),
-  fetch_outcome: z.enum(['ok', 'http_error', 'network_error']),
+  fetch_outcome: z.enum(['ok', 'http_error', 'network_error', 'too_large']),
   fetch_error: z.string().nullable(),
   extraction_outcome: z.enum(['ok', 'failed', 'skipped']),
   extraction_extractor: ExtractorNameSchema.nullable(),

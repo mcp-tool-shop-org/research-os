@@ -292,7 +292,7 @@ describe('contradict map', () => {
     expect(md).toContain('Contradictions: 01-landscape');
   });
 
-  it('refuses malformed claims (schema-level)', async () => {
+  it('silently skips schema-incompatible claim lines (B-003 fix)', async () => {
     const result = await init({
       topic: 'Malformed claims test',
       outDir: workDir,
@@ -305,13 +305,13 @@ describe('contradict map', () => {
     });
     const claimsPath = join(packPath, 'sections', '01-landscape', 'claims.jsonl');
     await writeFile(claimsPath, JSON.stringify({ not_a_claim: true }) + '\n', 'utf8');
-    await expect(
-      map({
-        sectionId: '01-landscape',
-        packPath,
-        detectors: [new HeuristicContradictionDetector()],
-      }),
-    ).rejects.toThrow();
+    const summary = await map({
+      sectionId: '01-landscape',
+      packPath,
+      detectors: [new HeuristicContradictionDetector()],
+    });
+    expect(summary.candidateClaims).toBe(0);
+    expect(summary.contradictionsAdded).toBe(0);
   });
 
   it('rejects when pack does not exist', async () => {
@@ -338,6 +338,74 @@ describe('contradict map', () => {
         detectors: [new HeuristicContradictionDetector()],
       }),
     ).rejects.toBeInstanceOf(SectionNotFoundError);
+  });
+
+  // B-004 regression: persisted source_ids should be deterministically sorted
+  // regardless of the order claims contributed them. Previously the set was
+  // serialized in insertion order, which made contradiction artifacts ordering-
+  // sensitive across re-runs / claim orderings.
+  it('sorts source_ids on the persisted contradiction (B-004)', async () => {
+    const sourceHash = createHash('sha256').update('x').digest('hex');
+    // claim_id and source_id patterns are [a-f0-9]{12}. Pick source IDs whose
+    // sort order is non-trivial: ddd < eee < fff.
+    const claimA = {
+      claim_id: 'clm_fffffffffff0_heuristic_1',
+      section_id: '01-landscape',
+      source_ids: ['src_ffffffffffff', 'src_eeeeeeeeeeee'],
+      source_hashes: [sourceHash, sourceHash],
+      asserts: 'WAL provides high concurrency for SQLite readers and writers',
+      scope: 'SQLite WAL mode',
+      not: null,
+      evidence_excerpt_ids: [],
+      evidence_excerpt: 'WAL provides high concurrency for SQLite readers and writers',
+      evidence_location: null,
+      confidence: 'low',
+      extractor: 'heuristic',
+      extraction_method: 'heuristic_key_point',
+      created_at: '2026-05-06T22:00:00.000Z',
+      review_state: 'candidate',
+    };
+    const claimB = {
+      claim_id: 'clm_bbbbbbbbbbbb_heuristic_1',
+      section_id: '01-landscape',
+      source_ids: ['src_dddddddddddd'],
+      source_hashes: [sourceHash],
+      asserts: 'WAL does not provide high concurrency for SQLite readers and writers',
+      scope: 'SQLite WAL mode',
+      not: null,
+      evidence_excerpt_ids: [],
+      evidence_excerpt: 'WAL does not provide high concurrency for SQLite readers and writers',
+      evidence_location: null,
+      confidence: 'low',
+      extractor: 'heuristic',
+      extraction_method: 'heuristic_key_point',
+      created_at: '2026-05-06T22:00:00.000Z',
+      review_state: 'candidate',
+    };
+    await makePackWithClaims([claimA, claimB]);
+    await map({
+      sectionId: '01-landscape',
+      packPath,
+      detectors: [new HeuristicContradictionDetector()],
+    });
+    const ledger = (
+      await readFile(join(packPath, 'sections', '01-landscape', 'contradictions.jsonl'), 'utf8')
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(ledger).toHaveLength(1);
+    const cnt = ContradictionSchema.parse(JSON.parse(ledger[0]!));
+    // Sorted ascending: ddd < eee < fff.
+    expect(cnt.source_ids).toEqual([
+      'src_dddddddddddd',
+      'src_eeeeeeeeeeee',
+      'src_ffffffffffff',
+    ]);
+    const expected = Array.from(
+      new Set([...claimA.source_ids, ...claimB.source_ids]),
+    ).sort();
+    expect(cnt.source_ids).toEqual(expected);
   });
 
   it('falls back from ollama-intern to heuristic when ollama is unavailable', async () => {

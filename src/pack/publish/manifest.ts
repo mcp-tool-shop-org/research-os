@@ -12,6 +12,7 @@ import {
 import { PackManifestSchema } from './schema.js';
 import type { PackManifest } from './schema.js';
 import { RESEARCH_OS_VERSION } from '../../index.js';
+import { ResearchOSError } from '../../errors.js';
 
 // Minimal schema for gate-result.json — only the fields manifest derivation needs.
 const GateResultMinimalSchema = z.object({
@@ -43,33 +44,90 @@ function sha256Bytes(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-function parseJsonl<T>(content: string): T[] {
-  return content
-    .split('\n')
-    .filter((l) => l.trim().length > 0)
-    .map((l) => JSON.parse(l) as T);
+/**
+ * D-002: parse newline-delimited JSON. Each non-blank line must parse
+ * independently; on failure we throw a {@link ResearchOSError} with
+ * `PACK_PARSE_ERROR`, the offending file path (`label`), and the 1-based
+ * line number. Preserves the original parse-error message as the cause so
+ * callers can still inspect it.
+ *
+ * `label` is typically the absolute or pack-relative file path so operators
+ * can locate the bad row quickly.
+ */
+function parseJsonl<T>(content: string, label: string): T[] {
+  const out: T[] = [];
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().length === 0) continue;
+    try {
+      out.push(JSON.parse(line) as T);
+    } catch (err) {
+      const cause = err instanceof Error ? err : new Error(String(err));
+      throw new ResearchOSError(
+        `Malformed JSON on line ${i + 1} of ${label}: ${cause.message}`,
+        'PACK_PARSE_ERROR',
+        `Inspect line ${i + 1} of ${label} for malformed JSON. Use \`research-os\` to repair or remove the bad row.`,
+        cause,
+      );
+    }
+  }
+  return out;
 }
 
 function readJsonlSafe<T>(filePath: string): T[] {
   if (!existsSync(filePath)) return [];
-  return parseJsonl<T>(readFileSync(filePath, 'utf8'));
+  return parseJsonl<T>(readFileSync(filePath, 'utf8'), filePath);
 }
 
 /**
- * Best-effort parse of `claim-reviews.jsonl`. Rows that fail schema
+ * D-003: best-effort parse of `claim-reviews.jsonl`. Rows that fail schema
  * validation are dropped (they were never canonical) but their absence is
- * not silently ignored — we accumulate them for the caller to surface as
- * warnings if it cares. For F-36's accepted-set derivation, dropping
- * malformed rows is correct: a row without a valid decision cannot
- * contribute to "accepted."
+ * not silently ignored — they are pushed onto `warnings` (when provided)
+ * as structured strings tagged `malformed_claim_review_row`. The caller can
+ * grep / summarize on that tag. For F-36's accepted-set derivation, dropping
+ * malformed rows is correct: a row without a valid decision cannot contribute
+ * to "accepted."
+ *
+ * After the loop, if N>0 rows were malformed, a CRITICAL summary line is
+ * appended so a downstream reader who only scans for `CRITICAL` still sees
+ * the count.
+ *
+ * @param filePath - Absolute path to claim-reviews.jsonl.
+ * @param sectionId - Owning section id (recorded in warning lines).
+ * @param warnings - Optional caller-owned mutable warning array.
  */
-function readClaimReviews(filePath: string): ClaimReview[] {
+function readClaimReviews(
+  filePath: string,
+  sectionId: string,
+  warnings?: string[],
+): ClaimReview[] {
   if (!existsSync(filePath)) return [];
-  const raw = parseJsonl<unknown>(readFileSync(filePath, 'utf8'));
+  const raw = parseJsonl<unknown>(readFileSync(filePath, 'utf8'), filePath);
   const valid: ClaimReview[] = [];
-  for (const r of raw) {
+  let malformed = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const r = raw[i];
     const parsed = ClaimReviewSchema.safeParse(r);
-    if (parsed.success) valid.push(parsed.data);
+    if (parsed.success) {
+      valid.push(parsed.data);
+    } else {
+      malformed++;
+      if (warnings) {
+        const issue = parsed.error.issues
+          .map((x) => `${x.path.join('.') || '<root>'}: ${x.message}`)
+          .join('; ');
+        warnings.push(
+          `malformed_claim_review_row section=${sectionId} file=${filePath} line=${i + 1}: ${issue}`,
+        );
+      }
+    }
+  }
+  if (malformed > 0 && warnings) {
+    warnings.push(
+      `CRITICAL section ${sectionId}: ${malformed} malformed claim-review row(s) dropped from ${filePath}. ` +
+        `Dropped rows cannot contribute to accepted-set derivation; investigate the review pipeline state.`,
+    );
   }
   return valid;
 }
@@ -113,7 +171,8 @@ export interface ManifestRefusal {
  * @param packDir - Source frozen pack directory.
  * @param packageName - Target package name.
  * @param operatorNotes - Operator-supplied notes recorded in the manifest.
- * @param warnings - Caller-owned mutable array; legacy-mismatch warnings get pushed.
+ * @param warnings - Caller-owned mutable array; legacy-mismatch and D-003
+ *                   malformed-row warnings get pushed here.
  */
 export function deriveManifest(
   packDir: string,
@@ -159,9 +218,10 @@ export function deriveManifest(
   for (const sectionId of sectionIds) {
     const sectionDir = join(packDir, 'sections', sectionId);
 
-    // claim-reviews.jsonl → effective accepted set (F-36)
+    // claim-reviews.jsonl → effective accepted set (F-36); malformed rows
+    // dropped with D-003 structured warnings.
     const reviewsPath = join(sectionDir, 'claim-reviews.jsonl');
-    const reviews = readClaimReviews(reviewsPath);
+    const reviews = readClaimReviews(reviewsPath, sectionId, warnings);
 
     // Refuse on incompatible decisions at the same timestamp — the
     // latest-decision-wins tie-breaker is undefined for these.
@@ -186,7 +246,7 @@ export function deriveManifest(
     // don't ship claims.jsonl), so we soft-warn instead.
     const claimsPath = join(sectionDir, 'claims.jsonl');
     if (existsSync(claimsPath)) {
-      const claimRows = parseJsonl<unknown>(readFileSync(claimsPath, 'utf8'));
+      const claimRows = parseJsonl<unknown>(readFileSync(claimsPath, 'utf8'), claimsPath);
       const claimIds = new Set<string>();
       for (const c of claimRows) {
         const parsed = ClaimIdOnlySchema.safeParse(c);

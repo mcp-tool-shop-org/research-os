@@ -145,20 +145,18 @@ describe('validateSourceCardOverride — no-op override rejection', () => {
     );
   });
 
-  it('throws when both new_source_type and new_publisher are explicitly null', () => {
-    const bad = {
+  it('accepts when both new_source_type and new_publisher are explicitly null (A-003 fix — publisher-only nulling is a valid correction)', () => {
+    const ok = {
       source_id: 'src_aabbccddeeff',
       url: 'https://example.com',
       new_source_type: null,
       new_publisher: null,
-      reason: 'both null',
+      reason: 'explicit double-null',
       operator: 'op',
       created_at: '2026-05-10T10:00:00.000Z',
       pack_version: '0.4.0',
     };
-    expect(() => validateSourceCardOverride(bad)).toThrow(
-      /at least one of new_source_type or new_publisher/i,
-    );
+    expect(() => validateSourceCardOverride(ok)).not.toThrow();
   });
 
   it('throws when reason is whitespace-only', () => {

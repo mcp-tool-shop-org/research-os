@@ -523,3 +523,217 @@ describe('Harness flag parsing: non-numeric value is rejected', () => {
     // The harness exits with an error in this case — verified by isFinite check
   });
 });
+
+// ---------------------------------------------------------------------------
+// F-54 RESIDUAL CLOSURE (C-001) — reviewer_options must land on review.json
+// AND review.md from BOTH the single-pass and multi-pass review codepaths.
+// ---------------------------------------------------------------------------
+import { mkdtemp, rm, readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { beforeEach, afterEach } from 'vitest';
+import { init } from '../src/intake/index.js';
+import { add as sectionAdd } from '../src/sections/index.js';
+import { review } from '../src/review/index.js';
+import type { Reviewer, ReviewerResult } from '../src/review/types.js';
+
+let f54WorkDir: string;
+let f54PackPath: string;
+
+async function makeMinimalReviewableFixture(): Promise<void> {
+  const r = await init({
+    topic: 'F-54 residual: reviewer_options disclosure on both review paths',
+    outDir: f54WorkDir,
+  });
+  f54PackPath = r.packPath;
+  await sectionAdd({ id: '01-f54', purpose: 'probe', packPath: f54PackPath });
+
+  const sourceId = 'src_aaaaaaaaaaaa';
+  const claimId = 'clm_aaaaaaaaaaaa_heuristic_1';
+
+  const cardDir = join(f54PackPath, 'evidence', 'source-cards');
+  await mkdir(cardDir, { recursive: true });
+  await writeFile(
+    join(cardDir, `${sourceId}.json`),
+    JSON.stringify({
+      source_id: sourceId,
+      receipt_id: `rcpt_${sourceId.replace(/^src_/, '')}_1`,
+      section_id: '01-f54',
+      url: 'https://example.com',
+      final_url: 'https://example.com',
+      fetched_at: '2026-05-06T22:00:00.000Z',
+      publisher: 'p1',
+      published_at: null,
+      title: 'T',
+      source_type: 'secondary',
+      relevance: 'unknown',
+      key_points: [],
+      limitations: [],
+      asserts: 'A',
+      scope: null,
+      not: null,
+      extracted_by: 'heuristic',
+      extracted_at: '2026-05-06T22:00:00.000Z',
+    }),
+    'utf8',
+  );
+  await appendFile(
+    join(f54PackPath, 'sections', '01-f54', 'sources.jsonl'),
+    JSON.stringify({ source_id: sourceId, added_at: '2026-05-06T22:00:01.000Z' }) + '\n',
+    'utf8',
+  );
+  await appendFile(
+    join(f54PackPath, 'evidence', 'fetch-log.jsonl'),
+    JSON.stringify({
+      receipt_id: `rcpt_${sourceId.replace(/^src_/, '')}_1`,
+      source_id: sourceId,
+      section_id: '01-f54',
+      requested_url: 'https://example.com',
+      final_url: 'https://example.com',
+      status: 200,
+      status_text: 'OK',
+      content_type: 'text/html',
+      fetched_at: '2026-05-06T22:00:00.000Z',
+      byte_count: 100,
+      sha256: createHash('sha256').update(sourceId).digest('hex'),
+      title: 'T',
+      raw_text_path: null,
+      fetch_outcome: 'ok',
+      fetch_error: null,
+      extraction_outcome: 'ok',
+      extraction_extractor: 'heuristic',
+      extraction_error: null,
+    }) + '\n',
+    'utf8',
+  );
+  await appendFile(
+    join(f54PackPath, 'sections', '01-f54', 'claims.jsonl'),
+    JSON.stringify({
+      claim_id: claimId,
+      section_id: '01-f54',
+      source_ids: [sourceId],
+      source_hashes: ['a'.repeat(64)],
+      asserts: 'something',
+      scope: 'narrow',
+      not: 'broad',
+      evidence_excerpt: 'literal',
+      evidence_location: null,
+      confidence: 'low',
+      extractor: 'heuristic',
+      extraction_method: 'heuristic_key_point',
+      created_at: '2026-05-06T22:00:00.000Z',
+      review_state: 'candidate',
+    }) + '\n',
+    'utf8',
+  );
+}
+
+// Synthetic reviewer that always succeeds with zero findings. Lets us drive
+// the review() control flow (single-pass and multi-pass) without Ollama.
+function makeNoOpReviewer(name: 'heuristic' | 'ollama-intern'): Reviewer {
+  return {
+    name,
+    async available() {
+      return true;
+    },
+    async review(): Promise<ReviewerResult> {
+      return { ok: true, drafts: [], method: `${name}_test_stub` };
+    },
+  };
+}
+
+beforeEach(async () => {
+  f54WorkDir = await mkdtemp(join(tmpdir(), 'research-os-f54-'));
+});
+
+afterEach(async () => {
+  await rm(f54WorkDir, { recursive: true, force: true });
+});
+
+describe('F-54 residual: reviewer_options disclosure on the single-pass path (LOAD-BEARING)', () => {
+  it('writes reviewer_options to review.json AND review.md on the SINGLE-PASS path', async () => {
+    await makeMinimalReviewableFixture();
+    const opts = { temperature: 0, seed: 7, num_ctx: 8192 } as const;
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+      // multiPass is OFF — exercises the single-pass codepath (run.ts:332)
+      reviewer_options: opts,
+    });
+
+    const reviewJsonPath = join(f54PackPath, 'audits', '01-f54-review.json');
+    const reviewMdPath = join(f54PackPath, 'audits', '01-f54-review.md');
+    const snapshot = JSON.parse(await readFile(reviewJsonPath, 'utf8'));
+    expect(snapshot.reviewer_options).toBeDefined();
+    expect(snapshot.reviewer_options.temperature).toBe(0);
+    expect(snapshot.reviewer_options.seed).toBe(7);
+    expect(snapshot.reviewer_options.num_ctx).toBe(8192);
+
+    const md = await readFile(reviewMdPath, 'utf8');
+    expect(md).toContain('## Reviewer options');
+    expect(md).toContain('temperature: 0');
+    expect(md).toContain('seed: 7');
+  });
+});
+
+describe('F-54 residual: reviewer_options disclosure on the multi-pass path', () => {
+  it('writes reviewer_options to review.json AND review.md on the MULTI-PASS path', async () => {
+    await makeMinimalReviewableFixture();
+    const opts = { temperature: 0, seed: 7, num_ctx: 8192 } as const;
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+      multiPass: true,
+      reviewer_options: opts,
+    });
+
+    const reviewJsonPath = join(f54PackPath, 'audits', '01-f54-review.json');
+    const reviewMdPath = join(f54PackPath, 'audits', '01-f54-review.md');
+    const snapshot = JSON.parse(await readFile(reviewJsonPath, 'utf8'));
+    expect(snapshot.reviewer_options).toBeDefined();
+    expect(snapshot.reviewer_options.temperature).toBe(0);
+    expect(snapshot.reviewer_options.seed).toBe(7);
+    expect(snapshot.reviewer_options.num_ctx).toBe(8192);
+
+    const md = await readFile(reviewMdPath, 'utf8');
+    expect(md).toContain('## Reviewer options');
+    expect(md).toContain('temperature: 0');
+    expect(md).toContain('seed: 7');
+  });
+});
+
+describe('F-54 residual: reviewer_options omitted when not passed (both paths)', () => {
+  it('single-pass: review.json has no reviewer_options when not passed', async () => {
+    await makeMinimalReviewableFixture();
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+    });
+    const snapshot = JSON.parse(
+      await readFile(join(f54PackPath, 'audits', '01-f54-review.json'), 'utf8'),
+    );
+    expect(snapshot.reviewer_options).toBeUndefined();
+    const md = await readFile(join(f54PackPath, 'audits', '01-f54-review.md'), 'utf8');
+    expect(md).not.toContain('## Reviewer options');
+  });
+
+  it('multi-pass: review.json has no reviewer_options when not passed', async () => {
+    await makeMinimalReviewableFixture();
+    await review({
+      sectionId: '01-f54',
+      packPath: f54PackPath,
+      reviewers: [makeNoOpReviewer('heuristic')],
+      multiPass: true,
+    });
+    const snapshot = JSON.parse(
+      await readFile(join(f54PackPath, 'audits', '01-f54-review.json'), 'utf8'),
+    );
+    expect(snapshot.reviewer_options).toBeUndefined();
+    const md = await readFile(join(f54PackPath, 'audits', '01-f54-review.md'), 'utf8');
+    expect(md).not.toContain('## Reviewer options');
+  });
+});

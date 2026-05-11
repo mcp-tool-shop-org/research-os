@@ -257,6 +257,28 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
     noteRefusal(refusal, `Synthesis cites claim(s) that are in repair or rejected state: ${repairCitations.join(', ')}.`);
   }
 
+  // F-C002: cite-allowed = accepted only. A claim that exists in claims.jsonl
+  // but has NO review record (or has a non-terminal decision) is neither
+  // "unknown" nor "repair/rejected" — it slips past the prior two refusals.
+  // The new check fires strictly more restrictively: well-formed, known-claim,
+  // not in repair/rejected, AND not in the accepted set. The "accepted" set
+  // matches the canonical effective-accepted contract (see
+  // src/closure-ledger/effective-accepted.ts).
+  const acceptedClaimIdSet = new Set(acceptedClaimIds);
+  const unacceptedCitations = allCited.filter(
+    (c) =>
+      isWellFormedClaimId(c) &&
+      allClaimIds.has(c) &&
+      !repairOrRejected.has(c) &&
+      !acceptedClaimIdSet.has(c),
+  );
+  if (unacceptedCitations.length > 0) {
+    noteRefusal(
+      refusal,
+      `Synthesis cites claim(s) that have no acceptance decision (cite-allowed = accepted only): ${unacceptedCitations.join(', ')}.`,
+    );
+  }
+
   // Disclosure check: every unresolved contradiction must appear in decision-brief.md OR final-report.md
   const unresolvedContradictionRefs: FreezeReceiptPayload['unresolved_contradictions'] = [];
   if (crossSectionMap) {

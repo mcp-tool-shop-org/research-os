@@ -1,3 +1,5 @@
+export type FetchOutcome = 'ok' | 'http_error' | 'network_error' | 'too_large';
+
 export type SourceType =
   | 'primary'
   | 'secondary'
@@ -47,6 +49,10 @@ export interface GatherOptions {
   preferExtractor?: ExtractorName;
   fetchImpl?: typeof fetch;
   extractors?: Extractor[];
+  /** A-001/A-002/A-007 — forwarded to fetchOnce. */
+  maxBytes?: number;
+  timeoutMs?: number;
+  unsafeAllowAllHosts?: boolean;
 }
 
 export interface GatherSummary {

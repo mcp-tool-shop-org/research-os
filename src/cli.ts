@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command, Option } from 'commander';
+import { Command, InvalidArgumentError, Option } from 'commander';
 import { init } from './intake/index.js';
 import { add as sectionAdd } from './sections/index.js';
 import { reportSection } from './section_report/index.js';
@@ -54,6 +54,25 @@ function reportError(err: unknown): never {
   process.exit(1);
 }
 
+/**
+ * D-006: returns a commander option coercer that parses an integer or throws
+ * `InvalidArgumentError` with the option label, surfaced cleanly through
+ * commander's own usage-error handling (no silent NaN propagation).
+ *
+ * Use as `.option('--limit <n>', '...', parseIntArg('--limit'))`.
+ */
+export function parseIntArg(label: string): (value: string) => number {
+  return (value: string): number => {
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n)) {
+      throw new InvalidArgumentError(
+        `${label}: expected integer, got '${value}'`,
+      );
+    }
+    return n;
+  };
+}
+
 const program = new Command();
 
 program
@@ -70,7 +89,7 @@ program
   .option('-d, --decision <text>', 'What decision this research informs')
   .option('-a, --audience <text>', 'Who consumes the output', 'self')
   .option('--desired-output <text>', 'Shape of the final artifact')
-  .option('--max-runtime-minutes <n>', 'Total runtime budget for the pack', (v) => parseInt(v, 10), 240)
+  .option('--max-runtime-minutes <n>', 'Total runtime budget for the pack', parseIntArg('--max-runtime-minutes'), 240)
   .option('--force', 'Overwrite an existing pack directory')
   .action(async (topic: string, opts) => {
     try {
@@ -103,9 +122,10 @@ sectionCmd
   .argument('<id>', 'Section id, e.g. "01-landscape"')
   .requiredOption('--purpose <text>', 'What this section investigates')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
-  .option('--max-time <n>', 'Section time budget in minutes', (v) => parseInt(v, 10))
-  .option('--min-sources <n>', 'Minimum sources required for this section', (v) => parseInt(v, 10))
-  .option('--primary-required <n>', 'Primary sources required for this section', (v) => parseInt(v, 10))
+  .option('--max-time <n>', 'Section time budget in minutes', parseIntArg('--max-time'))
+  .option('--min-sources <n>', 'Minimum sources required for this section', parseIntArg('--min-sources'))
+  .option('--primary-required <n>', 'Primary sources required for this section', parseIntArg('--primary-required'))
+  .option('--force', 'Overwrite an existing on-disk section directory that drifted from research.yaml (D-005)')
   .action(async (id: string, opts) => {
     try {
       const result = await sectionAdd({
@@ -115,6 +135,7 @@ sectionCmd
         maxTimeMinutes: opts.maxTime,
         minSources: opts.minSources,
         primarySourcesRequired: opts.primaryRequired,
+        force: Boolean(opts.force),
       });
       process.stdout.write(`section added\n`);
       process.stdout.write(`  id:    ${result.sectionId}\n`);
@@ -200,7 +221,24 @@ program
       let urlsFile = opts.urlsFile as string | undefined;
       if (opts.approved) {
         const path = await import('node:path');
+        const fs = await import('node:fs/promises');
         const candidate = path.join(opts.pack as string, 'sections', section, 'urls.approved.txt');
+        // D-004: stat the approved-URLs file before passing it to gather so
+        // a missing file produces an actionable hint instead of a generic
+        // "no urls" error downstream.
+        try {
+          await fs.stat(candidate);
+        } catch (statErr) {
+          const code = (statErr as NodeJS.ErrnoException).code;
+          if (code === 'ENOENT') {
+            throw new ResearchOSError(
+              `Approved URLs file not found: ${candidate}`,
+              'APPROVED_URLS_NOT_FOUND',
+              'No approved URLs found. Run `research-os discover approve` (or `discover export-urls`) first to produce sections/<id>/urls.approved.txt.',
+            );
+          }
+          throw statErr;
+        }
         urlsFile = urlsFile ?? candidate;
       }
       const result = await gather({
@@ -235,7 +273,7 @@ discoverCmd
   .argument('<section>', 'Section id, e.g. "04-gates-and-waivers"')
   .requiredOption('--query <text>', 'Free-text query to ask the discover provider')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
-  .option('--target <n>', 'Soft target candidate count', (v) => parseInt(v, 10), 12)
+  .option('--target <n>', 'Soft target candidate count', parseIntArg('--target'), 12)
   .action(async (section: string, opts) => {
     try {
       const result = await runDiscover({
@@ -274,7 +312,7 @@ discoverCmd
       return prev;
     },
   )
-  .option('--top <n>', 'Approve the top N candidates by rank', (v) => parseInt(v, 10))
+  .option('--top <n>', 'Approve the top N candidates by rank', parseIntArg('--top'))
   .option('--reason <text>', 'Optional reason recorded on the status update')
   .action(async (section: string, opts) => {
     try {
@@ -395,8 +433,8 @@ claimCmd
   )
   .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
-  .option('--per-source-cap <n>', 'Max claims per source forwarded to review', (v) => parseInt(v, 10), 10)
-  .option('--min-assert-chars <n>', 'Asserts shorter than this become parked_low_value', (v) => parseInt(v, 10), 30)
+  .option('--per-source-cap <n>', 'Max claims per source forwarded to review', parseIntArg('--per-source-cap'), 10)
+  .option('--min-assert-chars <n>', 'Asserts shorter than this become parked_low_value', parseIntArg('--min-assert-chars'), 30)
   .action(async (section: string, opts) => {
     try {
       const result = await runTriage({
@@ -520,13 +558,18 @@ contradictCmd
   .option('--by <identifier>', 'Who resolved it (recorded in ledger)', 'operator')
   .action(async (section: string, opts) => {
     try {
+      // D-008: route argument errors through commander's InvalidArgumentError
+      // so they flow through reportError like the rest of the command path
+      // instead of bypassing the catch block via raw stderr + exit(1).
       if (!opts.all && (!opts.id || opts.id.length === 0)) {
-        process.stderr.write('research-os: must provide --id <id> (repeatable) or --all\n');
-        process.exit(1);
+        throw new InvalidArgumentError(
+          'must provide --id <id> (repeatable) or --all',
+        );
       }
       if (opts.status === 'unresolved') {
-        process.stderr.write('research-os: --status unresolved is the default; use resolved, preserved, or rejected\n');
-        process.exit(1);
+        throw new InvalidArgumentError(
+          '--status unresolved is the default; use resolved, preserved, or rejected',
+        );
       }
       const result = await contradictResolve({
         sectionId: section,
@@ -606,7 +649,7 @@ program
   .option(
     '--review-window <n>',
     'Claims per LLM review window (default 30). Smaller windows fit smaller models.',
-    (v) => parseInt(v, 10),
+    parseIntArg('--review-window'),
   )
   .option(
     '--two-pass-llm',
@@ -815,7 +858,7 @@ program
   .description('Query the pack-local research-truth index')
   .argument('<term>', 'Search term (FTS5 syntax accepted)')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
-  .option('--limit <n>', 'Max hits to return', (v) => parseInt(v, 10), 25)
+  .option('--limit <n>', 'Max hits to return', parseIntArg('--limit'), 25)
   .option('--type <type>', 'Restrict to one record type (claim, source, contradiction, review_finding, gate_result, fetch_receipt, claim_review, section)')
   .action((term: string, opts) => {
     try {
@@ -868,7 +911,9 @@ coworkCmd
           process.stdout.write(`  - ${w}\n`);
         }
       }
-      if (!result.synthesisAllowed) process.exitCode = 0; // not an error — informational
+      // D-007: synthesisAllowed=false is informational, not an error. The
+      // default exit code (0) already conveys success; the previous
+      // `if (!synthesisAllowed) process.exitCode = 0` was a no-op.
     } catch (err) {
       reportError(err);
     }
@@ -1248,4 +1293,17 @@ sourceCardCmd
     }
   });
 
-program.parseAsync(process.argv);
+// Only auto-run as a CLI when this file is the process entry point. Under
+// `vitest` (which imports `parseIntArg` for the D-006 helper unit test) the
+// module is loaded as a dependency and we must NOT call parseAsync —
+// commander sees vitest's argv and calls process.exit, which vitest treats
+// as an unhandled error.
+const invokedAsCli =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  process.argv.length > 1 &&
+  /(?:^|[\\/])(research-os|cli\.js|cli\.ts)$/i.test(process.argv[1] ?? '');
+
+if (invokedAsCli) {
+  program.parseAsync(process.argv);
+}

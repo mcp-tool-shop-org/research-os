@@ -32,9 +32,13 @@ async function readCandidateClaims(packPath: string, sectionId: string): Promise
   const claims: Claim[] = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    const parsed = ClaimSchema.parse(JSON.parse(line));
-    if (parsed.review_state !== 'candidate') continue;
-    claims.push(parsed);
+    try {
+      const parsed = ClaimSchema.parse(JSON.parse(line));
+      if (parsed.review_state !== 'candidate') continue;
+      claims.push(parsed);
+    } catch {
+      /* skip malformed line — matches sibling pattern in triage/run.ts and density/run.ts */
+    }
   }
   return claims;
 }
@@ -78,7 +82,7 @@ function buildContradiction(args: {
   const id = `cnt_${pairHash(claim_a.claim_id, claim_b.claim_id)}_${detectorIdPart}`;
   const sourceIds = Array.from(
     new Set<string>([...claim_a.source_ids, ...claim_b.source_ids]),
-  );
+  ).sort();
   return ContradictionSchema.parse({
     contradiction_id: id,
     section_id: sectionId,

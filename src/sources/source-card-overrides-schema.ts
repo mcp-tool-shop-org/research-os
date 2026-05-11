@@ -33,11 +33,11 @@ export const SourceCardOverrideSchema = z
   })
   .refine(
     (obj) =>
-      (obj.new_source_type != null && obj.new_source_type !== undefined) ||
-      (obj.new_publisher != null && obj.new_publisher !== undefined),
+      Object.prototype.hasOwnProperty.call(obj, 'new_source_type') ||
+      Object.prototype.hasOwnProperty.call(obj, 'new_publisher'),
     {
       message:
-        'At least one of new_source_type or new_publisher must be present and non-null',
+        'At least one of new_source_type or new_publisher must be provided (publisher-only nulling is permitted)',
     },
   );
 
