@@ -270,3 +270,48 @@ Items 5 and 6 are **PASS**. Items 1, 2, 3, 4, 7, 8 are post-packet work — not 
 ## Section 8 — Final Operator Story
 
 research-os helps an operator turn a research question into a frozen evidence pack. It separates leads from fetched evidence, extracted claims from accepted claims, contradiction mapping from resolution, review from synthesis, and readiness from writing. It does not ask you to trust an LLM reviewer by default; it records the evidence needed to trust, reject, or conditionally admit reviewer profiles.
+
+---
+
+## v1.0 readiness reassessment (2026-05-11)
+
+**Verdict revision:** the prior Section 1 verdict (*"Ready after PR #9 merge"*) was incorrect. v1.0 was attempted as `chore(release): v1.0.0` (commit `3f79148`) and rolled back within the npm 72h unpublish window. The release was reframed as v0.7.0 — Dogfood Swarm Hardening.
+
+This section is history-honest: the original packet (Sections 1–8 above) stays intact as the record of what the readiness analysis claimed at the time. This section documents what the analysis got wrong and what the actual v1 readiness arc looks like.
+
+### What the prior verdict got wrong
+
+The packet conflated two questions:
+
+1. **"Is the contract honest and do the audits hold?"** — Section 6 (API/Semver contract), Section 7 (release prerequisites), and the implicit "code is correct + caveats are disclosed" framing all answer YES. The four-stage dogfood swarm executed after the packet was written (see [`dogfood-swarm-proof.md`](dogfood-swarm-proof.md)) confirmed it: 0 CRIT/HIGH after Stage A; 0 v1.0 blockers after Stages B/C/D; 4-pack regression byte-identical; 4 doctrine ratchets codified; 188 new tests; two cross-agent escapes caught + corrected forward without amending history.
+2. **"Is the product v1-shippable?"** — this question is different. v1-shippable means the product has a coherent primary use case, a proven happy path, a trustworthy operator story that a new operator can pick up without reading project history, and known limitations that do not undermine the product's reason to exist.
+
+The packet treated question (1) as if it answered question (2). It does not. A failed v1.0.0 release attempt on 2026-05-11 made this gap explicit: the v1.0.0 release notes leaned on a "Ships / Does NOT ship" frame that flattened the product into a feature inventory + a refusal list. That framing got pushback before the release commit was visible to operators. The release was unwound and reframed as v0.7.0.
+
+### What the dogfood swarm proved + what it did NOT prove
+
+**Proved:** the machinery survives audit. Code paths are correct, supply chain is hygienic, operator-facing actionability is structured, frozen-pack regression is preserved.
+
+**Did NOT prove:** that the product is ready for an external operator who has not read project history. Specifically:
+
+- **No fresh end-to-end pack** was produced with the current toolchain in this release. The 4-pack regression verifies that *historical* frozen artifacts reproduce byte-identically — a real correctness property — but it does not prove a new operator can take v0.7.0+, run `init → discover → gather → claims → review → gate → synth → freeze → publish`, recover from realistic failures, and end with a pack that explains itself without first reading project history.
+- **No clean happy-path operator guide.** Stage C produced the recovery surface (`handbook/recovery.md`) and per-error handbook pointers. It did not produce a single, sharp, top-to-bottom operator guide that walks a first-time user through pack production.
+- **No simplified reviewer-trust story for operator-facing audiences.** The calibration machinery is sound; the operator-facing "should I trust this model?" answer still requires reading `docs/experiment-6-proof.md`.
+- **No external-operator validation.** The swarm hardened the code; it did not introduce a new external operator who reproduced a pack with the current docs and recovered from a real failure.
+- **No release-copy proof.** v1.0.0 release-copy attempt failed because it led with the swarm narrative + caveat inventory. v1 release-copy must lead with the product's primary use case and the operator's reason for using it.
+
+### V1-BLOCKER-1 through V1-BLOCKER-5 (open work after v0.7.0)
+
+The v1 readiness arc opens as separate scope. Five concrete blockers, none of which the dogfood swarm could close:
+
+1. **V1-BLOCKER-1 — Fresh current-version pack proof.** A new pack on a fresh topic, authored end-to-end on v0.7+ toolchain (not historical frozen artifacts that still pass byte-identical regression). Pack must reach freeze with claim-traceable synthesis, be publishable via `research-os pack publish`, and be auditable by a reader who has not read project history.
+2. **V1-BLOCKER-2 — Clean happy-path operator guide.** Top-to-bottom walkthrough readable without project history. Covers `init → discover → gather → claims → review → gate → synth → freeze → publish` with operator-facing language. Does not require the reader to be familiar with experiment proofs or swarm doctrine.
+3. **V1-BLOCKER-3 — Recovery guide proven against real failures.** Induce 3–5 failure modes during V1-BLOCKER-1 pack production. Document the recovery path actually used. `handbook/recovery.md` updated against real evidence, not theoretical scenarios.
+4. **V1-BLOCKER-4 — Reviewer trust story simplified.** Either earn a `trusted_baseline` for a default profile (requires re-running the calibration harness against an improved fixture) or commit explicitly to "comparison_only by default" with a clear opt-in path documented in operator-facing material. Operator-facing answer to "what reviewer should I use?" should fit in one paragraph, not require reading `docs/experiment-6-proof.md`.
+5. **V1-BLOCKER-5 — Release copy rewritten around product value, not caveat inventory.** Lead with what the product does and who it's for. v1 release copy uses the structure: product sentence → primary use case → operator workflow → known limitations as supporting context (not as the lead).
+
+### Recommendation for v1 readiness arc
+
+Start with V1-BLOCKER-1 (fresh-pack production). The other four blockers are unblocked by V1-BLOCKER-1: the fresh pack provides the evidence base for V1-BLOCKER-2 (happy-path guide), the failure modes encountered during production provide the evidence for V1-BLOCKER-3 (recovery guide), the reviewer choice made during production provides the framing input for V1-BLOCKER-4, and the resulting pack provides the value-led story for V1-BLOCKER-5 release copy.
+
+The swarm hardened the toolchain so that V1-BLOCKER-1 has a fighting chance of running cleanly. That is what v0.7.0 actually delivers.

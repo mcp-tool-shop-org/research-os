@@ -2,7 +2,9 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased]
+## [0.7.0] — 2026-05-11 — Dogfood Swarm Hardening
+
+v0.7.0 hardens `research-os` after a full dogfood swarm: safer fetches, stronger pack publishing, resilient malformed-input handling, structured recovery errors, progress feedback, clearer operator docs, and preserved frozen-pack verification. This is a hardening release, not a v1 product release. v1 readiness work continues; v1 will require a fresh end-to-end pack proof produced by the current toolchain, a clean operator happy-path guide, a recovery guide validated against real failures, a simplified reviewer-trust story, and release copy that leads with product value rather than caveat inventory.
 
 ### Behavior changes
 

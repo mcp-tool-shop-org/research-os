@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/version-0.7.0-blue" alt="version 0.7.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -16,7 +16,9 @@
 
 # research-os
 
-Local-first CLI that turns an open-ended topic into a gated **research-pack** — a structured repo where Claude, Cowork, or a swarm can work for hours without hallucinating or flattening the investigation.
+`research-os` turns research from a generated document into a frozen evidence pack. It preserves source truth, separates claims from synthesis, forces readiness through gates, records reviewer and waiver decisions, and publishes a package whose claims can be traced and verified.
+
+It does not ask you to trust the model. It gives you the machinery to decide whether the model, the sources, and the synthesis earned trust.
 
 ## What it is
 
@@ -203,6 +205,8 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 
 ## Status
 
+**v0.7.0 — Dogfood Swarm Hardening** — published to npm as `@mcptoolshop/research-os@0.7.0`, 2026-05-11. A four-stage dogfood swarm (bug/security, proactive resilience, operator humanization, presentation polish) ran against the v0.6.0 tree. v0.7.0 ships the hardening: safer gather (per-URL try/catch + per-exception flush preserve in-flight source IDs on partial failure); resilient indexer (per-record / per-file / per-section skip-and-warn on malformed JSONL); structured recovery errors (12 ResearchOSError subclasses with handbook pointers); progress feedback (`--no-progress` / `--progress` flags with TTY auto-detect across review / gather / contradict-map / pack-publish); operator-facing actionability fixes (`pack publish --force` canonical destructive-replace sentence anchored across 8 surfaces with regression test; `IndexNotBuiltError` command-text typo fixed and command-text registry test added; per-error handbook pointer retrofit on 12 ResearchOSError subclasses); supply-chain hygiene (CI action SHA-pinning + `permissions: contents: read` default-deny; Dependabot `/site` + `github-actions` ecosystem coverage); two new handbook pages (`recovery.md`, `known-limitations.md`); presentation polish (canonical sentence regression, sidebar reorder, `:::caution` callouts on destructive actions). 901/901 vitest passing (713 → 901, +188 tests). **All four frozen packs verify-pack byte-identically against v0.3.3 baselines.** **Not a v1 release** — v1 readiness work continues; see [`docs/roadmap.md`](docs/roadmap.md) and [`docs/dogfood-swarm-proof.md`](docs/dogfood-swarm-proof.md). See [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md) and [CHANGELOG.md](CHANGELOG.md).
+
 **v0.6.0** — published to npm as `@mcptoolshop/research-os@0.6.0`, 2026-05-10. v0.6.0 closes Experiment 6 with reviewer-trust evidence: research-os can now produce a reproducible, attributable canonical-model baseline. Ships: deterministic reviewer options on the production review path (`review_profiles.<name>.reviewer_options` in `research.yaml`); gate schema backward compatibility for pre-v0.3.3 frozen artifacts (F-53); review output discloses sampling conditions directly on `review.json` and `review.md` (F-54); canonical deterministic aggregate receipt committed (`hermes-two-pass-deterministic`, `temperature:0, seed:7`). **No trusted baseline admitted.** `hermes-two-pass-deterministic=failed` (structural model-capability gap in decision vocabulary, not variance). **Hermes is not promoted to `trusted_baseline`.** The win is the mechanism, not a passing receipt. No gate, freeze, or synthesis-law changes. All four frozen packs verify-pack byte-identically. 713/713 vitest passing. See [CHANGELOG.md](CHANGELOG.md) and [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md).
 
 **v0.5.0** — published to npm as `@mcptoolshop/research-os@0.5.0`, 2026-05-10. v0.5.0 makes reviewer calibration durable. A reviewer profile is not trusted because it ran once; it earns a status through structured seeded-failure receipts and multi-run aggregation. Ships: structured calibration receipt schema (`seeded-v1.{json,md}`, Zod-validated, four status labels); multi-run harness (`--runs <n>`, per-run isolation, median-based PASS/FAIL bars, recurring-failure demotion); architecture-aware decision-vocab bar; pack-relative receipt lookup in `review-promote`. **No trusted baseline admitted:** `hermes-two-pass=failed` (aggregate, 3 runs), `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`. research-os can now refuse to trust a reviewer profile when repeated seeded failures do not support trust. **No gate, freeze, or synthesis-law changes. All four frozen packs verify-pack byte-identically.** 671/671 vitest passing. See [CHANGELOG.md](CHANGELOG.md).
@@ -227,7 +231,7 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 
 **v1 Experiment 1 (ComfyUI workflow durability)** — CLOSED 2026-05-09. All 8 sections at Terminal A, pack frozen, archive live. See [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### What v1.0 is not
+### What research-os is not (and v0.7.0 does not claim to be)
 
 - Not battle-tested by external users beyond the dogfood arcs. Six dogfood experiments closed — one self-referential, five external-domain (ComfyUI, XRPL, Godot, reviewer-calibration, deterministic-reviewer) — but external operator usage at scale remains future work.
 - Not a synthesis writer. The `synth workspace` command generates the structured workspace; humans (or Cowork) write the prose against accepted claim IDs.

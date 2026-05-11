@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue" alt="version 0.6.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/version-0.7.0-blue" alt="version 0.7.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -16,7 +16,9 @@
 
 # research-os
 
-`research-os`は、オープンエンドなテーマを、構造化されたリポジトリである「**research-pack**」へと変換する、ローカルファーストのCLIツールです。このリポジトリでは、Claude、Cowork、または複数のエージェントが、誤った情報を生成したり、調査を単純化したりすることなく、何時間も作業することができます。
+`research-os`は、生成されたドキュメントを、検証可能な証拠のパッケージへと変換します。これにより、元のデータの信頼性を保ち、主張と分析を分離し、段階的な検証プロセスを強制し、レビュー担当者や免責に関する決定を記録し、主張が追跡・検証可能なパッケージとして公開されます。
+
+このシステムは、モデルを無条件に信頼することを要求しません。むしろ、モデル、参照元、および分析が信頼に値するかどうかを判断するためのツールを提供します。
 
 ## 概要
 
@@ -24,7 +26,7 @@
 
 これはレポート生成ツールではありません。また、LLMのオーケストレーションのフレームワークでもありません。あなたの統合作業を自動化するものでもありません。`research-os`は、統合作業を開始するための条件を強制します。
 
-Frozen packs（凍結されたパッケージ）は、[`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)にアーカイブされており、ライブで公開されています。最初の2つのパッケージが含まれています。v1.0のロードマップについては、[`docs/roadmap.md`](docs/roadmap.md)を参照してください。
+Frozen packsは、[`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)にアーカイブされており、現在利用可能です。これには、6つのクローズドな内部テスト（dogfood）実験の4つのパッケージが含まれています。v1.0へのロードマップについては、[`docs/roadmap.md`](docs/roadmap.md)を参照してください。
 
 v0.1は、2つの内部テスト（dogfood）で検証されました。最初のテストでは、research-os自体の仕様を調査した結果、v0.1.0のリリース前に7つの問題点が発見され、それぞれにコード修正が必要となり、新たなルールや統合パターンが導入されました。2番目のテスト（v1 Experiment 1：ComfyUIワークフローの安定性、11セッション、research-osとの語彙の重複がない環境）は、2026年5月9日に完了し、パッケージが凍結され、アーカイブが公開され、パターン2の適用がコミット`22b5dba`によって完了しました。v0.1の検証結果は、[`docs/dogfood-proof.md`](docs/dogfood-proof.md)に、Experiment 1の検証結果は、[`docs/experiment-1-proof.md`](docs/experiment-1-proof.md)に記載されています。ハンドブックは、<https://mcp-tool-shop-org.github.io/research-os/handbook/>で確認できます。
 
@@ -81,6 +83,10 @@ research-os freeze
 research-os pack publish \
   --to <research-packs>/packages/<name>
 ```
+
+> **`freeze`コマンドの出力に関する注意点:** `research-os freeze`コマンドは、すべてのアーティファクトを処理し、コンテンツハッシュを計算する際に、通常は何も表示せずに動作します。このコマンドは、大きなパッケージの場合、何も出力しない状態で数十秒かかることがあります。完了すると、単一の判定ブロック（`PASS`または`REFUSED`と、レシートのパス）が表示されます。この間隔をハングアップと解釈しないでください。
+
+> **`--force`オプションに関する警告:** `--force`オプションは、ターゲットのパッケージディレクトリをクリアし、置き換えます。生成されたパッケージの出力内に、手動で作成したファイルを保存しないでください。代わりに、アップストリームのアーティファクト（クレーム、ソース、合成）または関連ファイルを編集してください。完全な利用規約と拒否のケースについては、[`docs/pack-publish.md`](docs/pack-publish.md)を参照してください。
 
 **具体的な使用例**については、`research-os-packs/research-os-spec/` にある「dogfood」と呼ばれるパッケージを参照してください。このパッケージには、すべてのファイル、すべての記録、すべての処理結果、すべての固定状態のフィンガープリントなどが、追記のみ可能なファイルとして保存されています。このパッケージによって、`docs/dogfood-proof.md` が生成されました。
 
@@ -178,6 +184,8 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 ## ステータス
 
+**v0.7.0 — Dogfood Swarm Hardening（内部テストの強化）** — npmに`@mcptoolshop/research-os@0.7.0`として公開されました。2026年5月11日。v0.6.0のコードベースに対して、4段階の内部テスト（バグ/セキュリティ、積極的な耐性向上、オペレーターの使いやすさ向上、プレゼンテーションの改善）を実施しました。v0.7.0では、以下の強化が施されています。より安全なデータ収集（URLごとのtry/catchと、例外ごとのエラー処理による、部分的な失敗時のソースIDの保持）、堅牢なインデクサー（不正なJSONL形式のレコード/ファイル/セクションをスキップして警告）、構造化されたリカバリーエラー（12種類の`ResearchOSError`サブクラスと、それらに関するハンドブックへのリンク）、進捗状況のフィードバック（`--no-progress` / `--progress`フラグによるTTYの自動検出）、オペレーター向けの操作性の改善（`pack publish --force`コマンドによる、破壊的な置換処理の標準化と、8つの箇所での回帰テスト、`IndexNotBuiltError`コマンドのテキストの修正と、コマンドテキストのレジストリテストの追加、12種類の`ResearchOSError`サブクラスに対するハンドブックへのリンクの追加）、サプライチェーンのセキュリティ強化（CIアクションのSHAピンニングと、`permissions: contents: read`のデフォルト拒否、Dependabot /site + github-actionsによるエコシステム対応）、新しいハンドブックのページ2ページ（`recovery.md`、`known-limitations.md`）、プレゼンテーションの改善（標準的な文の回帰テスト、サイドバーの再配置、破壊的な操作に対する`:::caution`の注意喚起）。901/901のvitestテストが成功しました（713 → 901、+188テスト）。**すべての4つのfrozen packsが、v0.3.3のベースラインに対して、バイト単位で完全に一致します。** **これはv1のリリースではありません**。v1の準備作業は継続中です。[`docs/roadmap.md`](docs/roadmap.md)と[`docs/dogfood-swarm-proof.md`](docs/dogfood-swarm-proof.md)を参照してください。[`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md)と[CHANGELOG.md](CHANGELOG.md)も参照してください。
+
 **v0.6.0** — npmに`@mcptoolshop/research-os@0.6.0`として公開されました。2026年5月10日。v0.6.0では、実験6が、レビュー担当者の信頼性に関する証拠とともに完了しました。これにより、research-osは、再現可能で、帰属可能な、標準的なモデルのベースラインを生成できるようになりました。変更点：本番環境のレビュープロセスにおける再現性のあるレビュー担当者オプション（`review_profiles.<name>.reviewer_options`を`research.yaml`に追加）、既存のv0.3.3以前のフローズンアーティファクトに対するゲートスキーマの互換性（F-53）、レビュー出力にサンプリング条件が直接`review.json`と`review.md`に表示されるように変更（F-54）、標準的な再現性のある集計記録がコミットされました（`hermes-two-pass-deterministic`、`temperature:0, seed:7`）。**どのプロファイルも`trusted_baseline`として認められていません。** `hermes-two-pass-deterministic=failed`（判断の語彙における構造的なモデルの能力ギャップ。ばらつきの問題ではない）。**Hermesは`trusted_baseline`として昇格しません。** 重要なのは、メカニズムであり、単に合格する記録ではありません。ゲート、フリーズ、または合成法の変更はありません。すべてのフローズンパックが、バイト単位で同一であることを確認しました。713/713のvitestが合格しました。詳細は[CHANGELOG.md](CHANGELOG.md)と[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)を参照してください。
 
 **v0.5.0** — npmに `@mcptoolshop/research-os@0.5.0` として公開。2026年5月10日。v0.5.0では、レビュー担当者の評価の信頼性を高めるための機能が導入されました。レビュー担当者のプロファイルは、単に一度実行されたというだけで信頼されるわけではありません。構造化されたテストケースと複数回の実行結果を組み合わせることで、信頼度を評価します。同梱内容：構造化された評価結果スキーマ (`seeded-v1.{json,md}`、Zodによる検証、4つのステータスラベル）、複数回の実行をサポートする機能 (`--runs <n>`、各実行の分離、中央値に基づいた合否判定、繰り返し発生するエラーに対する評価の引き下げ）、アーキテクチャを考慮した意思決定のための語彙セット、`review-promote` 内でのパッケージ相対的な評価結果の参照機能。**信頼できる基準値は認められません:** `hermes-two-pass=failed` (集計、3回の実行)、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`。research-osは、繰り返し発生するテストの失敗が信頼を裏付けることができない場合、レビュー担当者のプロファイルを信頼しないようにすることができます。**ゲート、フリーズ、または合成規則に関する変更はありません。すべての4つのパッケージが、バイト単位で完全に同一であることを検証済みです。** 671/671のvitestテストが合格。詳細は [CHANGELOG.md](CHANGELOG.md) を参照してください。
@@ -198,25 +206,31 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **v0.1.0** — 2026年5月8日に固定されました。`research-os-packs/research-os-spec/` (関連リポジトリ) にある「dogfood」パッケージでは、8つのセクションで296件の主張が承認され、17件が処理され、30件がオペレーターによって修正され、未解決の矛盾は0件、すべてのゲートで `synthesis_eligible=true` となりました。463件中463件のvitestテストが合格しました。16個の重要なルールが実装されています。詳細については、[docs/dogfood-proof.md](docs/dogfood-proof.md) を参照してください。このドキュメントには、7つの発見事項と、固定状態のフィンガープリントが記載されています。
 
-**research-packs アーカイブ (モノレポ)** — [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs) で公開されており、リリース時に2つのパッケージが提供されています。`comfyui-workflow-durability` (実験1、302件の承認済みクレーム、8セクション) と `research-os-self-dogfood` (v0.1 のドッグフード版、296件の承認済みクレーム、8セクション)。どちらのパッケージも `verify-pack.mjs` をパスしています。
+**research-packs アーカイブモノレポ** — [`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)で公開されており、以下の4つのパッケージが含まれています。`research-os-self-dogfood`（v0.1の内部テスト用、296件のクレームが承認済み、8つのセクション）、`comfyui-workflow-durability`（実験1、302件のクレームが承認済み、8つのセクション）、`xrpl-creator-token-durability`（実験3のパッケージ#2）、および`godot-export-runtime-durability`（実験3のパッケージ#3）。すべてのパッケージで`verify-pack.mjs`が`PASS`の結果となっています。
 
 **v1 実験1 (ComfyUI ワークフローの安定性)** — 2026年5月9日に終了。8つのセクションすべてが Terminal A で完了し、パッケージは凍結され、アーカイブは公開されました。詳細は [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) と [`docs/roadmap.md`](docs/roadmap.md) を参照してください。
 
-### v0.1の制限事項
+### research-osとは何か（およびv0.7.0が主張するもの）
 
-- 外部ユーザーによる実戦テストは行われていません。3つの内部テストが完了しました。そのうち1つは自己参照型、2つは外部ドメイン型です。実験3（外部からのプレッシャー下でのAPIの安定性）は、**2026年5月10日に完了しました**: ComfyUI、XRPL、Godotの3つのパッケージすべてが、v0.3.xのCLIインターフェースに変更を加えることなく、フリーズ状態に達しました。このテスト期間中に、v0.3.0の`--detector`（F-09）、v0.3.1のセクションごとの免除（F-10/F-11）、v0.3.2の標準化された承認済みクレーム会計（F-36）、およびv0.3.3のゲートセマンティクスに関する明確化（F-43/F-41）が実現されました。
-- 合成コードを生成するものではありません。`synth workspace`コマンドは、構造化されたワークスペースを生成します。プログラミングコードではなく、承認されたクレームIDに基づいて、人間（またはCowork）がテキストを作成します。
-- セマンティックバージョニング（semver）でAPIの安定性は保証されません。v1.0.0は、カレンダー上の日付ではなく、達成すべき目標です。詳細は[`docs/roadmap.md`](docs/roadmap.md)にある、その目標を達成するための6つの実験を参照してください。
+- 外部ユーザーによる実戦テストは、内部テスト段階にとどまっています。6つの内部テストが完了しました（自己参照型1つ、外部ドメイン関連型5つ：ComfyUI、XRPL、Godot、レビューア校正、決定論的レビューア）、しかし、大規模な外部オペレーターの利用は今後の課題です。
+- これは、コンテンツ生成ツールではありません。`synth workspace` コマンドは、構造化された作業環境を生成します。コンテンツは、人間（または Cowork）が、承認されたクレームIDに基づいて記述します。
+- 特定のレビューモデルを推奨するものではありません。v1.0 には、デフォルトで `trusted_baseline` レビューアプロファイルは含まれていません。校正記録は、推奨を意味するものではありません。詳細については、[レビューア校正に関するマニュアルページ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) を参照してください。
+- 過去のアーティファクトが、一部のパッケージに含まれている可能性があります。v1.0 以前のパッケージには、v0.4以前の初期設定による `research_os_version: '0.1.0'` が含まれています。この問題は修正されましたが、過去のパッケージは Law 15 により変更できません（[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) を参照）。
+- npm 上でのプロヴェナンス認証は、v1.x 以降で実装予定です。v1.0 の npm パッケージは、package-shasum と GitHub のリリースコミットを使用して検証してください。
 
 ### 既知の制限事項
 
-- **抽出元の情報が、ゲートシームでは表示されません。** セクションは、キャリブレーションされた抽出器 (Ollama と設定されたモデル) が利用できない場合に、ヒューリスティックに基づく代替クレームに依存して、承認済みクレームの基準を満たすことができます。これは、ロードマップの実験4として記録されています。今後の改善により、承認済みクレームは抽出器ごとに報告され、基準を満たす数の承認済みクレームが、キャリブレーションされたパスから取得されるようになります。
-- **キャリブレーションされた `hermes-two-pass` を基準とする、レビューモデルの選択は未解決です。** ドッグフードテストでは、1つのレビュー設定が検証されました。代替モデルは、信頼できるようになる前に、独自のシードされた失敗の再現キャリブレーションが必要です。これは、ロードマップの実験5です。
-- **v0.1 の自己ドッグフードパッケージでは、抽出に `mistral-nemo:12b` が使用されました (標準のデフォルトは `hermes3:8b`)。** v0.1 のテスト期間中、この環境では `hermes3:8b` が利用できませんでした。この代替の使用に関する情報は、`hermes3` ベースの記録が作成されるまで有効です。`hermes3:8b` が利用できない環境では、`OLLAMA_INTERN_MODEL` を利用可能なモデルに設定してください。オペレーターが事前に設定した URL と、クエリの精度に関するルール (ハンドブックを参照) を使用することで、あいまいなトピックに関する誤った情報の検出を軽減できます。
+v1.0 には、オペレーターが認識する既知の制限事項が3つ含まれています。それぞれの制限事項は、[既知の制限事項に関するマニュアルページ](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) および [CHANGELOG.md](CHANGELOG.md) に記載されています。これらの制限事項は、リリースを妨げるものではなく、それぞれに復旧または軽減策が定義されています。
+
+- **B-E-001 — v1.0 以前のパッケージのバージョン情報が、過去の遺物である。** v0.3.3 から v0.6.0 の間に公開されたパッケージには、`pack.manifest.json` および `pack/research.yaml` に `research_os_version: "0.1.0"` が含まれています。これは、v0.4 以前の初期設定における固定値によるものです。この問題は v1.0 で修正されました（初期設定は現在、実行時に `RESEARCH_OS_VERSION` を取得します）。既存のパッケージは、Law 15 により変更できません。影響を受けるパッケージ内の JSON ファイルには、それぞれの最新バージョンが記録されています。
+- **B-E-004 — npm のプロヴェナンス認証は、v1.x 以降で実装予定。** v1.0 の npm tarball は、package-shasum のみで検証できます。公開プロセスを CI ワークフローに移行し、Sigstore OIDC を統合することは、公開前の翻訳という原則（TranslateGemma 12B はローカルで実行）と競合するため、この移行は v1.x で計画されています。v1.0 の npm パッケージは、package-shasum と GitHub のリリースコミットを使用して検証してください。
+- **B-A-003 — インデクサのスキーマバージョンの移行は、ドキュメントに記載されていますが、強制はされていません。** v1.0 には、書き込み側の `SCHEMA_VERSION` 整数が含まれていますが、読み込み側の移行ツールはありません。ドキュメントに記載されている `SCHEMA_VERSION` の変更があった場合、`.research-os/index.sqlite` を削除し、`research-os index build --all` を再実行してください。パッケージ自体には影響はありません。インデクサは、エビデンスとクレームに対する高速化レイヤーであり（Law 8）、再構築は冪等です。
+
+**v1.0 には、信頼されたベースラインのレビューアプロファイルは含まれていません。** これは、意図的な信頼性の設定であり、欠陥ではありません。リポジトリ内の校正記録（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）は、その証拠を記録しています。信頼は、繰り返し行われる意図的なエラー検出によって得られるものであり、当然のことではありません。
 
 ## v1.0 へのロードマップ
 
-v1.0は、単なるリリース日ではなく、達成される状態です。v0.1からv1.0までの間に、6つの実験段階があります。これには、自己参照を含まない内部テスト（現在はComfyUIワークフローの安定性向上パックとして進行中）、`research-os pack publish`コマンドによる、標準的な`research-packs`モノレポへの自動エクスポート（実験2。実験1の手動での完了処理の後に行われる）、外部からのプレッシャーに対するAPIの安定性、抽出元の追跡機能の確立、`hermes-two-pass`を超えるレビューアの調整の一般化、そして`hermes3:8b`上でのクリーンなベースラインの実行が含まれます。実験1は、パッケージの最終版が作成される前に完了しません。これは、v0.1の内部テストが完了し、`research-packs`モノレポの最初のパッケージとしてリリースされる際に終了します。詳細な計画は、[`docs/roadmap.md`](docs/roadmap.md)に記載されています。アーキテクチャの設計は一貫して維持され、v1.0は、v0.1で検証された内容をさらに深めるものであり、以前の段階を再検討するものではありません。
+v1.0は、リリース日ではなく、達成される状態です。6つの内部テスト（Exp1～Exp6、2026年5月8日～2026年5月11日）が完了し、それぞれが[`mcp-tool-shop-org/research-packs`](https://github.com/mcp-tool-shop-org/research-packs)に登録される研究用パッケージを生成しました。このプロジェクトは、v0.2.0の`research-os pack publish`機能とパターン2（実験2）、v0.3.0の`--detector`フラグ（F-09）、v0.3.1のセクションごとの例外規定（F-10/F-11）、v0.3.2の標準化された承認済み請求処理（F-36）、v0.3.3のゲートのセマンティクスに関する明確化（F-43/F-41）、v0.4.0のソースコードの整合性（F-27/F-47/F-46）、v0.5.0のレビュー担当者の調整（F-48/F-49/F-50）、およびv0.6.0の決定論的なレビュー担当者基準（F-53/F-54）を達成しました。v1.0のリリース準備は、複数の段階で構成される品質向上プロセスを通じて現在進行中です。アーキテクチャの固定は、このプロセス全体を通して維持されます。詳細な計画は[`docs/roadmap.md`](docs/roadmap.md)に記載されています。
 
 ## ライセンス
 
