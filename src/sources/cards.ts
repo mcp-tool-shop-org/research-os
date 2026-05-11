@@ -84,48 +84,13 @@ export async function appendFetchLog(packPath: string, receipt: FetchReceipt): P
 }
 
 /**
- * @deprecated A-008 — O(N²) when called inside a loop. Prefer
- * createSectionSourceIdAppender for loops; this function re-reads the file
- * on every call.
- */
-export async function appendSectionSourceId(
-  packPath: string,
-  sectionId: string,
-  sourceId: string,
-): Promise<void> {
-  const path = join(packPath, 'sections', sectionId, 'sources.jsonl');
-  if (!existsSync(path)) {
-    await writeFile(path, '', 'utf8');
-  }
-  const existing = await readFile(path, 'utf8');
-  const ids = new Set(
-    existing
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return (JSON.parse(line) as { source_id: string }).source_id;
-        } catch {
-          return null;
-        }
-      })
-      .filter((x): x is string => x !== null),
-  );
-  if (ids.has(sourceId)) return;
-  await appendFile(
-    path,
-    JSON.stringify({ source_id: sourceId, added_at: new Date().toISOString() }) + '\n',
-    'utf8',
-  );
-}
-
-/**
  * A-008 — batched section-source-id appender.
  *
  * Reads the existing sources.jsonl once on creation; an in-memory Set
  * deduplicates across calls; flush() emits all queued new ids in a single
- * appendFile call. Use this instead of appendSectionSourceId inside loops.
+ * appendFile call. This is the only supported way to append source_ids
+ * to a section's sources.jsonl — use it for both single-shot and loop
+ * append patterns.
  */
 export async function createSectionSourceIdAppender(
   packPath: string,

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { join, basename, resolve, dirname } from 'node:path';
+import { join, basename, resolve } from 'node:path';
 import { deriveManifest } from './manifest.js';
 import { generateReadme } from './readme.js';
 import { generateHowToReadScaffold } from './how-to-read.js';
@@ -56,18 +56,13 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
           `Target directory already exists and is non-empty: ${toDir}\n  Use --force to overwrite.`,
         );
       }
-      // Sanity guard: never `rm` outside the parent that the caller passed
-      // us. The publish root is `dirname(toDir)`; a path like `<root>/../foo`
-      // would resolve outside it. After `resolve()` the path is canonical,
-      // so a startsWith check is safe.
-      const publishRoot = resolve(dirname(toDir));
-      const safeTarget = resolve(toDir);
-      if (!safeTarget.startsWith(publishRoot)) {
-        throw new Error(
-          `Refusing to --force-overwrite target outside publish root.\n  target: ${safeTarget}\n  root:   ${publishRoot}`,
-        );
-      }
-      await rm(safeTarget, { recursive: true, force: true });
+      // We do not attempt to defend against malicious --to paths at this
+      // point: resolve() above has already canonicalized any '..' segments
+      // to absolute paths. The operator-supplied --to is the trust boundary
+      // here. Hardening (caller-supplied publish-root constraint) is a
+      // post-v1.0 concern if research-os ever accepts untrusted publish
+      // targets.
+      await rm(toDir, { recursive: true, force: true });
     }
   }
 

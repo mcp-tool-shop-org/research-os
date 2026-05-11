@@ -33,6 +33,7 @@ const SECTION_ID_PATTERN = /^[0-9]{2}-[a-z0-9-]+$/;
 /** D-005: artifact files we check for inside an existing section directory. */
 const SECTION_ARTIFACT_FILES = [
   'brief.md',
+  'sources.jsonl',
   'claims.jsonl',
   'contradictions.md',
   'open_questions.md',

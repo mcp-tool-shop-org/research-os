@@ -13,7 +13,12 @@ export {
   pickExtractor,
 } from './extractors/index.js';
 export { normalizeOllamaHost } from './extractors/ollama-intern.js';
-export { buildCard, writeSourceCard, appendFetchLog, appendSectionSourceId } from './cards.js';
+export {
+  buildCard,
+  writeSourceCard,
+  appendFetchLog,
+  createSectionSourceIdAppender,
+} from './cards.js';
 export {
   readOverrides,
   appendOverride,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as yamlParse } from 'yaml';
@@ -148,5 +148,25 @@ describe('section add', () => {
       yamlParse(await readFile(join(packPath, 'research.yaml'), 'utf8')),
     );
     expect(parsed.sections.map((s) => s.id)).toEqual(['01-first', '02-second', '03-third']);
+  });
+
+  // D-RE-003: sources.jsonl is one of the artifact files scaffold writes,
+  // so an existing on-disk sources.jsonl (operator's hand-curated ledger,
+  // or leftover from an aborted run) must trigger the same overwrite
+  // refusal that the other artifact files do. Without this, a `section
+  // add` could silently truncate the operator's source ledger.
+  it('refuses overwrite when only sources.jsonl exists in section dir', async () => {
+    const sectId = '05-only-sources';
+    const sectDir = join(packPath, 'sections', sectId);
+    await mkdir(sectDir, { recursive: true });
+    await writeFile(
+      join(sectDir, 'sources.jsonl'),
+      '{"source_id":"src_aaaaaaaaaaaa","url":"https://example.com","kind":"primary"}\n',
+      'utf8',
+    );
+
+    await expect(
+      add({ id: sectId, purpose: 'should refuse over sources.jsonl', packPath }),
+    ).rejects.toThrow(/sources\.jsonl/);
   });
 });

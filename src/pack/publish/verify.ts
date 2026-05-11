@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { PackManifestSchema } from './schema.js';
+import { SYNTHESIS_FILES } from '../../freeze/run.js';
 
 // Inline equivalent of research-packs/scripts/verify-pack.mjs.
 // Checks the same admission-contract conditions. The dogfood test uses the
@@ -67,15 +68,19 @@ function walkFiles(root: string): string[] {
 
 /**
  * Files at the published-package root that are produced by `pack publish`
- * itself rather than fingerprinted in `freeze-receipt.json`. Anything in
- * this set is NOT an orphan even though the receipt does not list it.
+ * itself rather than fingerprinted in `freeze-receipt.json`. Synthesis
+ * paths are sourced from the canonical `SYNTHESIS_FILES` constant in
+ * `src/freeze/run.ts` so this list stays in lockstep with what `freeze`
+ * writes (single source of truth — do not hardcode synthesis paths here).
+ *
+ * Exported so regression tests can assert the single-source-of-truth
+ * invariant (SYNTHESIS_FILES ⊂ PUBLISH_GENERATED_PATHS). This module is
+ * internal to research-os; no public API stability concern.
  */
-const PUBLISH_GENERATED_PATHS = new Set<string>([
+export const PUBLISH_GENERATED_PATHS = new Set<string>([
+  ...SYNTHESIS_FILES,
   'pack.manifest.json',
   'README.md',
-  'synthesis/final-report.md',
-  'synthesis/decision-brief.md',
-  'synthesis/working-report.md',
   'docs/how-to-read-this.md',
   // freeze-receipt.json lives under pack/ — included for parity with
   // research-packs/scripts/verify-pack.mjs ignore set.

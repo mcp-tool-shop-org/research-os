@@ -157,7 +157,24 @@ async function indexSection(args: {
   const deleteArtifacts = db.prepare('DELETE FROM artifacts WHERE section_id = ?');
   const deleteFactsFts = db.prepare('DELETE FROM facts_fts WHERE section_id = ?');
 
-  // A-006 — wrap the section-scope DELETE-then-INSERT-section in a transaction.
+  // A-006 — atomic scope is limited to the section-row swap.
+  //
+  // What IS atomic: the per-section DELETEs (sources, claims, contradictions,
+  // review_findings, claim_reviews, gate_results, fetch_receipts, artifacts,
+  // facts_fts) and the single INSERT OR REPLACE into `sections`. Either the
+  // section row reflects the new pack state and the old child rows are gone,
+  // or nothing changed.
+  //
+  // What is NOT atomic: the downstream INSERT loops below (lines ~190–403)
+  // run OUTSIDE this transaction. They are interleaved with `await readFile`
+  // / `await tryReadJsonl` calls, and better-sqlite3 transactions are
+  // strictly synchronous — wrapping the whole phase would require hoisting
+  // every async load above this block. Partial-write recovery story: the
+  // child tables all use INSERT OR REPLACE (idempotent on primary key), and
+  // the next `index build` for the same section runs the DELETEs first, so
+  // any half-written child rows from a crashed prior run are overwritten on
+  // re-run. The pack-level audit-rollup phase (indexPackAuditRollups) is
+  // similarly idempotent.
   db.transaction(() => {
     deleteSources.run(sectionId);
     deleteClaims.run(sectionId);

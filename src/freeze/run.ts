@@ -39,7 +39,13 @@ import type {
 } from './types.js';
 
 const REQUIRED_PACK_ARTIFACTS = ['research.yaml', 'audits/pack-audit.json', 'handoffs/cowork-handoff.json'];
-const SYNTHESIS_FILES = [
+/**
+ * Canonical list of synthesis files written by freeze and copied to the
+ * top-level published package directory. Imported by `src/pack/publish/
+ * verify.ts` to keep its orphan-detection allowlist in lockstep with what
+ * freeze emits. DO NOT duplicate this list elsewhere.
+ */
+export const SYNTHESIS_FILES = [
   'synthesis/cross-section-map.json',
   'synthesis/cross-section-map.md',
   'synthesis/decision-brief.md',

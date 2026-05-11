@@ -12,11 +12,16 @@ All notable changes to `research-os` are documented here.
   generated package output. Edit upstream artifacts (claims, sources, synthesis) or
   sibling files instead.
 
-### Fixes
+### Fixes — Stage A swarm
 
-- Stage A dogfood swarm wave 1 closes 12 HIGH, 14 MEDIUM, and 5 trivial LOW findings
-  across the source-acquisition, claims/contradictions, review/closure, CLI/pack-publish,
-  and tests/CI/docs domains. Headline items:
+The Stage A dogfood swarm landed in two waves. Wave 1 carried the bulk of the bug/security
+amend; Wave 2 corrected two integrations that the Phase 4 re-audit caught as incomplete
+(API surfaces landed without the corresponding caller migration / allowlist completion).
+The historical-accuracy framing is preserved here so the next swarm doesn't inherit a
+"closed in Wave 1" framing for findings that needed Wave 2 to actually close.
+
+#### Wave 1 — 12 HIGH + 14 MEDIUM + 5 trivial LOW across 5 domains
+
   - `fetch.ts`: response-size cap (default 25 MB), request timeout (default 60 s),
     charset-aware decoding (Content-Type + BOM sniff), SSRF guard on initial URL + post-
     redirect URL (private/loopback/link-local refusal).
@@ -35,8 +40,9 @@ All notable changes to `research-os` are documented here.
     refused (cite-allowed = accepted only).
   - `pack publish` parse errors carry `ResearchOSError(PACK_PARSE_ERROR)` with file +
     line + actionable hint; `readClaimReviews` warnings flow through `deriveManifest`.
-  - `verify-pack` learns orphan-artifact detection (files on disk not fingerprinted in
-    `freeze-receipt.json`).
+  - `verify-pack` learns orphan-artifact detection. **Wave 1's allowlist was incomplete
+    (missed `synthesis/cross-section-map.{json,md}`); Wave 2 completes via the
+    `SYNTHESIS_FILES` single-source refactor — see Wave 2 below.**
   - `section add` refuses overwrite when on-disk section directory exists with content
     but is absent from `research.yaml`; `--force` bypasses the guard.
   - CLI numeric option coercers reject non-numeric input via `commander.InvalidArgumentError`.
@@ -46,25 +52,76 @@ All notable changes to `research-os` are documented here.
     `tmp/` directory is now `.gitignore`'d (23 reviewer-calibration fixture files
     untracked from index, files retained on disk for the calibration script to rebuild).
 
+#### Wave 2 — corrections + integration cleanup
+
+  - **A-008 actually closed (gather.ts O(N²) → batched appender).** Wave 1 added
+    `createSectionSourceIdAppender` to `cards.ts` but did not migrate the only in-tree
+    caller. Wave 2 migrates `gather.ts` to the batched appender, **deletes**
+    `appendSectionSourceId` from `cards.ts` and from the public `src/sources/index.ts`
+    re-export, and adds an end-to-end regression test that exercises `gather()` through
+    its actual caller path AND asserts the deprecated API is no longer reachable from the
+    public surface. The Wave 1 framing of an A-008 closure was inaccurate; the live
+    production path remained O(N²) until Wave 2.
+  - **D-001 part 2 actually closed (`SYNTHESIS_FILES` single-source-of-truth).** Wave 1
+    added `PUBLISH_GENERATED_PATHS` orphan-detection allowlist with a hardcoded synthesis
+    list that omitted `cross-section-map.{json,md}`. The test fixture only emitted 2
+    synthesis files, so unit tests passed even with the gap. Wave 2 exports the canonical
+    `SYNTHESIS_FILES` constant from `src/freeze/run.ts` and derives `PUBLISH_GENERATED_PATHS`
+    in `verify.ts` via spread, so freeze and verify stay in lockstep by construction.
+    Regression test ships a real-pack-shaped positive case with all 5 synthesis files and
+    a single-source-of-truth invariant assertion that fails if anyone re-introduces a
+    hardcoded synthesis list. Wave 1 would have failed orphan detection on the first
+    real-pack publish; Wave 2 prevents that AND prevents future drift when synthesis adds
+    a 6th file.
+  - **A-006 transaction-scope claim corrected to honest.** Wave 1 wrapped only the
+    section-row swap (DELETEs + sections-row INSERT OR REPLACE) in `db.transaction`; the
+    downstream INSERT loop runs outside the transaction interleaved with ~12 async data
+    loads. A full single-transaction restructure would require hoisting every async load
+    above the transaction (better-sqlite3 transactions are synchronous), which sprawls
+    beyond Stage A scope. Wave 2 updates the inline comment to accurately describe the
+    atomic scope and document the recovery model (`INSERT OR REPLACE` + next-run DELETE
+    overwrites partial state). No code restructure — the honest claim is the deliverable.
+  - **DNS-rebinding TOCTOU disclosure** (two surfaces). The SSRF guard's `dns.lookup`
+    pre-check + subsequent `fetch` resolution permit DNS rebinding by an attacker
+    controlling the authoritative DNS for the target hostname. Wave 2 adds an inline
+    `NOTE:` comment in `src/sources/fetch.ts` adjacent to the lookup site AND a `## Known
+    limitations` section in `SECURITY.md` documenting the TOCTOU window. Threat model
+    fit: research-os operates on operator-curated URL lists (output of `discover
+    approve`), not arbitrary user input — the residual risk is acceptable for v1.0.
+    Hardening via a pre-resolved-IP custom dispatcher is deferred to post-v1.0.
+  - **Tautological sanity guard removed.** Wave 1's `safeTarget.startsWith(publishRoot)`
+    check in `pack/publish/index.ts` was structurally a no-op (`toDir` is already
+    canonicalized by `resolve()` upstream, so `..` segments have been removed before the
+    check runs). The accompanying comment claiming defense against `<root>/../foo` was
+    misleading. Wave 2 removes the guard, removes the now-unused `publishRoot`/`safeTarget`
+    locals and `dirname` import, and replaces the comment with an accurate trust-model
+    note (operator-supplied `--to` is the trust boundary; hardening is post-v1.0). No
+    behavior change — the recursive `rm` for non-empty `--force` targets stays.
+  - **`section add` overwrite guard widened** to include `sources.jsonl`. Wave 1's
+    `SECTION_ARTIFACT_FILES` list omitted `sources.jsonl` even though `scaffold` writes
+    it. An operator with a hand-curated source ledger but no `research.yaml` entry could
+    have it silently overwritten. Wave 2 adds it.
+
 ### Tests
 
-- Adds 47 regression tests (713 → 760 PASS), covering 14 required-regression vectors plus
-  the broader fix surface. New test files: `test/sources/fetch-{size-cap,timeout,charset,
-  ssrf}.test.ts`, `test/sources/source-card-overrides-schema.test.ts`, `test/claims-
-  ollama-intern-null.test.ts`, `test/contradictions-ollama-intern-null.test.ts`,
-  `test/contradictions-map-malformed.test.ts`, `test/claims-density-shares-sum.test.ts`,
-  `test/freeze-unaccepted-citation.test.ts`, `test/pack-publish/publish-force-clears.
-  test.ts`, `test/pack-publish/verify-orphan-detection.test.ts`,
-  `test/cli/parse-int-validation.test.ts`.
+- **Wave 1:** 47 regression tests (713 → 760 PASS), covering 14 required-regression vectors.
+- **Wave 2:** 8 additional regression tests (760 → 768 PASS). Wave 2 tests follow a new
+  doctrine rule that emerged from Wave 1's escape: regression tests must verify the fix
+  path end-to-end through the actual caller, not just unit-test the new helper, and must
+  demonstrate that the deprecated/replaced API is no longer reachable on the relevant code
+  path (or is removed entirely). The `gather-appender-integration.test.ts` asserts the old
+  appender API is absent from the public re-export; the `verify-cross-section-map.test.ts`
+  asserts every entry of `SYNTHESIS_FILES` is in the allowlist (the single-source invariant).
 
 ### Verified
 
-- Lint + typecheck + tests: PASS at 760/760.
+- Lint + typecheck + build + tests: PASS at **768/768**.
 - 4-pack regression: byte-identical PASS on all 4 published research packs
   (`368d2361…` research-os-self-dogfood, `d71943c6…` comfyui-workflow-durability,
   `6511a044…` xrpl-creator-token-durability, `55a65792…` godot-export-runtime-durability).
 - No `trusted_baseline` promotion; no reviewer profile status changes; no gate / freeze /
-  synthesis-law changes beyond the precise C-002 freeze accepted-only citation fix.
+  synthesis-law changes beyond the precise C-002 freeze accepted-only citation fix and the
+  `SYNTHESIS_FILES` export from freeze.
 
 ## [0.6.0] — 2026-05-10 — deterministic reviewer baseline
 

@@ -11,8 +11,8 @@ import { collectUrls } from './url-input.js';
 import { defaultExtractors, pickExtractor } from './extractors/index.js';
 import {
   appendFetchLog,
-  appendSectionSourceId,
   buildCard,
+  createSectionSourceIdAppender,
   writeSourceCard,
 } from './cards.js';
 import { readOverrides } from './source-card-overrides.js';
@@ -47,6 +47,10 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
     sourceIds: [],
   };
 
+  // A-008 — open the section-source-id appender once before the loop so the
+  // sources.jsonl file is read at most once per gather() call (was O(N²)).
+  const sourceIdAppender = await createSectionSourceIdAppender(packPath, options.sectionId);
+
   for (const url of urls) {
     const { receipt, rawText } = await fetchOnce(url, {
       sectionId: options.sectionId,
@@ -77,7 +81,7 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
         };
         const card = buildCard({ receipt: receiptToWrite, extraction: result, extractedBy: extractor.name, overrides });
         await writeSourceCard(packPath, card);
-        await appendSectionSourceId(packPath, options.sectionId, card.source_id);
+        sourceIdAppender.add(card.source_id);
         summary.cardsWritten += 1;
         summary.sourceIds.push(card.source_id);
       } else {
@@ -96,6 +100,9 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
     await appendFetchLog(packPath, receiptToWrite);
     summary.receiptsAppended += 1;
   }
+
+  // A-008 — single batched append of all queued source_ids.
+  await sourceIdAppender.flush();
 
   return summary;
 }

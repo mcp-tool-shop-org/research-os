@@ -124,6 +124,12 @@ async function isUrlSafe(
     return { safe: true };
   }
   try {
+    // NOTE: Known DNS-rebinding TOCTOU between this pre-check and the
+    // fetchImpl() resolution. An attacker controlling the authoritative DNS
+    // for a hostname can return a public IP here and a private/loopback IP
+    // at fetch time (or use low-TTL A-record swap). This is acceptable for
+    // the current operator-curated URL threat model. Hardening (custom
+    // dispatcher with pre-resolved IP) is a post-v1.0 concern; see SECURITY.md.
     const records = await dns.lookup(hostname, { all: true });
     for (const r of records) {
       if (isPrivateOrLoopbackAddress(r.address)) {
