@@ -454,8 +454,8 @@ describe('Critic routing — label → draft state', () => {
   });
 });
 
-describe('Critic routing — fail-soft on critic-call failure', () => {
-  it('admits the claim (frame_excluded:false) AND increments critic_call_failed when the critic call returns malformed JSON', async () => {
+describe('Critic routing — conservative fail-exclude on critic-call failure (v0.8.0 phase 1b-b correctness fix)', () => {
+  it('EXCLUDES the claim (frame_excluded:true, reason=critic_unavailable) AND increments critic_call_failed when the critic call returns malformed JSON', async () => {
     const capture: ToolCall[] = [];
     const ex = makeExtractor(
       capture,
@@ -481,17 +481,20 @@ describe('Critic routing — fail-soft on critic-call failure', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const c = result.claims[0]!;
-    // Fail-soft: admit.
-    expect(c.frame_excluded === true).toBe(false);
-    expect(c.frame_exclusion_reason).toBeUndefined();
-    expect(c.frame_exclusion_rationale).toBeUndefined();
+    // Conservative fail-EXCLUDE: critic could not judge, so do not admit.
+    expect(c.frame_excluded).toBe(true);
+    expect(c.frame_exclusion_reason).toBe('critic_unavailable');
+    expect(c.frame_exclusion_rationale).toBe(
+      'Critic call failed; conservatively excluded from synthesis evidence.',
+    );
     expect(result.criticTally?.critic_call_failed).toBe(1);
     expect(result.criticTally?.supports_section).toBe(0);
   });
 
-  it('does NOT use envelope.frame_alignment to fill in for a failed critic call', async () => {
+  it('does NOT use envelope.frame_alignment to fill in for a failed critic call — system-state critic_unavailable is the reason regardless of envelope', async () => {
     // The doctrine ratchet: even when envelope.frame_alignment.on_topic === false,
-    // a critic call failure must NOT inherit that signal. We admit (fail-soft).
+    // a critic call failure must NOT inherit that signal. Independent decision:
+    // absence of judgement routes to EXCLUDE with critic_unavailable.
     const capture: ToolCall[] = [];
     const ex = makeExtractor(
       capture,
@@ -517,7 +520,8 @@ describe('Critic routing — fail-soft on critic-call failure', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const c = result.claims[0]!;
-    expect(c.frame_excluded === true).toBe(false);
+    expect(c.frame_excluded).toBe(true);
+    expect(c.frame_exclusion_reason).toBe('critic_unavailable');
     expect(result.criticTally?.critic_call_failed).toBe(1);
   });
 });

@@ -56,6 +56,12 @@ export type CriticLabel = (typeof CRITIC_LABELS)[number];
 // Labels that mean "do not admit this claim into the section as evidence". When
 // the critic returns any of these, the resulting persisted claim is marked
 // frame_excluded:true and routed to the frame_excluded decision in review.
+//
+// IMPORTANT: this is the model's exclusion-LABEL menu. It is intentionally
+// THREE entries — the model never returns critic_unavailable. critic_unavailable
+// is a system-state value set by the extractor on critic-call failure, NOT a
+// label the model may choose. See FRAME_EXCLUSION_REASONS below for the wider
+// schema-persistence enum.
 export const CRITIC_EXCLUSION_LABELS = [
   'off_topic',
   'background_only',
@@ -67,6 +73,22 @@ export type CriticExclusionLabel = (typeof CRITIC_EXCLUSION_LABELS)[number];
 export function isExclusionLabel(label: string): label is CriticExclusionLabel {
   return (CRITIC_EXCLUSION_LABELS as readonly string[]).includes(label);
 }
+
+// Schema-persistence enum for ClaimSchema.frame_exclusion_reason. Carries the
+// THREE critic-model labels PLUS the system-state critic_unavailable. The
+// extractor stamps critic_unavailable when the critic call fails (any of:
+// MCP transport error, parse error, invalid label, empty rationale, timeout).
+// Admitting on critic failure would let off-topic content leak in mislabelled
+// "on-topic" purely because the critic crashed — the safe default when
+// topicality cannot be determined is to EXCLUDE.
+export const FRAME_EXCLUSION_REASONS = [
+  'off_topic',
+  'background_only',
+  'source_chrome',
+  'critic_unavailable',
+] as const;
+
+export type FrameExclusionReason = (typeof FRAME_EXCLUSION_REASONS)[number];
 
 export interface CriticTemplateInputs {
   sectionPurpose: string;

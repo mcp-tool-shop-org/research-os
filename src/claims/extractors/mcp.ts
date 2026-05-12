@@ -34,10 +34,16 @@ import type {
 import { runCritic, type CriticCallToolClient } from '../critic/mcp-critic.js';
 import { isExclusionLabel } from '../critic/prompt.js';
 
-// Mirrors DEFAULT_WINDOW_CHARS in the legacy direct-Ollama extractor — the
-// ledger paging math is identical. Keeps existing window counts byte-stable
-// across the legacy/MCP migration.
-const DEFAULT_WINDOW_CHARS = 5_000;
+// Phase 1b-b diagnostic finding (2026-05-12): under 5_000 the cosmology
+// off-topic source on the dev-rtx5080 workhorse profile (8K context) pages
+// into windows whose largest token count exceeds the model's safe budget and
+// hits TIER_TIMEOUT — any window timing out kills the source. Reducing to
+// 3_000 keeps all 3 Section-01 off-topic sources completing cleanly on the
+// reference profile out-of-the-box. The legacy direct-Ollama extractor at
+// src/claims/extractors/direct-ollama-legacy-extractor.ts intentionally
+// retains 5_000 because it is unwired archival code and its tests pin to
+// historical byte counts.
+const DEFAULT_WINDOW_CHARS = 3_000;
 
 // The span-grounding rule lives in the MCP `hint` parameter. The server prepends
 // it as `\nHint: ${hint}` to the prompt, so it has to stand on its own (no
@@ -397,10 +403,18 @@ Source-card not: ${card.not ?? 'null'}`;
         //     the draft so the persisted claim and downstream review can
         //     surface them).
         //
-        // Critic call failure (transport / parse) → fail-soft: admit the
-        // claim as if supports_section was returned. We cannot prove
-        // off-topic from a failed call, but we DO record the failure in the
-        // criticTally so the summary surfaces it.
+        // CRITIC-CALL FAILURE — POLICY INVERSION (v0.8.0 phase 1b-b correctness fix):
+        // Any failure mode — transport error, parse error, invalid label,
+        // empty rationale, timeout — routes to frame_excluded=true with
+        // reason='critic_unavailable'. Live evidence on 2026-05-12 showed
+        // the prior soft-fail-admit behavior was admitting chrome content
+        // ("contact arXiv Click here to contact arXiv") as on-topic high-
+        // confidence claims purely because the critic call failed mid-page.
+        // The safe default when topicality cannot be determined is to
+        // EXCLUDE the claim. The critic_call_failed counter still tracks
+        // event volume for telemetry so the operator can detect critic-
+        // health issues; the routing decision is uniform across all five
+        // failure modes.
         if (input.framePurpose !== undefined && input.framePurpose.trim().length > 0) {
           const criticClient = client as unknown as CriticCallToolClient;
           for (const draft of page.drafts) {
@@ -414,13 +428,16 @@ Source-card not: ${card.not ?? 'null'}`;
             });
             if (!critic.ok) {
               criticTally.critic_call_failed += 1;
-              // Fail-soft: admit. We do NOT inherit envelope.frame_alignment
-              // because the doctrine ratchet says that signal is unreliable;
-              // using it to fill in for a failed critic reintroduces the
-              // unreliability as a shortcut.
-              draft.frame_excluded = false;
-              delete draft.frame_exclusion_reason;
-              delete draft.frame_exclusion_rationale;
+              // CONSERVATIVE FAIL: exclude. We cannot prove the claim
+              // supports the section, so we must not admit it as evidence.
+              // This is NOT inheriting envelope.frame_alignment (the
+              // doctrine ratchet still holds — envelope is telemetry only);
+              // this is independently deciding that absence-of-judgement
+              // routes to exclude, not admit.
+              draft.frame_excluded = true;
+              draft.frame_exclusion_reason = 'critic_unavailable';
+              draft.frame_exclusion_rationale =
+                'Critic call failed; conservatively excluded from synthesis evidence.';
               continue;
             }
             if (critic.label === 'supports_section') {

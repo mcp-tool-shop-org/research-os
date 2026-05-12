@@ -621,14 +621,24 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
   const severityCounts: Record<FindingSeverity, number> = { info: 0, warn: 0, block: 0 };
   for (const f of dedupedFindings) severityCounts[f.severity] += 1;
 
-  // Phase 1b-b: section is promoted to 'reviewed' only when EVERY review
-  // decision is accepted_for_synthesis. A frame_excluded claim is not
-  // accepted — so any non-empty frame_excluded bucket blocks promotion.
-  // This is correct-by-construction since claimReviews now includes the
-  // frame_excluded synthetic reviews.
+  // Phase 1b-b (v0.8.0) — corrected: section is promoted to 'reviewed' only
+  // when every REVIEWER-SET claim_review is accepted_for_synthesis. The
+  // frame_excluded synthetic reviews are filtered OUT of this check because
+  // they represent topicality filtering at extract time, NOT an outstanding
+  // review concern. They are filter-don't-reject; gating promotion on them
+  // would defeat the purpose of frame_excluded (any single off-topic chrome
+  // claim would block an otherwise-clean section forever).
+  //
+  // The accepted_claim_floor gate is the binding evidence-existence guard
+  // (proven by scenarios A/B/C in test/gate-frame-excluded.test.ts) — a
+  // section with 0 accepted + N frame_excluded fails the floor naturally,
+  // because frame_excluded does not substitute for accepted.
+  const reviewerSetReviews = claimReviews.filter(
+    (r) => r.decision !== 'frame_excluded',
+  );
   const allAccepted =
-    claimReviews.length > 0 &&
-    claimReviews.every((r) => r.decision === 'accepted_for_synthesis');
+    reviewerSetReviews.length > 0 &&
+    reviewerSetReviews.every((r) => r.decision === 'accepted_for_synthesis');
   // Only promote section status when this run is on the active profile —
   // calibration / A/B runs must never touch section state.
   const activeProfileForPromote = await readActiveProfile(args.packPath, args.sectionId);

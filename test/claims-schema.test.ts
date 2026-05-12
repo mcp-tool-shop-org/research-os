@@ -100,4 +100,30 @@ describe('ClaimSchema', () => {
     const parsed2 = ClaimSchema.parse(JSON.parse(serialized));
     expect(parsed2.frame_excluded).toBe(true);
   });
+
+  it('parses frame_exclusion_reason="critic_unavailable" (v0.8.0 phase 1b-b correctness fix)', () => {
+    // System-state value stamped by the extractor on critic-call failure.
+    // Must round-trip through the schema cleanly so the review pipeline can
+    // route the claim to decision=frame_excluded with the system-state
+    // reason preserved.
+    const parsed = ClaimSchema.parse({
+      ...baseClaim,
+      frame_excluded: true,
+      frame_exclusion_reason: 'critic_unavailable',
+      frame_exclusion_rationale: 'Critic call failed; conservatively excluded from synthesis evidence.',
+    });
+    expect(parsed.frame_excluded).toBe(true);
+    expect(parsed.frame_exclusion_reason).toBe('critic_unavailable');
+  });
+
+  it('still rejects an unknown frame_exclusion_reason value', () => {
+    expect(() =>
+      ClaimSchema.parse({
+        ...baseClaim,
+        frame_excluded: true,
+        frame_exclusion_reason: 'made_up_reason',
+        frame_exclusion_rationale: 'r',
+      }),
+    ).toThrow();
+  });
 });

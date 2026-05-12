@@ -15,9 +15,11 @@ import {
   CRITIC_LABELS,
   CRITIC_RESULT_SCHEMA,
   CRITIC_EXCLUSION_LABELS,
+  FRAME_EXCLUSION_REASONS,
   renderCriticPrompt,
   isExclusionLabel,
 } from '../src/claims/critic/prompt.js';
+import { ClaimSchema } from '../src/claims/schema.js';
 
 const LOCKED_TEXT = `Section purpose:
 {section.purpose}
@@ -61,17 +63,95 @@ describe('CRITIC_PROMPT_TEMPLATE (drift prevention)', () => {
     ]);
   });
 
-  it('exposes the three exclusion labels (NOT including supports_section)', () => {
+  it('exposes the three exclusion labels (NOT including supports_section, NOT including critic_unavailable)', () => {
+    // The CRITIC_EXCLUSION_LABELS constant is the MODEL-OUTPUT menu. It is
+    // intentionally three entries — the model never returns
+    // critic_unavailable. That value is system-state, set by the extractor
+    // on critic-call failure; it lives in FRAME_EXCLUSION_REASONS (the
+    // schema-persistence enum) but not here.
     expect(CRITIC_EXCLUSION_LABELS).toEqual([
       'off_topic',
       'background_only',
       'source_chrome',
     ]);
+    expect(CRITIC_EXCLUSION_LABELS).toHaveLength(3);
     expect(isExclusionLabel('supports_section')).toBe(false);
     expect(isExclusionLabel('off_topic')).toBe(true);
     expect(isExclusionLabel('background_only')).toBe(true);
     expect(isExclusionLabel('source_chrome')).toBe(true);
     expect(isExclusionLabel('hallucinated')).toBe(false);
+    // critic_unavailable is NOT a model-output label.
+    expect(isExclusionLabel('critic_unavailable')).toBe(false);
+  });
+
+  it('exposes the FOUR schema-persistence reasons in FRAME_EXCLUSION_REASONS (model labels PLUS critic_unavailable)', () => {
+    // FRAME_EXCLUSION_REASONS is the wider enum the schema uses to persist
+    // ClaimSchema.frame_exclusion_reason. It includes critic_unavailable
+    // (a system-state value) on top of the three model-output labels.
+    expect(FRAME_EXCLUSION_REASONS).toEqual([
+      'off_topic',
+      'background_only',
+      'source_chrome',
+      'critic_unavailable',
+    ]);
+    expect(FRAME_EXCLUSION_REASONS).toHaveLength(4);
+  });
+
+  it('the critic prompt template does NOT advertise critic_unavailable as a label option to the model', () => {
+    // Drift guard: if a future edit accidentally adds critic_unavailable to
+    // the prompt's label menu, this fails. The model must never see it as
+    // an option — it is set by code on critic-call failure, not chosen.
+    expect(CRITIC_PROMPT_TEMPLATE).not.toContain('critic_unavailable');
+  });
+
+  it('ClaimSchema.frame_exclusion_reason enum exactly matches FRAME_EXCLUSION_REASONS (four entries)', () => {
+    // The schema enum is the persistence contract; FRAME_EXCLUSION_REASONS
+    // is the source of truth. Parses must accept all four.
+    for (const reason of FRAME_EXCLUSION_REASONS) {
+      const claim = {
+        claim_id: 'clm_abcdef012345_heuristic_1',
+        section_id: '01-test',
+        source_ids: ['src_abcdef012345'],
+        source_hashes: ['a'.repeat(64)],
+        asserts: 'x',
+        scope: null,
+        not: null,
+        evidence_excerpt_ids: [],
+        evidence_excerpt: 'x',
+        evidence_location: null,
+        confidence: 'low' as const,
+        extractor: 'heuristic' as const,
+        extraction_method: 'heuristic_key_point',
+        created_at: '2026-05-12T00:00:00.000Z',
+        review_state: 'candidate' as const,
+        frame_excluded: true,
+        frame_exclusion_reason: reason,
+        frame_exclusion_rationale: 'r',
+      };
+      expect(() => ClaimSchema.parse(claim)).not.toThrow();
+    }
+    // And a non-enum value still rejects.
+    const claim = {
+      claim_id: 'clm_abcdef012345_heuristic_1',
+      section_id: '01-test',
+      source_ids: ['src_abcdef012345'],
+      source_hashes: ['a'.repeat(64)],
+      asserts: 'x',
+      scope: null,
+      not: null,
+      evidence_excerpt_ids: [],
+      evidence_excerpt: 'x',
+      evidence_location: null,
+      confidence: 'low' as const,
+      extractor: 'heuristic' as const,
+      extraction_method: 'heuristic_key_point',
+      created_at: '2026-05-12T00:00:00.000Z',
+      review_state: 'candidate' as const,
+      frame_excluded: true,
+      frame_exclusion_reason: 'hallucinated_reason',
+      frame_exclusion_rationale: 'r',
+    };
+    expect(() => ClaimSchema.parse(claim)).toThrow();
   });
 
   it('schema enum on label exactly matches CRITIC_LABELS', () => {

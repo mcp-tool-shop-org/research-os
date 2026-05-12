@@ -30,8 +30,18 @@ export interface DraftClaim {
   // frame_exclusion_reason + frame_exclusion_rationale when it returns a
   // non-supports_section label. Both fields are present only on excluded
   // drafts; supports_section + heuristic drafts leave them undefined.
+  //
+  // The reason enum carries FOUR values; critic_unavailable is a
+  // system-state label set when the critic call itself fails (transport,
+  // parse, invalid label, empty rationale, or timeout). The model never
+  // emits critic_unavailable — see CRITIC_EXCLUSION_LABELS in
+  // src/claims/critic/prompt.ts for the three model-output labels.
   frame_excluded?: boolean;
-  frame_exclusion_reason?: 'off_topic' | 'background_only' | 'source_chrome';
+  frame_exclusion_reason?:
+    | 'off_topic'
+    | 'background_only'
+    | 'source_chrome'
+    | 'critic_unavailable';
   frame_exclusion_rationale?: string;
 }
 

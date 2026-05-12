@@ -112,8 +112,14 @@ export function renderCoworkMaster(payload: CoworkHandoffPayload): string {
   // extract-time critic decided these claims are not section-evidence
   // (off_topic / background_only / source_chrome) before review ever ran.
   // No LLM review tokens were spent; the rationale on each claim's review
-  // record carries the critic's call forward.
-  lines.push('### Frame-excluded claims (off_topic / background_only / source_chrome)');
+  // record carries the critic's call forward. critic_unavailable is the
+  // system-state value stamped by the extractor when the critic call itself
+  // failed (transport / parse / invalid label / empty rationale / timeout) —
+  // included here so the operator can spot critic-health issues separately
+  // from genuine model exclusions.
+  lines.push(
+    '### Frame-excluded claims (off_topic / background_only / source_chrome / critic_unavailable)',
+  );
   lines.push('');
   const frameIds = payload.frame_excluded_claim_ids ?? [];
   if (frameIds.length === 0) {

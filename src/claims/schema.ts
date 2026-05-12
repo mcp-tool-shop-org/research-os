@@ -50,9 +50,19 @@ export const ClaimSchema = z.object({
   // rationale below. Extract's window-level frame_alignment is telemetry only
   // — the critic decides admission. Both fields are present only when
   // frame_excluded === true; legacy claims without them parse cleanly.
+  //
+  // The schema enum carries FOUR values; the critic model only ever returns
+  // three (off_topic / background_only / source_chrome — see
+  // CRITIC_EXCLUSION_LABELS in src/claims/critic/prompt.ts). The fourth value
+  // — critic_unavailable — is a SYSTEM-STATE label set by the extractor when
+  // the critic call itself fails (transport, parse, invalid label, empty
+  // rationale, or timeout). The model never outputs it. The safe default
+  // when topicality cannot be determined is to EXCLUDE the claim, not to
+  // admit it — admitting on critic failure lets off-topic content leak in
+  // labelled "on-topic" purely because the critic crashed.
   frame_excluded: z.boolean().optional().default(false),
   frame_exclusion_reason: z
-    .enum(['off_topic', 'background_only', 'source_chrome'])
+    .enum(['off_topic', 'background_only', 'source_chrome', 'critic_unavailable'])
     .optional(),
   frame_exclusion_rationale: z.string().optional(),
 });
