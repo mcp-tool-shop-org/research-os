@@ -1,3 +1,8 @@
+// LEGACY — direct-Ollama claim extractor. Replaced in v0.8.0 by the
+// MCP-backed extractor at ./mcp.ts. Retained in tree for archival
+// through Phase 2-5 of the v0.8.0 architecture recovery in case
+// rollback is needed. NOT the default code path — see ./index.ts.
+
 import { renderLedgerForPrompt } from '../../sources/excerpts/ledger.js';
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
 import type { Excerpt } from '../../sources/excerpts/schema.js';

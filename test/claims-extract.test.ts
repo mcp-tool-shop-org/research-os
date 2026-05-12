@@ -170,7 +170,13 @@ describe('claim extract (heuristic-only path, span-first)', () => {
     }
   });
 
-  it('is idempotent — re-running with same extractor dedupes by claim_id', async () => {
+  it('is idempotent on repeat runs — preserve-rename is one-shot per pack (v0.8.0)', async () => {
+    // v0.8.0 changes the extract contract: the FIRST extract call moves any
+    // pre-existing claims.jsonl (in the test fixture, the empty stub
+    // sectionAdd writes) to claims.jsonl.pre-mcp-2026-05-11. Subsequent
+    // runs see the preservation file in place and leave claims.jsonl
+    // alone — at that point the legacy append-and-dedup behaviour kicks
+    // back in for repeat runs.
     await fixturePackWithSource([
       'One key point that is long enough.',
       'Two distinct second point that is long enough.',
@@ -182,6 +188,10 @@ describe('claim extract (heuristic-only path, span-first)', () => {
     });
     expect(first.claimsAdded).toBe(2);
 
+    // Second run: preserve file is already present (the empty stub from
+    // section-add was preserved during the first call), helper no-ops.
+    // Existing claims.jsonl rows from the first run are matched by
+    // claim_id and skipped — recovering the legacy dedup contract.
     const second = await extract({
       sectionId: '01-landscape',
       packPath,

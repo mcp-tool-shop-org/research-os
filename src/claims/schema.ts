@@ -37,6 +37,12 @@ export const ClaimSchema = z.object({
   extraction_method: z.string().min(1),
   created_at: z.string(),
   review_state: ReviewStateSchema,
+  // Phase 1 (v0.8.0): when the MCP extractor's ollama_extract frame_alignment
+  // judges the source off-topic for the section purpose, every claim emitted in
+  // that window is marked frame_excluded so downstream gates/triage can filter
+  // without re-asking the model. Optional + defaults to false for back-compat
+  // with claims written before the MCP migration.
+  frame_excluded: z.boolean().optional().default(false),
 });
 
 export type Claim = z.infer<typeof ClaimSchema>;

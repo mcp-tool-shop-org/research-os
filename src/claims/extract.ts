@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, renameSync } from 'node:fs';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import {
   NoSourcesGatheredError,
@@ -8,6 +9,7 @@ import {
   SectionNotFoundError,
 } from '../errors.js';
 import { RESEARCH_OS_VERSION } from '../index.js';
+import { ResearchYamlSchema } from '../intake/schema.js';
 import {
   buildExcerptIndex,
   EXCERPT_ID_PATTERN,
@@ -28,6 +30,14 @@ import type {
   ExtractClaimsOptions,
   ExtractClaimsSummary,
 } from './types.js';
+
+// One-time migration suffix applied to a pre-existing claims.jsonl on the
+// FIRST run under the v0.8.0 MCP extractor. We do NOT rotate this suffix —
+// the operator-visible contract is: extract once, you get one preservation
+// copy. If a file with this exact name already exists, that signals an
+// unexpected state (operator already migrated) and we surface it loudly
+// rather than silently clobbering the prior preservation copy.
+const CLAIMS_JSONL_PRE_MCP_SUFFIX = '.pre-mcp-2026-05-11';
 
 const MIN_EXCERPT_LEN_FOR_GROUNDING = 8;
 const EVIDENCE_EXCERPT_JOIN = ' … ';
@@ -54,6 +64,44 @@ const EXTRACTOR_ID_PART: Record<ClaimExtractor, string> = {
 
 interface SectionSourceEntry {
   source_id: string;
+}
+
+// Read the section purpose from research.yaml so we can pass it as `frame` to
+// the MCP extractor. Returns undefined when the section has no purpose set
+// or research.yaml is structurally malformed — extractors that accept frame
+// treat undefined as "no topicality judgement", which is safe.
+async function readSectionPurpose(
+  packPath: string,
+  sectionId: string,
+): Promise<string | undefined> {
+  const yamlPath = join(packPath, 'research.yaml');
+  if (!existsSync(yamlPath)) return undefined;
+  try {
+    const parsed = ResearchYamlSchema.parse(parseYaml(await readFile(yamlPath, 'utf8')));
+    const section = parsed.sections.find((s) => s.id === sectionId);
+    if (!section) return undefined;
+    const purpose = section.purpose.trim();
+    return purpose.length > 0 ? purpose : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// One-shot preservation of an existing claims.jsonl before the first MCP
+// extraction. Renames sections/<id>/claims.jsonl →
+// sections/<id>/claims.jsonl.pre-mcp-2026-05-11. We refuse to clobber an
+// existing preservation file — that signals the operator already migrated
+// and a second silent rename would destroy their prior preservation copy.
+function preserveLegacyClaimsJsonlIfNeeded(claimsPath: string): void {
+  if (!existsSync(claimsPath)) return;
+  const preservedPath = claimsPath + CLAIMS_JSONL_PRE_MCP_SUFFIX;
+  if (existsSync(preservedPath)) {
+    // Already migrated — leave both files in place. The new run will append
+    // to the existing claims.jsonl (idempotent via claim_id dedup). We do NOT
+    // re-rename, do NOT rotate, do NOT clobber.
+    return;
+  }
+  renameSync(claimsPath, preservedPath);
 }
 
 async function readSectionSourceIds(
@@ -201,6 +249,10 @@ function buildClaim(args: {
     evidence_excerpt: evidenceText,
     evidence_location: draft.evidence_location,
     confidence: draft.confidence,
+    // Phase 1 v0.8.0: propagate frame_alignment.on_topic === false from the
+    // MCP envelope down to the persisted claim. Heuristic extractor never
+    // sets this; default in the schema is false.
+    frame_excluded: draft.frame_excluded ?? false,
     extractor,
     extraction_method: extractionMethod,
     created_at: new Date().toISOString(),
@@ -220,7 +272,34 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
   const adapters = options.extractors ?? defaultClaimExtractors();
   const extractor = await pickClaimExtractor(adapters);
 
+  // Resolve framePurpose ONCE per extract() call. The section purpose is
+  // pack-stable, so reading research.yaml inside the per-source loop would
+  // be wasted I/O. undefined when the section has no purpose set; extractors
+  // treat that as "no topicality judgement", matching the v2.2.0 frame
+  // contract on the MCP server side.
+  const framePurpose = await readSectionPurpose(packPath, options.sectionId);
+
+  // The effective model override propagates from the CLI / env up through
+  // ExtractClaimsOptions. Empty strings collapse to undefined so the MCP
+  // server uses its tier default.
+  const effectiveModel =
+    typeof options.effectiveModel === 'string' && options.effectiveModel.trim().length > 0
+      ? options.effectiveModel.trim()
+      : undefined;
+
   const claimsPath = join(packPath, 'sections', options.sectionId, 'claims.jsonl');
+
+  // v0.8.0 Phase 1 migration: when an existing claims.jsonl is present we
+  // rename it to claims.jsonl.pre-mcp-2026-05-11 before this run starts
+  // appending. This preserves the legacy direct-Ollama extraction record
+  // alongside the fresh MCP-backed output. One-shot — see helper for why.
+  preserveLegacyClaimsJsonlIfNeeded(claimsPath);
+
+  // After preservation the on-disk claims.jsonl (if any) is removed/renamed,
+  // so the existing-id set is empty for this run. We still call the helper
+  // (rather than initialising `new Set()`) so an unexpected "preservation
+  // file already exists" branch — where we left claims.jsonl in place — is
+  // handled by reading the actual file state.
   const existingIds = await readExistingClaimIds(packPath, options.sectionId);
 
   const summary: ExtractClaimsSummary = {
@@ -240,6 +319,8 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     claimsRejectedExtractorParaphrase: 0,
     claimIds: [],
     failures: [],
+    modelFallbacks: [],
+    framesExcluded: 0,
   };
 
   for (const sourceId of sourceIds) {
@@ -275,6 +356,8 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       sourceCard: card,
       sourceHash: receipt?.sha256 ?? null,
       excerpts: ledger.excerpts,
+      framePurpose,
+      effectiveModel,
     });
 
     if (!result.ok) {
@@ -285,6 +368,12 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
 
     summary.sourcesProcessed += 1;
     summary.extractionMethod = result.method;
+    if (result.modelFallbacks && result.modelFallbacks.length > 0) {
+      summary.modelFallbacks.push(...result.modelFallbacks);
+    }
+    if (typeof result.framesExcluded === 'number' && result.framesExcluded > 0) {
+      summary.framesExcluded += result.framesExcluded;
+    }
 
     const excerptIndex = buildExcerptIndex(ledger.excerpts);
 
@@ -342,6 +431,10 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     claims_rejected_ungrounded: summary.claimsRejectedUngrounded,
     claims_rejected_excerpt_id_missing: summary.claimsRejectedExcerptIdMissing,
     claims_rejected_excerpt_id_malformed: summary.claimsRejectedExcerptIdMalformed,
+    // Phase 1 v0.8.0 — MCP envelope signals lifted into the receipt so
+    // section-report consumers can disclose them without re-reading run logs.
+    model_fallbacks: summary.modelFallbacks,
+    frames_excluded: summary.framesExcluded,
     failures: summary.failures.map((f) => ({
       source_id: f.source_id,
       reason: f.reason,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   OllamaInternClaimExtractor,
   pageExcerpts,
-} from '../src/claims/extractors/ollama-intern.js';
+} from '../src/claims/extractors/direct-ollama-legacy-extractor.js';
 import type { Excerpt } from '../src/sources/excerpts/schema.js';
 import type { SourceCard } from '../src/sources/schema.js';
 

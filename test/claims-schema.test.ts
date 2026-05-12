@@ -80,4 +80,24 @@ describe('ClaimSchema', () => {
       ClaimSchema.parse({ ...baseClaim, confidence: 'maximum' }),
     ).toThrow();
   });
+
+  it('parses a legacy claim WITHOUT frame_excluded and defaults to false (v0.8.0 back-compat)', () => {
+    // Legacy claims.jsonl rows written pre-v0.8.0 do not carry the
+    // frame_excluded field. The schema must round-trip them with the field
+    // filled in as false so reviewer/gate consumers can read every row.
+    const parsed = ClaimSchema.parse(baseClaim);
+    expect(parsed.frame_excluded).toBe(false);
+  });
+
+  it('parses a fresh claim WITH frame_excluded:true (v0.8.0 forward path)', () => {
+    const parsed = ClaimSchema.parse({ ...baseClaim, frame_excluded: true });
+    expect(parsed.frame_excluded).toBe(true);
+  });
+
+  it('round-trips frame_excluded through serialize → parse', () => {
+    const parsed1 = ClaimSchema.parse({ ...baseClaim, frame_excluded: true });
+    const serialized = JSON.stringify(parsed1);
+    const parsed2 = ClaimSchema.parse(JSON.parse(serialized));
+    expect(parsed2.frame_excluded).toBe(true);
+  });
 });

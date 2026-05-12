@@ -21,10 +21,35 @@ export interface DraftClaim {
   evidence_excerpt_ids: string[];
   evidence_location: string | null;
   confidence: Confidence;
+  // Phase 1 (v0.8.0): when the MCP extractor's frame_alignment judges the
+  // ledger window off-topic for the section purpose, every draft from that
+  // window is marked frame_excluded so the persisted claim carries it forward.
+  // Heuristic extractor never sets this.
+  frame_excluded?: boolean;
+}
+
+// Substitution surfaced by the MCP envelope when model_requested !== model.
+// One per window where it happened. Lifted into the extraction summary so the
+// section report can display "X claims came from a fallback tier" without
+// re-walking response logs.
+export interface ModelFallbackEvent {
+  source_id: string;
+  window_index: number;
+  model_requested: string;
+  model_used: string;
+  fallback_from?: string;
 }
 
 export type ClaimExtractionResult =
-  | { ok: true; claims: DraftClaim[]; method: string }
+  | {
+      ok: true;
+      claims: DraftClaim[];
+      method: string;
+      // Optional — populated by extractors that surface MCP envelopes.
+      modelFallbacks?: ModelFallbackEvent[];
+      // Number of ledger windows judged off-topic by frame_alignment.
+      framesExcluded?: number;
+    }
   | { ok: false; error: string };
 
 export interface ClaimExtractionInput {
@@ -33,6 +58,13 @@ export interface ClaimExtractionInput {
   // The deterministic excerpt ledger for this source. The extractor sees ONLY
   // these spans plus the source-card metadata — it does not see the raw text.
   excerpts: Excerpt[];
+  // Section purpose — passed to the MCP extractor as `frame` for topicality
+  // judgement. Optional; the heuristic extractor ignores it.
+  framePurpose?: string;
+  // Operator-selected model override. Threaded into ollama_extract as the
+  // per-call `model` parameter (v2.3.0 contract). undefined means "let the MCP
+  // server pick its default"; the heuristic extractor ignores it.
+  effectiveModel?: string;
 }
 
 export interface ClaimExtractorAdapter {
@@ -45,6 +77,11 @@ export interface ExtractClaimsOptions {
   sectionId: string;
   packPath?: string;
   extractors?: ClaimExtractorAdapter[];
+  // Operator override threaded into ollama_extract as the per-call `model`
+  // parameter (MCP v2.3.0 contract). Precedence in cli.ts: `--model` flag ??
+  // OLLAMA_INTERN_MODEL env var ?? undefined. The extractor receives this
+  // verbatim on every ClaimExtractionInput it processes.
+  effectiveModel?: string;
 }
 
 export interface ExtractClaimsFailure {
@@ -75,6 +112,11 @@ export interface ExtractClaimsSummary {
   claimsRejectedExtractorParaphrase: number;
   claimIds: string[];
   failures: ExtractClaimsFailure[];
+  // Phase 1 v0.8.0 — populated only when the MCP-backed extractor encounters
+  // model substitution or off-topic windows. Empty otherwise; legacy callers
+  // can ignore.
+  modelFallbacks: ModelFallbackEvent[];
+  framesExcluded: number;
 }
 
 export interface SourceFetchPair {

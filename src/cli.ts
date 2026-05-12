@@ -416,11 +416,18 @@ claimCmd
   .description('Extract candidate claims from a section\'s gathered sources')
   .argument('<section>', 'Section id, e.g. "01-landscape"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--model <name>',
+    'Per-call MCP model override (e.g. hermes3:8b). Precedence: --model ?? OLLAMA_INTERN_MODEL env var. The MCP server falls back to its tier default on timeout.',
+  )
   .action(async (section: string, opts) => {
     try {
+      const effectiveModel =
+        (opts.model as string | undefined) ?? process.env.OLLAMA_INTERN_MODEL ?? undefined;
       const result = await claimExtract({
         sectionId: section,
         packPath: opts.pack,
+        effectiveModel,
       });
       process.stdout.write(`claim extraction complete\n`);
       process.stdout.write(`  section:                            ${result.sectionId}\n`);
