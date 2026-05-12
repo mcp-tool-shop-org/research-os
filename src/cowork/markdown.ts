@@ -70,11 +70,12 @@ export function renderCoworkMaster(payload: CoworkHandoffPayload): string {
   if (payload.sections.length === 0) {
     lines.push('No sections in this pack.');
   } else {
-    lines.push('| Section | Status | Gate verdict | Synthesis-eligible | Candidate claims | Accepted | Need repair | Rejected | Unresolved contradictions |');
-    lines.push('|---|---|---|---|---|---|---|---|---|');
+    lines.push('| Section | Status | Gate verdict | Synthesis-eligible | Candidate claims | Accepted | Need repair | Rejected | Frame-excluded | Unresolved contradictions |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|');
     for (const s of payload.sections) {
+      const frameCount = s.frame_excluded_claim_ids?.length ?? 0;
       lines.push(
-        `| \`${s.section_id}\` | ${s.status} | ${s.gate_verdict ?? '—'} | ${s.synthesis_eligible ? 'yes' : 'no'} | ${s.candidate_claims_total} | ${s.accepted_claim_ids.length} | ${s.repair_claim_ids.length} | ${s.rejected_claim_ids.length} | ${s.unresolved_contradiction_ids.length} |`,
+        `| \`${s.section_id}\` | ${s.status} | ${s.gate_verdict ?? '—'} | ${s.synthesis_eligible ? 'yes' : 'no'} | ${s.candidate_claims_total} | ${s.accepted_claim_ids.length} | ${s.repair_claim_ids.length} | ${s.rejected_claim_ids.length} | ${frameCount} | ${s.unresolved_contradiction_ids.length} |`,
       );
     }
   }
@@ -104,6 +105,21 @@ export function renderCoworkMaster(payload: CoworkHandoffPayload): string {
     lines.push('_None._');
   } else {
     for (const cid of payload.blocked_claim_ids) lines.push(`- \`${cid}\``);
+  }
+  lines.push('');
+
+  // Phase 1b-b (v0.8.0): frame-excluded bucket. Distinct from rejected — the
+  // extract-time critic decided these claims are not section-evidence
+  // (off_topic / background_only / source_chrome) before review ever ran.
+  // No LLM review tokens were spent; the rationale on each claim's review
+  // record carries the critic's call forward.
+  lines.push('### Frame-excluded claims (off_topic / background_only / source_chrome)');
+  lines.push('');
+  const frameIds = payload.frame_excluded_claim_ids ?? [];
+  if (frameIds.length === 0) {
+    lines.push('_None._');
+  } else {
+    for (const cid of frameIds) lines.push(`- \`${cid}\``);
   }
   lines.push('');
 

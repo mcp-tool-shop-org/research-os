@@ -42,7 +42,19 @@ export const ClaimSchema = z.object({
   // that window is marked frame_excluded so downstream gates/triage can filter
   // without re-asking the model. Optional + defaults to false for back-compat
   // with claims written before the MCP migration.
+  //
+  // Phase 1b-b (v0.8.0): the per-claim section-evidence critic is the
+  // ENFORCEMENT layer. When the critic returns a label other than
+  // supports_section (off_topic / background_only / source_chrome), the
+  // emitted claim is marked frame_excluded:true and carries the reason +
+  // rationale below. Extract's window-level frame_alignment is telemetry only
+  // — the critic decides admission. Both fields are present only when
+  // frame_excluded === true; legacy claims without them parse cleanly.
   frame_excluded: z.boolean().optional().default(false),
+  frame_exclusion_reason: z
+    .enum(['off_topic', 'background_only', 'source_chrome'])
+    .optional(),
+  frame_exclusion_rationale: z.string().optional(),
 });
 
 export type Claim = z.infer<typeof ClaimSchema>;

@@ -11,6 +11,8 @@ export const IndexStatusSchema = z.enum(['present', 'missing']);
 export const ProvenanceSummarySchema = z.object({
   accepted_count: z.number().int().nonnegative(),
   rejected_count: z.number().int().nonnegative(),
+  // Phase 1b-b: optional for back-compat with pre-v0.8.0 handoffs.
+  frame_excluded_count: z.number().int().nonnegative().optional(),
   triage_parked_count: z.number().int().nonnegative(),
   needs_review_undispositioned_count: z.number().int().nonnegative(),
   dispositioned_count: z.number().int().nonnegative(),
@@ -37,6 +39,9 @@ export const SectionStateSchema = z.object({
   accepted_claim_ids: z.array(z.string()),
   repair_claim_ids: z.array(z.string()),
   rejected_claim_ids: z.array(z.string()),
+  // Phase 1b-b: extract-time critic exclusions. Optional with default []
+  // for back-compat with pre-v0.8.0 handoffs.
+  frame_excluded_claim_ids: z.array(z.string()).default([]),
   dispositioned_claim_ids: z.array(z.string()).default([]),
   candidate_claims_total: z.number().int().nonnegative(),
   unresolved_contradiction_ids: z.array(z.string()),
@@ -77,6 +82,8 @@ export const CoworkHandoffPayloadSchema = z.object({
   accepted_claim_ids: z.array(z.string()),
   repair_claim_ids: z.array(z.string()),
   blocked_claim_ids: z.array(z.string()),
+  // Phase 1b-b: pack-wide aggregate of frame-excluded claim ids.
+  frame_excluded_claim_ids: z.array(z.string()).default([]),
   dispositioned_claim_ids: z.array(z.string()).default([]),
   unresolved_contradiction_ids: z.array(z.string()),
   waivers: z.array(WaiverEntrySchema),

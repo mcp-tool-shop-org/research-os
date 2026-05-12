@@ -150,7 +150,11 @@ function makeExtractor(capture: CapturedCall[], response: () => unknown): MCPCla
 // ---- Tests -----------------------------------------------------------------
 
 describe('MCPClaimExtractor request shape', () => {
-  it('passes framePurpose as `frame` on the ollama_extract call', async () => {
+  it('passes framePurpose as `frame` on the (first) ollama_extract call', async () => {
+    // Phase 1b-b: with framePurpose set, the per-claim critic also runs
+    // (via ollama_extract). We assert on the FIRST captured call — the
+    // extractor itself — which still carries the `frame` parameter for the
+    // server's frame_alignment telemetry.
     const capture: CapturedCall[] = [];
     const ex = makeExtractor(capture, () => makeEnvelopeResponse());
     const result = await ex.extract({
@@ -160,7 +164,7 @@ describe('MCPClaimExtractor request shape', () => {
       framePurpose: 'gates and waivers — what blocks synthesis',
     });
     expect(result.ok).toBe(true);
-    expect(capture).toHaveLength(1);
+    expect(capture.length).toBeGreaterThanOrEqual(1);
     expect(capture[0]?.name).toBe('ollama_extract');
     expect(capture[0]?.arguments.frame).toBe('gates and waivers — what blocks synthesis');
   });
@@ -228,7 +232,21 @@ describe('MCPClaimExtractor request shape', () => {
 });
 
 describe('MCPClaimExtractor frame_alignment handling', () => {
-  it('marks every claim frame_excluded:true when result.frame_alignment.on_topic === false', async () => {
+  it('records framesExcluded counter when result.frame_alignment.on_topic === false (envelope telemetry)', async () => {
+    // Phase 1b-b doctrine ratchet: envelope.frame_alignment is TELEMETRY
+    // only — the per-claim critic decides admission. So even when the
+    // envelope says on_topic=false, the critic still runs per claim and
+    // its verdict is what flips frame_excluded on each draft. The
+    // framesExcluded counter on the result still tracks the envelope
+    // signal for calibration receipts; that hasn't changed.
+    //
+    // This test re-uses the same envelope (no critic mocked separately), so
+    // when the critic-shaped ollama_extract call fires it will receive the
+    // SAME envelope (which has no {label, rationale} payload) — that means
+    // the critic call parses as "not a critic envelope" and fails soft,
+    // admitting each claim with frame_excluded=false. The framesExcluded
+    // counter still increments because envelope.frame_alignment.on_topic
+    // === false on the extract call.
     const capture: CapturedCall[] = [];
     const ex = makeExtractor(capture, () =>
       makeEnvelopeResponse({
@@ -260,8 +278,12 @@ describe('MCPClaimExtractor frame_alignment handling', () => {
     });
     if (!result.ok) throw new Error(`should succeed: ${result.error}`);
     expect(result.claims).toHaveLength(2);
-    expect(result.claims.every((c) => c.frame_excluded === true)).toBe(true);
+    // Envelope telemetry still incremented.
     expect(result.framesExcluded).toBe(1);
+    // Critic-call failures (envelope had no {label, rationale}) → fail-soft,
+    // admit every claim with frame_excluded=false.
+    expect(result.claims.every((c) => c.frame_excluded !== true)).toBe(true);
+    expect(result.criticTally?.critic_call_failed).toBe(2);
   });
 
   it('does NOT mark claims frame_excluded when on_topic === true', async () => {

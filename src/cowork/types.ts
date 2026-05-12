@@ -5,6 +5,11 @@ export type IndexStatus = 'present' | 'missing';
 export interface ProvenanceSummary {
   accepted_count: number;
   rejected_count: number;
+  // Phase 1b-b (v0.8.0): count of claims the extract-time section-evidence
+  // critic excluded. Separate from rejected (review-time adjudication) and
+  // repair (needs_* decisions). Optional with default 0 for back-compat
+  // with handoff payloads from pre-v0.8.0 packs.
+  frame_excluded_count?: number;
   triage_parked_count: number;
   needs_review_undispositioned_count: number;
   dispositioned_count: number;
@@ -31,6 +36,10 @@ export interface SectionState {
   accepted_claim_ids: string[];
   repair_claim_ids: string[];
   rejected_claim_ids: string[];
+  // Phase 1b-b (v0.8.0): claims excluded by the extract-time
+  // section-evidence critic (off_topic / background_only / source_chrome).
+  // Optional with default [] for back-compat.
+  frame_excluded_claim_ids?: string[];
   dispositioned_claim_ids: string[];
   candidate_claims_total: number;
   unresolved_contradiction_ids: string[];
@@ -71,6 +80,9 @@ export interface CoworkHandoffPayload {
   accepted_claim_ids: string[];
   repair_claim_ids: string[];
   blocked_claim_ids: string[];
+  // Phase 1b-b (v0.8.0): pack-wide aggregate of frame-excluded claim ids.
+  // Optional with default [] for back-compat.
+  frame_excluded_claim_ids?: string[];
   dispositioned_claim_ids: string[];
   unresolved_contradiction_ids: string[];
   waivers: WaiverEntry[];

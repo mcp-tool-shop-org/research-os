@@ -31,6 +31,12 @@ export type ReviewerName = 'heuristic' | 'ollama-intern';
 export type ReviewDecision =
   | 'accepted_for_synthesis'
   | 'rejected'
+  // Phase 1b-b (v0.8.0): the per-claim section-evidence critic decided this
+  // claim is not section-evidence (off_topic / background_only / source_chrome).
+  // Emitted at REVIEW time with no findings and no review LLM call — the
+  // critic already decided at extract time. Outside synthesis flow, same as
+  // rejected, but the routing reason is admissibility, not adjudication.
+  | 'frame_excluded'
   | 'needs_scope_repair'
   | 'needs_source_repair'
   | 'needs_contradiction_mapping'

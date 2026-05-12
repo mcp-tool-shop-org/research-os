@@ -43,6 +43,15 @@ const WARN_TO_DECISION: Record<string, ReviewDecision> = {
 
 const DECISION_PRIORITY: ReviewDecision[] = [
   'rejected',
+  // Phase 1b-b (v0.8.0): frame_excluded sits between rejected (adjudicated
+  // unusable) and the needs_* repair decisions. Rationale: rejected and
+  // frame_excluded both mean "outside synthesis flow"; needs_* imply possible
+  // repair. A claim flagged frame_excluded by the extract-time critic AND
+  // separately rejected by the reviewer (hypothetical edge case) routes to
+  // rejected (higher priority) — the reviewer's adjudication wins. A claim
+  // flagged frame_excluded AND needs_repair routes to frame_excluded — the
+  // admissibility call comes first, repair is moot.
+  'frame_excluded',
   'needs_contradiction_mapping',
   'needs_source_repair',
   'needs_scope_repair',

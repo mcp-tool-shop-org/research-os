@@ -246,6 +246,13 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     const allowed = await readTriagedClaimIds(packPath, options.sectionId);
     candidateClaims = candidateClaims.filter((c) => allowed.has(c.claim_id));
   }
+  // Phase 1b-b (v0.8.0): claims the extract-time critic already excluded never
+  // reach the review LLM. They get a synthetic ClaimReview with
+  // decision='frame_excluded' carrying the critic's rationale. The reviewer
+  // sees only the non-excluded candidates, so no LLM tokens are spent
+  // re-judging admissibility — the topicality call lives at extract time.
+  const frameExcludedClaims = candidateClaims.filter((c) => c.frame_excluded === true);
+  candidateClaims = candidateClaims.filter((c) => c.frame_excluded !== true);
   const sources = await readSourceCards(packPath);
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r));
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r));
@@ -269,6 +276,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
       section,
       claims,
       candidateClaims,
+      frameExcludedClaims,
       sources,
       receipts,
       contradictions,
@@ -322,6 +330,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
       section,
       claims,
       candidateClaims,
+      frameExcludedClaims,
       sources,
       receipts,
       contradictions,
@@ -351,6 +360,7 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     reviewer: reviewer.name,
     reviewMethod: result.method,
     candidateClaims,
+    frameExcludedClaims,
     drafts: acceptedDrafts,
     llmFindingsRejected,
     profile: options.profile ?? DEFAULT_PROFILE,
@@ -367,6 +377,10 @@ interface ReviewWithSpecificReviewerArgs {
   section: Section;
   claims: Claim[];
   candidateClaims: Claim[];
+  // Phase 1b-b: claims the extract-time critic excluded. The reviewer does
+  // NOT see them; finalizeReview emits synthetic ClaimReview records with
+  // decision='frame_excluded'.
+  frameExcludedClaims: Claim[];
   sources: SourceCard[];
   receipts: FetchReceipt[];
   contradictions: Contradiction[];
@@ -460,6 +474,7 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     reviewer: pickedReviewerName,
     reviewMethod: methods.length > 0 ? `multi_pass(${methods.join(' + ')})` : 'multi_pass(empty)',
     candidateClaims: args.candidateClaims,
+    frameExcludedClaims: args.frameExcludedClaims,
     drafts: merged,
     llmFindingsRejected,
     profile: args.options.profile ?? DEFAULT_PROFILE,
@@ -502,6 +517,7 @@ async function reviewWithSpecificReviewer(args: ReviewWithSpecificReviewerArgs):
     reviewer: args.reviewer.name,
     reviewMethod: result.method,
     candidateClaims: args.candidateClaims,
+    frameExcludedClaims: args.frameExcludedClaims,
     drafts: result.drafts,
     llmFindingsRejected: 0,
     profile: args.options.profile ?? DEFAULT_PROFILE,
@@ -516,6 +532,10 @@ interface FinalizeArgs {
   reviewer: ReviewerName;
   reviewMethod: string;
   candidateClaims: Claim[];
+  // Phase 1b-b: claims the extract-time critic excluded. They DID NOT reach
+  // the reviewer; we synthesize one ClaimReview per excluded claim with
+  // decision='frame_excluded' so downstream gates / cowork see them.
+  frameExcludedClaims: Claim[];
   drafts: DraftFinding[];
   llmFindingsRejected: number;
   profile: string;
@@ -552,7 +572,7 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     (w) => w.section_id === args.sectionId,
   );
 
-  const claimReviews: ClaimReview[] = deriveClaimReviews({
+  const reviewerClaimReviews: ClaimReview[] = deriveClaimReviews({
     claims: args.candidateClaims,
     findings: dedupedFindings,
     reviewer: args.reviewer,
@@ -561,9 +581,36 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     profile: args.profile !== DEFAULT_PROFILE ? args.profile : undefined,
   });
 
+  // Phase 1b-b (v0.8.0): synthesize ClaimReview records for the
+  // frame_excluded claims. They never reached the reviewer (no LLM call,
+  // no findings); the critic already decided at extract time. The record
+  // carries the critic's rationale forward into review.json + claim-reviews
+  // so downstream gates and cowork see them as one bucket.
+  const nowIso = new Date().toISOString();
+  const frameExcludedReviews: ClaimReview[] = args.frameExcludedClaims.map((claim) => {
+    const rationale = claim.frame_exclusion_rationale ?? null;
+    const reasonLabel = claim.frame_exclusion_reason ?? null;
+    const reasonPrefix = reasonLabel ? `${reasonLabel}: ` : '';
+    const reason = rationale
+      ? `Frame-excluded before review: ${reasonPrefix}${rationale}`
+      : `Frame-excluded before review: ${reasonLabel ?? 'no rationale recorded'}`;
+    return ClaimReviewSchema.parse({
+      claim_id: claim.claim_id,
+      decision: 'frame_excluded',
+      reason,
+      finding_ids: [],
+      reviewer: args.reviewer,
+      review_method: args.reviewMethod,
+      created_at: nowIso,
+      ...(args.profile !== DEFAULT_PROFILE ? { profile: args.profile } : {}),
+    });
+  });
+  const claimReviews: ClaimReview[] = [...reviewerClaimReviews, ...frameExcludedReviews];
+
   const decisionCounts: Record<ReviewDecision, number> = {
     accepted_for_synthesis: 0,
     rejected: 0,
+    frame_excluded: 0,
     needs_scope_repair: 0,
     needs_source_repair: 0,
     needs_contradiction_mapping: 0,
@@ -574,8 +621,13 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
   const severityCounts: Record<FindingSeverity, number> = { info: 0, warn: 0, block: 0 };
   for (const f of dedupedFindings) severityCounts[f.severity] += 1;
 
+  // Phase 1b-b: section is promoted to 'reviewed' only when EVERY review
+  // decision is accepted_for_synthesis. A frame_excluded claim is not
+  // accepted — so any non-empty frame_excluded bucket blocks promotion.
+  // This is correct-by-construction since claimReviews now includes the
+  // frame_excluded synthetic reviews.
   const allAccepted =
-    args.candidateClaims.length > 0 &&
+    claimReviews.length > 0 &&
     claimReviews.every((r) => r.decision === 'accepted_for_synthesis');
   // Only promote section status when this run is on the active profile —
   // calibration / A/B runs must never touch section state.
@@ -592,7 +644,10 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     reviewer: args.reviewer,
     review_method: args.reviewMethod,
     reviewed_at: new Date().toISOString(),
-    candidate_claims: args.candidateClaims.length,
+    // Phase 1b-b: candidate_claims is the TOTAL candidate set the operator
+    // started with — including frame_excluded claims. claim_reviews carries
+    // the per-claim disposition (accepted / rejected / frame_excluded / ...).
+    candidate_claims: args.candidateClaims.length + args.frameExcludedClaims.length,
     findings: dedupedFindings,
     claim_reviews: claimReviews,
     decision_counts: decisionCounts,
@@ -654,7 +709,9 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     sectionId: args.sectionId,
     reviewer: args.reviewer,
     reviewMethod: args.reviewMethod,
-    candidateClaims: args.candidateClaims.length,
+    // Phase 1b-b: total candidate set (including frame_excluded) so the
+    // summary number matches the snapshot.
+    candidateClaims: args.candidateClaims.length + args.frameExcludedClaims.length,
     findingsAdded: dedupedFindings.length,
     findingsDeduped: dedupedCount,
     llmFindingsRejected: args.llmFindingsRejected,

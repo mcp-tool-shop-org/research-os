@@ -27,9 +27,12 @@ import type {
   ClaimExtractionResult,
   ClaimExtractorAdapter,
   Confidence,
+  CriticTally,
   DraftClaim,
   ModelFallbackEvent,
 } from '../types.js';
+import { runCritic, type CriticCallToolClient } from '../critic/mcp-critic.js';
+import { isExclusionLabel } from '../critic/prompt.js';
 
 // Mirrors DEFAULT_WINDOW_CHARS in the legacy direct-Ollama extractor — the
 // ledger paging math is identical. Keeps existing window counts byte-stable
@@ -329,6 +332,17 @@ Source-card not: ${card.not ?? 'null'}`;
     const modelFallbacks: ModelFallbackEvent[] = [];
     let pagesOk = 0;
     let framesExcluded = 0;
+    // Phase 1b-b: per-claim critic decisions. Initialised at zero and
+    // populated as we critique each draft. ALWAYS populated on the MCP
+    // extractor's success result so the operator sees the split even on
+    // perfectly-on-topic packs.
+    const criticTally: CriticTally = {
+      supports_section: 0,
+      off_topic: 0,
+      background_only: 0,
+      source_chrome: 0,
+      critic_call_failed: 0,
+    };
     try {
       const client = (await handle.connect()) as unknown as CallToolClient;
       for (let i = 0; i < windows.length; i += 1) {
@@ -370,6 +384,65 @@ Source-card not: ${card.not ?? 'null'}`;
           }
           modelFallbacks.push(fallbackEvent);
         }
+
+        // Phase 1b-b: per-claim section-evidence critic. Runs on EVERY draft
+        // from EVERY window, regardless of envelope.frame_alignment. Extract's
+        // frame_alignment becomes calibration telemetry; the critic is the
+        // admission gate.
+        //
+        // Critic returns one of four labels:
+        //   - supports_section: admit (frame_excluded=false, no rationale).
+        //   - off_topic / background_only / source_chrome: route out
+        //     (frame_excluded=true with the reason + rationale stamped on
+        //     the draft so the persisted claim and downstream review can
+        //     surface them).
+        //
+        // Critic call failure (transport / parse) → fail-soft: admit the
+        // claim as if supports_section was returned. We cannot prove
+        // off-topic from a failed call, but we DO record the failure in the
+        // criticTally so the summary surfaces it.
+        if (input.framePurpose !== undefined && input.framePurpose.trim().length > 0) {
+          const criticClient = client as unknown as CriticCallToolClient;
+          for (const draft of page.drafts) {
+            const critic = await runCritic(criticClient, {
+              sectionPurpose: input.framePurpose,
+              claimAsserts: draft.asserts,
+              sourceTitle: card.title,
+              sourcePublisher: card.publisher,
+              sourceType: card.source_type,
+              effectiveModel: input.effectiveModel,
+            });
+            if (!critic.ok) {
+              criticTally.critic_call_failed += 1;
+              // Fail-soft: admit. We do NOT inherit envelope.frame_alignment
+              // because the doctrine ratchet says that signal is unreliable;
+              // using it to fill in for a failed critic reintroduces the
+              // unreliability as a shortcut.
+              draft.frame_excluded = false;
+              delete draft.frame_exclusion_reason;
+              delete draft.frame_exclusion_rationale;
+              continue;
+            }
+            if (critic.label === 'supports_section') {
+              criticTally.supports_section += 1;
+              draft.frame_excluded = false;
+              delete draft.frame_exclusion_reason;
+              delete draft.frame_exclusion_rationale;
+              continue;
+            }
+            // off_topic / background_only / source_chrome — route out.
+            if (isExclusionLabel(critic.label)) {
+              criticTally[critic.label] += 1;
+            }
+            draft.frame_excluded = true;
+            draft.frame_exclusion_reason = critic.label as
+              | 'off_topic'
+              | 'background_only'
+              | 'source_chrome';
+            draft.frame_exclusion_rationale = critic.rationale;
+          }
+        }
+
         allDrafts.push(...page.drafts);
       }
     } finally {
@@ -388,7 +461,9 @@ Source-card not: ${card.not ?? 'null'}`;
     // markers DO NOT prevent dedup: if two windows produce the same assert,
     // keep one. If either window was off-topic, preserve the off-topic flag
     // (any-off-topic wins) so we don't silently launder a frame_excluded claim
-    // into the accepted set via deduplication.
+    // into the accepted set via deduplication. Critic-derived
+    // frame_exclusion_reason / rationale flow with whichever copy was marked
+    // excluded — if both were, prefer the prior one (stable order).
     const seen = new Map<string, DraftClaim>();
     for (const d of allDrafts) {
       const key = d.asserts.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -399,6 +474,15 @@ Source-card not: ${card.not ?? 'null'}`;
       }
       if (d.frame_excluded || prior.frame_excluded) {
         prior.frame_excluded = true;
+        // Carry forward exclusion metadata from whichever copy had it. If
+        // the prior already has a reason, keep it; otherwise inherit from
+        // the duplicate.
+        if (!prior.frame_exclusion_reason && d.frame_exclusion_reason) {
+          prior.frame_exclusion_reason = d.frame_exclusion_reason;
+        }
+        if (!prior.frame_exclusion_rationale && d.frame_exclusion_rationale) {
+          prior.frame_exclusion_rationale = d.frame_exclusion_rationale;
+        }
       }
     }
     const drafts = Array.from(seen.values());
@@ -413,7 +497,12 @@ Source-card not: ${card.not ?? 'null'}`;
     const method =
       windows.length > 1 ? 'mcp_ollama_extract_paged' : 'mcp_ollama_extract';
 
-    const out: ClaimExtractionResult = { ok: true, claims: drafts, method };
+    const out: ClaimExtractionResult = {
+      ok: true,
+      claims: drafts,
+      method,
+      criticTally,
+    };
     if (modelFallbacks.length > 0) out.modelFallbacks = modelFallbacks;
     if (framesExcluded > 0) out.framesExcluded = framesExcluded;
     return out;

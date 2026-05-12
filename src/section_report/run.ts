@@ -206,6 +206,10 @@ export async function reportSection(
     needs_source_repair: 0,
     needs_contradiction_mapping: 0,
     rejected: 0,
+    // Phase 1b-b (v0.8.0): extract-time critic exclusion bucket. Counted as
+    // its own decision so the section report distinguishes "off-topic
+    // attrition" from review-time rejection / repair work.
+    frame_excluded: 0,
     needs_human_review: 0,
   };
   for (const claim of claims) {

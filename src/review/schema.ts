@@ -36,6 +36,9 @@ export const ReviewerNameSchema = z.enum(['heuristic', 'ollama-intern']);
 export const ReviewDecisionSchema = z.enum([
   'accepted_for_synthesis',
   'rejected',
+  // Phase 1b-b (v0.8.0): extract-time section-evidence critic decided this
+  // claim is not section-evidence. Outside synthesis flow.
+  'frame_excluded',
   'needs_scope_repair',
   'needs_source_repair',
   'needs_contradiction_mapping',

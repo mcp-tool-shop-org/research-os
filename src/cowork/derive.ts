@@ -136,6 +136,7 @@ function buildSectionState(args: {
   const accepted: string[] = [];
   const repair: string[] = [];
   const rejected: string[] = [];
+  const frameExcluded: string[] = [];
   const dispositioned: string[] = [];
   for (const c of candidateClaims) {
     const d = decisionByClaim.get(c.claim_id);
@@ -144,6 +145,11 @@ function buildSectionState(args: {
       accepted.push(c.claim_id);
     } else if (d.decision === 'rejected') {
       rejected.push(c.claim_id);
+    } else if (d.decision === 'frame_excluded') {
+      // Phase 1b-b: extract-time critic excluded this claim. Surfaced as its
+      // own bucket so the operator sees "off-topic claim attrition" as a
+      // separate concern from review-time rejection or repair work.
+      frameExcluded.push(c.claim_id);
     } else if (effectiveDispositions.has(c.claim_id)) {
       dispositioned.push(c.claim_id);
     } else {
@@ -186,6 +192,7 @@ function buildSectionState(args: {
   const provenanceSummary: ProvenanceSummary = {
     accepted_count: accepted.length,
     rejected_count: rejected.length,
+    frame_excluded_count: frameExcluded.length,
     triage_parked_count: triageParkedCount,
     needs_review_undispositioned_count: repair.length,
     dispositioned_count: dispositioned.length,
@@ -207,6 +214,7 @@ function buildSectionState(args: {
     accepted_claim_ids: accepted,
     repair_claim_ids: repair,
     rejected_claim_ids: rejected,
+    frame_excluded_claim_ids: frameExcluded,
     dispositioned_claim_ids: dispositioned,
     candidate_claims_total: candidateClaims.length,
     unresolved_contradiction_ids: unresolved.map((c) => c.contradiction_id),
@@ -331,6 +339,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
   const acceptedAll: string[] = [];
   const repairAll: string[] = [];
   const blockedAll: string[] = [];
+  const frameExcludedAll: string[] = [];
   const dispositionedAll: string[] = [];
   const unresolvedContradictionsAll: string[] = [];
   const gateVerdicts: CoworkHandoffPayload['gate_verdicts'] = [];
@@ -358,6 +367,9 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
     acceptedAll.push(...state.accepted_claim_ids);
     repairAll.push(...state.repair_claim_ids);
     blockedAll.push(...state.rejected_claim_ids);
+    if (state.frame_excluded_claim_ids) {
+      frameExcludedAll.push(...state.frame_excluded_claim_ids);
+    }
     dispositionedAll.push(...state.dispositioned_claim_ids);
     unresolvedContradictionsAll.push(...state.unresolved_contradiction_ids);
 
@@ -392,7 +404,11 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
   const summary = (() => {
     const ready = sections.filter((s) => s.synthesis_eligible).length;
     const blocked = sections.length - ready;
-    return `Pack mode=${mode}; ${sections.length} section(s) total, ${ready} synthesis-eligible, ${blocked} blocked or unrun. ${acceptedAll.length} accepted claim(s); ${repairAll.length} need repair; ${dispositionedAll.length} dispositioned; ${blockedAll.length} rejected; ${unresolvedContradictionsAll.length} unresolved contradiction(s); ${waivers.length} waiver(s).`;
+    const frameClause =
+      frameExcludedAll.length > 0
+        ? ` ${frameExcludedAll.length} frame-excluded (off_topic/background_only/source_chrome);`
+        : '';
+    return `Pack mode=${mode}; ${sections.length} section(s) total, ${ready} synthesis-eligible, ${blocked} blocked or unrun. ${acceptedAll.length} accepted claim(s); ${repairAll.length} need repair; ${dispositionedAll.length} dispositioned;${frameClause} ${blockedAll.length} rejected; ${unresolvedContradictionsAll.length} unresolved contradiction(s); ${waivers.length} waiver(s).`;
   })();
 
   return {
@@ -406,6 +422,7 @@ export function derive(input: DeriveInput): CoworkHandoffPayload {
     accepted_claim_ids: acceptedAll,
     repair_claim_ids: repairAll,
     blocked_claim_ids: blockedAll,
+    frame_excluded_claim_ids: frameExcludedAll,
     dispositioned_claim_ids: dispositionedAll,
     unresolved_contradiction_ids: unresolvedContradictionsAll,
     waivers,

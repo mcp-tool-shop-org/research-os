@@ -445,6 +445,26 @@ claimCmd
       // are reviewer concerns and surface in the review step, not here.
       process.stdout.write(`    excerpt_id_missing:               ${result.claimsRejectedExcerptIdMissing}\n`);
       process.stdout.write(`    excerpt_id_malformed:             ${result.claimsRejectedExcerptIdMalformed}\n`);
+      // Phase 1b-b: section-evidence critic breakdown. Heuristic extractor
+      // never invokes the critic so all counts are zero; only the MCP path
+      // populates them.
+      const tally = result.criticTally;
+      const criticTotal =
+        tally.supports_section +
+        tally.off_topic +
+        tally.background_only +
+        tally.source_chrome +
+        tally.critic_call_failed;
+      if (criticTotal > 0) {
+        process.stdout.write(`  critic decisions (per-claim):       ${criticTotal}\n`);
+        process.stdout.write(`    supports_section (admitted):      ${tally.supports_section}\n`);
+        process.stdout.write(`    frame_excluded:off_topic:         ${tally.off_topic}\n`);
+        process.stdout.write(`    frame_excluded:background_only:   ${tally.background_only}\n`);
+        process.stdout.write(`    frame_excluded:source_chrome:     ${tally.source_chrome}\n`);
+        if (tally.critic_call_failed > 0) {
+          process.stdout.write(`    critic_call_failed (admit):       ${tally.critic_call_failed}\n`);
+        }
+      }
       if (result.failures.length > 0) {
         process.stdout.write(`\nfailures:\n`);
         for (const f of result.failures) {

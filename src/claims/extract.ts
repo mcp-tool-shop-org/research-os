@@ -237,6 +237,20 @@ function buildClaim(args: {
   } = args;
   const idPart = EXTRACTOR_ID_PART[extractor];
   const claimId = `clm_${sourceId.replace(/^src_/, '')}_${idPart}_${index + 1}`;
+  // Phase 1b-b: the per-claim critic populates frame_exclusion_reason +
+  // frame_exclusion_rationale ONLY on excluded drafts. Admit them only when
+  // frame_excluded is true — accepting them on supports_section drafts would
+  // be a silent contradiction (admitted but with an exclusion reason).
+  const frameExcluded = draft.frame_excluded ?? false;
+  const exclusionExtras =
+    frameExcluded && draft.frame_exclusion_reason
+      ? {
+          frame_exclusion_reason: draft.frame_exclusion_reason,
+          ...(draft.frame_exclusion_rationale
+            ? { frame_exclusion_rationale: draft.frame_exclusion_rationale }
+            : {}),
+        }
+      : {};
   return ClaimSchema.parse({
     claim_id: claimId,
     section_id: sectionId,
@@ -252,7 +266,8 @@ function buildClaim(args: {
     // Phase 1 v0.8.0: propagate frame_alignment.on_topic === false from the
     // MCP envelope down to the persisted claim. Heuristic extractor never
     // sets this; default in the schema is false.
-    frame_excluded: draft.frame_excluded ?? false,
+    frame_excluded: frameExcluded,
+    ...exclusionExtras,
     extractor,
     extraction_method: extractionMethod,
     created_at: new Date().toISOString(),
@@ -321,6 +336,15 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     failures: [],
     modelFallbacks: [],
     framesExcluded: 0,
+    // Phase 1b-b: aggregate critic decisions across all sources. Always
+    // present; populated by MCPClaimExtractor.extract() per source.
+    criticTally: {
+      supports_section: 0,
+      off_topic: 0,
+      background_only: 0,
+      source_chrome: 0,
+      critic_call_failed: 0,
+    },
   };
 
   for (const sourceId of sourceIds) {
@@ -373,6 +397,14 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     }
     if (typeof result.framesExcluded === 'number' && result.framesExcluded > 0) {
       summary.framesExcluded += result.framesExcluded;
+    }
+    // Phase 1b-b: fold per-source critic tally into the pack-wide summary.
+    if (result.criticTally) {
+      summary.criticTally.supports_section += result.criticTally.supports_section;
+      summary.criticTally.off_topic += result.criticTally.off_topic;
+      summary.criticTally.background_only += result.criticTally.background_only;
+      summary.criticTally.source_chrome += result.criticTally.source_chrome;
+      summary.criticTally.critic_call_failed += result.criticTally.critic_call_failed;
     }
 
     const excerptIndex = buildExcerptIndex(ledger.excerpts);
@@ -435,6 +467,11 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     // section-report consumers can disclose them without re-reading run logs.
     model_fallbacks: summary.modelFallbacks,
     frames_excluded: summary.framesExcluded,
+    // Phase 1b-b v0.8.0 — per-claim critic decision counts for this section.
+    // Helps the operator (and audit-time consumers) see how many claims the
+    // extract-time topicality critic kept vs routed out, with the breakdown
+    // by exclusion label.
+    critic_tally: summary.criticTally,
     failures: summary.failures.map((f) => ({
       source_id: f.source_id,
       reason: f.reason,
