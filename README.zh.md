@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/version-0.7.0-blue" alt="version 0.7.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -90,7 +90,7 @@ research-os pack publish \
 
 **要查看一个实际的示例**，请参阅 `research-os-packs/research-os-spec/` 目录下的研究包——每个文件、每个记录、每个结论、每个冻结的指纹，都以只追加的日志形式存储在磁盘上。该研究包生成了 `docs/dogfood-proof.md`。
 
-**需要本地运行 [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp)**，用于 LLM 的提取、筛选、审查和发现。默认模型是 `hermes3:8b`；可以使用 `OLLAMA_INTERN_MODEL=<model>` 进行覆盖。如果 Ollama 不在默认的 `localhost:11434` 地址上，请设置 `OLLAMA_HOST`。
+**需要本地运行 [`ollama-intern-mcp@^2.4.0`](https://github.com/mcp-tool-shop-org/ollama-intern-mcp)**，用于LLM提取、初步评估、审查和发现。MCP服务器通过环境变量 `OLLAMA_INTERN_MCP_BIN` 或 PATH 环境变量来发现。默认模型是 `hermes3:8b`；可以使用 `OLLAMA_INTERN_MODEL=<model>` 覆盖该设置（或者在每次调用时使用 `--model <name>`）。如果Ollama没有安装在默认的 `localhost:11434` 上，请设置 `OLLAMA_HOST`。
 
 ## 16 条核心规则
 
@@ -182,7 +182,15 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
 
+## 新功能，版本 v0.8.0
+
+v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取主张，增加了对框架边界内的相关性的强制执行，将不相关的信息保留为排除项而不是可用的信息，并为需要修复的包中的符合条件的章节，增加了章节范围内的证据综合功能。
+
+请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 状态
+
+**v0.8.0 — 架构恢复 + 框架相关性** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.8.0`，发布日期：2026-05-12。v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取主张（此前 README 中声明了该依赖，但代码内部直接使用了 Ollama 的接口，绕过了该依赖，自 v0.1 版本以来一直存在这种情况，v0.8.0 修复了这个问题）。新增功能：MCP 客户端基础 (`OLLAMA_INTERN_MCP_BIN` 环境变量 + PATH 发现 + StdioClientTransport 生命周期)；通过 `ollama_extract` 和 4 标签模式（`supports_section` / `off_topic` / `background_only` / `source_chrome`）对每个主张的章节证据进行评估；新的 `ReviewDecision` 选项 `frame_excluded`（审查时跳过 LLM，对排除的主张生成 `ClaimReview`）；`ClaimSchema` 增加了 `frame_excluded` + `frame_exclusion_reason`（包含 4 个值，包括 `critic_unavailable`，用于表示系统状态错误）+ `frame_exclusion_rationale`；通过 `synth section <id>` 对需要修复的包中符合条件的章节，进行章节范围内的证据综合（证据引用索引：主张 ID → 断言 → 证据摘录 → 来源 URL，而不是叙述性文本）；门禁机制通过 `getEffectivePublisher` / `getEffectiveSourceType` 尊重来源卡覆盖信息（吸收了 v0.7.1 的目标）；`DEFAULT_WINDOW_CHARS` 默认值从 5000 更改为 3000（针对 `hermes3:8b` 在 `dev-rtx5080` 配置文件下的 8K 工作上下文进行了优化）；对评估器调用的软失败策略进行了反转（5 种失败模式中的任何一种，包括传输失败、解析失败、标签无效、缺少理由或超时，都默认设置为 `frame_excluded: true`，理由为 `critic_unavailable`，而不是直接拒绝）；推广语义：排除的主张不会阻止章节的推广；协同工作流程将 `frame_excluded` 作为独立的桶，与已接受、需要修复和已拒绝的主张分开。**需要 `ollama-intern-mcp@^2.4.0`**。1013/1013 个 vitest 测试通过（从 901 增加到 1013，增加了 112 个测试）。**所有四个冻结的包都与 v0.3.3 的基线完全一致（字节级别）**。**这不是 v1 版本** — v1 版本的开发工作仍在进行中；请参阅 [`docs/roadmap.md`](docs/roadmap.md)。请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 **v0.7.0 — 内部测试版本强化** — 已于2026年5月11日以 `@mcptoolshop/research-os@0.7.0` 的版本发布到 npm。 针对 v0.6.0 版本，进行了四阶段的内部测试（包括：错误/安全问题、主动增强稳定性、优化操作界面、完善界面设计）。 v0.7.0 版本包含以下强化改进：更安全的收集功能（针对每个 URL 采用 try/catch 机制，并在部分失败时保留正在处理的源 ID）；更具弹性的索引器（针对格式错误的 JSONL 文件，可以跳过并发出警告，针对每个记录/每个文件/每个部分）；结构化的错误恢复（12 个 `ResearchOSError` 子类，并提供参考手册链接）；进度反馈（通过 `--no-progress` 和 `--progress` 标志，自动检测终端环境，用于审查、收集、冲突映射和打包发布）；面向操作人员的可操作性改进（`pack publish --force` 命令的规范化和破坏性替换功能，已在 8 个方面进行了回归测试；修复了 `IndexNotBuiltError` 命令中的文本错误，并添加了命令文本注册测试；为 12 个 `ResearchOSError` 子类添加了错误参考手册链接）；供应链安全（CI 动作的 SHA 值固定，以及默认禁止读取文件内容；Dependabot 和 `github-actions` 生态系统覆盖）；新增了两个参考手册页面（`recovery.md` 和 `known-limitations.md`）；界面设计优化（规范化句子、重新排序侧边栏，并在破坏性操作处添加了警告提示）。 901 个 `vitest` 测试通过（从 713 个增加到 901 个，增加了 188 个测试）。 **所有四个冻结版本的打包文件都与 v0.3.3 版本的打包文件完全一致。** **这不是 v1 版本的发布** — v1 版本的准备工作仍在进行，详情请参见 [`docs/roadmap.md`](docs/roadmap.md) 和 [`docs/dogfood-swarm-proof.md`](docs/dogfood-swarm-proof.md)。 更多信息请参见 [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 

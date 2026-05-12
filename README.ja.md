@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/version-0.7.0-blue" alt="version 0.7.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -16,9 +16,9 @@
 
 # research-os
 
-`research-os`は、生成されたドキュメントを、検証可能な証拠のパッケージへと変換します。これにより、元のデータの信頼性を保ち、主張と分析を分離し、段階的な検証プロセスを強制し、レビュー担当者や免責に関する決定を記録し、主張が追跡・検証可能なパッケージとして公開されます。
+`research-os`は、生成されたドキュメントを、検証可能な証拠の集合として保存するツールです。これにより、元の情報源を保持し、主張と分析を分離し、段階的な検証プロセスを強制し、レビュー担当者および免責事項の決定を記録し、主張が追跡および検証可能なパッケージとして公開されます。
 
-このシステムは、モデルを無条件に信頼することを要求しません。むしろ、モデル、参照元、および分析が信頼に値するかどうかを判断するためのツールを提供します。
+このツールは、モデル自体を信頼することを要求しません。モデル、情報源、および分析が信頼に値するかどうかを判断するための仕組みを提供します。
 
 ## 概要
 
@@ -90,7 +90,7 @@ research-os pack publish \
 
 **具体的な使用例**については、`research-os-packs/research-os-spec/` にある「dogfood」と呼ばれるパッケージを参照してください。このパッケージには、すべてのファイル、すべての記録、すべての処理結果、すべての固定状態のフィンガープリントなどが、追記のみ可能なファイルとして保存されています。このパッケージによって、`docs/dogfood-proof.md` が生成されました。
 
-**LLM（大規模言語モデル）の抽出、トリアージ、レビュー、および発見には、ローカルで実行されている [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) が必要です。** デフォルトのモデルは `hermes3:8b` です。別のモデルを使用する場合は、`OLLAMA_INTERN_MODEL=<モデル名>` で指定してください。Ollamaがデフォルトの `localhost:11434` 以外の場所で実行されている場合は、`OLLAMA_HOST` 環境変数を設定してください。
+**ローカルで [`ollama-intern-mcp@^2.4.0`](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) が必要**。これは、LLMの抽出、分類、レビュー、および発見に使用されます。MCPサーバーは、`OLLAMA_INTERN_MCP_BIN`環境変数またはPATHから検出されます。デフォルトのモデルは `hermes3:8b` です。必要に応じて、`OLLAMA_INTERN_MODEL=<モデル名>` (または、コマンドラインオプション `--model <モデル名>`) で上書きできます。Ollamaがデフォルトの `localhost:11434` にない場合は、`OLLAMA_HOST` を設定してください。
 
 ## 16の重要な原則
 
@@ -182,9 +182,17 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **再現性のあるレビュー担当者プロファイル** — `research.yaml`の`review_profiles.<name>.reviewer_options`を使用して、`temperature`、`seed`、およびその他のOllamaのサンプリングパラメータを、本番環境のレビュープロセスにおけるすべての`OllamaInternReviewer`の構築に適用します。`hermes-two-pass-deterministic`プロファイルは、組み込みのサンプルとして提供されています。詳細は[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)と、[レビュー担当者キャリブレーションハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
 
+## v0.8.0 での変更点
+
+v0.8.0 は、アーキテクチャの改善を目的としたリリースです。`research-os` は、主張の抽出のためのローカル証拠処理基盤として、`ollama-intern-mcp@^2.4.0` を使用するようになりました。また、セクションの関連性をフレームに制限する機能を追加し、関連性のない証拠を「使用不可」として扱い、修正が必要なパッケージ内のセクションに対して、セクション範囲の証拠合成機能を追加しました。
+
+詳細については、[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
 ## ステータス
 
-**v0.7.0 — Dogfood Swarm Hardening（内部テストの強化）** — npmに`@mcptoolshop/research-os@0.7.0`として公開されました。2026年5月11日。v0.6.0のコードベースに対して、4段階の内部テスト（バグ/セキュリティ、積極的な耐性向上、オペレーターの使いやすさ向上、プレゼンテーションの改善）を実施しました。v0.7.0では、以下の強化が施されています。より安全なデータ収集（URLごとのtry/catchと、例外ごとのエラー処理による、部分的な失敗時のソースIDの保持）、堅牢なインデクサー（不正なJSONL形式のレコード/ファイル/セクションをスキップして警告）、構造化されたリカバリーエラー（12種類の`ResearchOSError`サブクラスと、それらに関するハンドブックへのリンク）、進捗状況のフィードバック（`--no-progress` / `--progress`フラグによるTTYの自動検出）、オペレーター向けの操作性の改善（`pack publish --force`コマンドによる、破壊的な置換処理の標準化と、8つの箇所での回帰テスト、`IndexNotBuiltError`コマンドのテキストの修正と、コマンドテキストのレジストリテストの追加、12種類の`ResearchOSError`サブクラスに対するハンドブックへのリンクの追加）、サプライチェーンのセキュリティ強化（CIアクションのSHAピンニングと、`permissions: contents: read`のデフォルト拒否、Dependabot /site + github-actionsによるエコシステム対応）、新しいハンドブックのページ2ページ（`recovery.md`、`known-limitations.md`）、プレゼンテーションの改善（標準的な文の回帰テスト、サイドバーの再配置、破壊的な操作に対する`:::caution`の注意喚起）。901/901のvitestテストが成功しました（713 → 901、+188テスト）。**すべての4つのfrozen packsが、v0.3.3のベースラインに対して、バイト単位で完全に一致します。** **これはv1のリリースではありません**。v1の準備作業は継続中です。[`docs/roadmap.md`](docs/roadmap.md)と[`docs/dogfood-swarm-proof.md`](docs/dogfood-swarm-proof.md)を参照してください。[`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md)と[CHANGELOG.md](CHANGELOG.md)も参照してください。
+**v0.8.0 — アーキテクチャの改善 + トピックの関連性のフレーム制限** — npm で `@mcptoolshop/research-os@0.8.0` として公開されました (2026-05-12)。v0.8.0 は、アーキテクチャの改善を目的としたリリースです。`research-os` は、主張の抽出のためのローカル証拠処理基盤として、`ollama-intern-mcp@^2.4.0` を使用するようになりました (以前はREADMEで依存関係が宣言されていましたが、コードはv0.1の初期バージョンから、それを回避する内部の直接Ollamaのスタブを使用しており、v0.8.0でその乖離を解消しました)。 以下の機能が追加されました。MCPクライアント基盤 (`OLLAMA_INTERN_MCP_BIN` 環境変数 + PATH検出 + StdioClientTransportライフサイクル); `ollama_extract` を使用した、各主張に対するセクション証拠の評価 (4つのラベル: `supports_section` / `off_topic` / `background_only` / `source_chrome`); 新しい `ReviewDecision` の `frame_excluded` (除外された主張に対してLLMの処理をスキップし、合成された `ClaimReview` を生成); `ClaimSchema` に `frame_excluded` + `frame_exclusion_reason` (システムの状態異常の場合に `critic_unavailable` を含む4つの値のenum) + `frame_exclusion_rationale` が追加; 修正が必要なパッケージ内の、ゲートの対象となるセクションに対して、セクション範囲の証拠合成機能 (証拠の参照インデックス: 主張ID → アサーション → 証拠の抜粋 → ソースURL — これは、記述的な文章ではありません); ゲートは、`getEffectivePublisher` / `getEffectiveSourceType` を使用した、ソースカードのオーバーライドレジスタを尊重します (v0.7.1 の目標を吸収)。`DEFAULT_WINDOW_CHARS` のデフォルト値が 5000 から 3000 に変更されました (dev-rtx5080 プロファイルにおける、8Kのコンテキストサイズを持つ `hermes3:8b` に最適化)。評価者の呼び出しに対する、ソフトフェイルポリシーが反転されました (5つの失敗モードのうちのいずれか — トランスポート / 解析 / 無効なラベル / 空の理由 / タイムアウト — の場合、デフォルトでは `frame_excluded: true` となり、理由として `critic_unavailable` が設定されます。ただし、正常な状態ではありません)。プロモーションのセマンティクス: `frame_excluded` の主張は、セクションのプロモーションをブロックしません。コワークハンドオフでは、`frame_excluded` が、受け入れられた/修正が必要な/拒否されたものとは別の、独自のバケットとして表示されます。**`ollama-intern-mcp@^2.4.0` が必要です。** 1013/1013 の vitest が成功しました (901 → 1013、+112 テスト)。**すべての4つの凍結されたパッケージが、v0.3.3 のベースラインに対して、バイト単位で完全に一致します。** **これは、v1 リリースではありません** — v1 のための作業は継続中です。詳細については、[`docs/roadmap.md`](docs/roadmap.md) を参照してください。詳細については、[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
+**v0.7.0 — Dogfood Swarm Hardening（内部テストの強化）** — npmに`@mcptoolshop/research-os@0.7.0`として公開されました。2026年5月11日。v0.6.0のコードベースに対して、4段階の内部テスト（バグ/セキュリティ、積極的な耐性向上、オペレーターの使いやすさ向上、プレゼンテーションの改善）を実施しました。v0.7.0では、以下の強化が施されています。より安全なデータ収集（URLごとのtry/catchと、例外ごとのエラー処理による、部分的な失敗時のソースIDの保持）、堅牢なインデクサー（不正なJSONL形式のレコード/ファイル/セクションをスキップして警告）、構造化されたリカバリーエラー（12種類の`ResearchOSError`サブクラスと、それらに関するハンドブックへのリンク）、進捗状況のフィードバック（`--no-progress` / `--progress`フラグによるTTYの自動検出）、オペレーター向けの操作性の改善（`pack publish --force`コマンドによる、破壊的な置換処理の標準化と、8つの箇所での回帰テスト、`IndexNotBuiltError`コマンドのテキストの修正と、コマンドテキストのレジストリテストの追加、12種類の`ResearchOSError`サブクラスに対するハンドブックへのリンクの追加）、サプライチェーンのセキュリティ強化（CIアクションのSHAピンニングと、`permissions: contents: read`のデフォルト拒否、Dependabot /site + github-actionsによるエコシステム対応）、新しいハンドブックのページ2ページ（`recovery.md`、`known-limitations.md`）、プレゼンテーションの改善（標準的な文の回帰テスト、サイドバーの再配置、破壊的な操作に対する`:::caution`の注意喚起）。901/901のvitestテストが成功しました（713 → 901、+188テスト）。**すべての4つのfrozen packsが、v0.3.3のベースラインに対して、バイト単位で完全に一致します。** **これはv1のリリースではありません**。v1の準備作業は継続中です。[`docs/roadmap.md`](docs/roadmap.md)と[`docs/swarm-hardening-proof.md`](docs/swarm-hardening-proof.md)を参照してください。[`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md)と[CHANGELOG.md](CHANGELOG.md)も参照してください。
 
 **v0.6.0** — npmに`@mcptoolshop/research-os@0.6.0`として公開されました。2026年5月10日。v0.6.0では、実験6が、レビュー担当者の信頼性に関する証拠とともに完了しました。これにより、research-osは、再現可能で、帰属可能な、標準的なモデルのベースラインを生成できるようになりました。変更点：本番環境のレビュープロセスにおける再現性のあるレビュー担当者オプション（`review_profiles.<name>.reviewer_options`を`research.yaml`に追加）、既存のv0.3.3以前のフローズンアーティファクトに対するゲートスキーマの互換性（F-53）、レビュー出力にサンプリング条件が直接`review.json`と`review.md`に表示されるように変更（F-54）、標準的な再現性のある集計記録がコミットされました（`hermes-two-pass-deterministic`、`temperature:0, seed:7`）。**どのプロファイルも`trusted_baseline`として認められていません。** `hermes-two-pass-deterministic=failed`（判断の語彙における構造的なモデルの能力ギャップ。ばらつきの問題ではない）。**Hermesは`trusted_baseline`として昇格しません。** 重要なのは、メカニズムであり、単に合格する記録ではありません。ゲート、フリーズ、または合成法の変更はありません。すべてのフローズンパックが、バイト単位で同一であることを確認しました。713/713のvitestが合格しました。詳細は[CHANGELOG.md](CHANGELOG.md)と[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)を参照してください。
 

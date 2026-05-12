@@ -2,14 +2,16 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased] — v0.8.0
+## [Unreleased]
 
-v0.8.0 reconnects research-os to its declared local-LLM substrate
-(`ollama-intern-mcp`), enforces section topicality with an extraction-time
-critic, and produces section-scoped evidence-citation briefs from the
-resulting accepted claims. Pack-level narrative synthesis remains gated on
-whole-pack synthesis-readiness; this release does not ship narrative
-drafting.
+## [0.8.0] - 2026-05-12
+
+v0.8.0 is an architecture recovery release: research-os now uses
+`ollama-intern-mcp@^2.4.0` as the local evidence-worker substrate for
+claim extraction, adds frame-bound section relevance enforcement,
+preserves off-topic evidence as excluded rather than usable, and adds
+section-scoped evidence synthesis for gate-eligible sections in
+repair-required packs.
 
 ### Added
 
