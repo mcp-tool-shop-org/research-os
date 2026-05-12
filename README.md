@@ -90,7 +90,7 @@ research-os pack publish \
 
 **For a real worked example**, see the dogfood pack at `research-os-packs/research-os-spec/` — every artifact, every receipt, every disposition, every freeze fingerprint, all on disk in append-only ledgers. That pack is what produced `docs/dogfood-proof.md`.
 
-**Requires [ollama-intern-mcp](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. Default model is `hermes3:8b`; override with `OLLAMA_INTERN_MODEL=<model>`. Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
+**Requires [`ollama-intern-mcp@^2.4.0`](https://github.com/mcp-tool-shop-org/ollama-intern-mcp) running locally** for LLM extraction, triage, review, and discovery. The MCP server is discovered via the `OLLAMA_INTERN_MCP_BIN` env var or PATH. Default model is `hermes3:8b`; override with `OLLAMA_INTERN_MODEL=<model>` (or per-call `--model <name>`). Set `OLLAMA_HOST` if Ollama is not on the default `localhost:11434`.
 
 ## The 16 load-bearing laws
 
@@ -202,6 +202,10 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 `hermes-two-pass-deterministic` profile ships as a built-in example. See
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) and the
 [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
+## New in v0.8.0
+
+**v0.8.0 — architecture recovery + frame-bound topicality enforcement.** research-os now consumes its declared substrate `ollama-intern-mcp@^2.4.0` over MCP (previously bypassed via internal direct-Ollama stubs). An extraction-time critic via `ollama_extract` enforces section topicality: claims judged off-topic for the section purpose are preserved with `frame_excluded: true` and a structured reason, kept out of synthesis evidence but visible to operators. Section-level synthesis produces an evidence-citation brief (claim ID → assertion → evidence excerpt → source URL), not narrative prose; pack-level narrative synthesis remains gated on whole-pack `synthesis_ready` state. See [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Status
 

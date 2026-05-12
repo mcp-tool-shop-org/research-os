@@ -333,6 +333,7 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     claimsRejectedScopeMissing: 0,
     claimsRejectedExtractorParaphrase: 0,
     claimIds: [],
+    claimsAdmittedPersisted: 0,
     failures: [],
     modelFallbacks: [],
     framesExcluded: 0,
@@ -442,6 +443,12 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       existingIds.add(claim.claim_id);
       summary.claimsAdded += 1;
       summary.claimIds.push(claim.claim_id);
+      // Persisted-on-disk admitted count: matches grep of frame_excluded:false
+      // in claims.jsonl after the run. The critic tally counts decisions on
+      // drafts; this counts admitted claims that survived persistence + dedup.
+      if (claim.frame_excluded === false) {
+        summary.claimsAdmittedPersisted += 1;
+      }
     }
   }
 
@@ -472,6 +479,10 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     // extract-time topicality critic kept vs routed out, with the breakdown
     // by exclusion label.
     critic_tally: summary.criticTally,
+    // Phase 1b-b v0.8.0 — count of claims persisted with frame_excluded:false.
+    // Reconciles operator confusion when supports_section critic decisions
+    // exceed the post-persistence admitted count due to rejection or dedup.
+    claims_admitted_persisted: summary.claimsAdmittedPersisted,
     failures: summary.failures.map((f) => ({
       source_id: f.source_id,
       reason: f.reason,

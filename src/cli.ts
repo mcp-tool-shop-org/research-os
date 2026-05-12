@@ -457,13 +457,28 @@ claimCmd
         tally.critic_call_failed;
       if (criticTotal > 0) {
         process.stdout.write(`  critic decisions (per-claim):       ${criticTotal}\n`);
-        process.stdout.write(`    supports_section (admitted):      ${tally.supports_section}\n`);
+        // The critic tally counts decisions on every draft seen, BEFORE
+        // persistence. A draft critic'd as supports_section can still be
+        // rejected (ungrounded / excerpt_id_missing / excerpt_id_malformed)
+        // or deduped before it reaches claims.jsonl, so this label is
+        // pre-persist. The persisted admitted count is printed below.
+        process.stdout.write(`    supports_section (pre-persist):   ${tally.supports_section}\n`);
         process.stdout.write(`    frame_excluded:off_topic:         ${tally.off_topic}\n`);
         process.stdout.write(`    frame_excluded:background_only:   ${tally.background_only}\n`);
         process.stdout.write(`    frame_excluded:source_chrome:     ${tally.source_chrome}\n`);
         if (tally.critic_call_failed > 0) {
-          process.stdout.write(`    critic_call_failed (admit):       ${tally.critic_call_failed}\n`);
+          // v0.8.0 phase 1b-b: critic-unavailable now defaults to
+          // frame_excluded:true (conservative exclusion), NOT admit. The
+          // label below matches the actual shipped soft-fail-inversion
+          // behavior; older builds called this "(admit)" before the fix.
+          process.stdout.write(`    critic_call_failed (conservatively excluded): ${tally.critic_call_failed}\n`);
         }
+        // Reconciliation line — what actually landed in claims.jsonl with
+        // frame_excluded:false. Matches `grep -c '"frame_excluded":false'
+        // claims.jsonl` after the run completes. May be lower than
+        // supports_section (pre-persist) above when drafts were rejected
+        // during persistence or deduped against an earlier extraction.
+        process.stdout.write(`  admitted (persisted on disk):       ${result.claimsAdmittedPersisted}\n`);
       }
       if (result.failures.length > 0) {
         process.stdout.write(`\nfailures:\n`);

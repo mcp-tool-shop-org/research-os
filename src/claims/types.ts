@@ -144,6 +144,14 @@ export interface ExtractClaimsSummary {
   claimsRejectedScopeMissing: number;
   claimsRejectedExtractorParaphrase: number;
   claimIds: string[];
+  // Phase 1b-b v0.8.0 — count of claims persisted to claims.jsonl with
+  // frame_excluded:false. Sourced from the actual persistence loop, NOT the
+  // critic tally. Diverges from criticTally.supports_section when a draft is
+  // critic'd as supports_section but later rejected (ungrounded /
+  // excerpt_id_missing / excerpt_id_malformed) or deduped against an existing
+  // claim. Operator-trust contract: this matches `grep -c '"frame_excluded":false'
+  // claims.jsonl` after the run completes.
+  claimsAdmittedPersisted: number;
   failures: ExtractClaimsFailure[];
   // Phase 1 v0.8.0 — populated only when the MCP-backed extractor encounters
   // model substitution or off-topic windows. Empty otherwise; legacy callers

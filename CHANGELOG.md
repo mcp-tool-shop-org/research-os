@@ -2,7 +2,98 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased]
+## [Unreleased] — v0.8.0
+
+v0.8.0 reconnects research-os to its declared local-LLM substrate
+(`ollama-intern-mcp`), enforces section topicality with an extraction-time
+critic, and produces section-scoped evidence-citation briefs from the
+resulting accepted claims. Pack-level narrative synthesis remains gated on
+whole-pack synthesis-readiness; this release does not ship narrative
+drafting.
+
+### Added
+
+- **MCP client substrate.** Binary discovery (`OLLAMA_INTERN_MCP_BIN` env or
+  PATH) and `StdioClientTransport` wiring let research-os consume
+  `ollama-intern-mcp@^2.4.0` over MCP. Previously, internal direct-Ollama
+  stubs bypassed the declared MCP substrate.
+- **Per-claim section-evidence critic** via `ollama_extract`. Every draft
+  claim is judged against the section purpose at extraction time. The critic
+  has final say on admission; extraction's `frame_alignment` is telemetry
+  only.
+- **`frame_excluded` review decision** in the `ReviewDecision` union.
+  Claims judged off-topic for the section purpose are preserved with
+  `frame_excluded: true` so operators can audit what was withheld; they are
+  kept out of synthesis evidence and do not block section promotion.
+- **`frame_exclusion_reason` enum** with four values: `off_topic`,
+  `background_only`, `source_chrome`, `critic_unavailable`. The model emits
+  the first three; `critic_unavailable` is a system-state label.
+- **`frame_exclusion_rationale`** — structured natural-language explanation
+  stamped on every excluded claim. Visible on the persisted claim and to
+  the reviewer / cowork surfaces.
+- **`critic_unavailable` system-state reason** — covers transport failure,
+  parse failure, invalid label, empty rationale, and timeout under one
+  reason so the soft-fail audit trail is uniform.
+
+### Changed
+
+- **Direct-Ollama call paths replaced by MCP-via-`ollama-intern-mcp@^2.4.0`.**
+  All LLM consumption in extraction, triage, review, and discovery now flows
+  through the MCP client.
+- **`DEFAULT_WINDOW_CHARS` reduced from 5000 → 3000.** Sized for
+  `hermes3:8b` at the workhorse-tier 8K context window. The smaller window
+  is the regression-safe default; operators wanting larger windows configure
+  per-call.
+- **Section-level synthesis output is an evidence-citation index**, not
+  narrative prose: `claim_id → assertion → evidence_excerpt → source_id`.
+  Operators (or Cowork) author narrative against accepted claim IDs.
+- **Cowork handoff surfaces `frame_excluded` as its own bucket**, separate
+  from accepted / repair / rejected. Operators see what the topicality
+  critic withheld without confusing it with reviewer rejection.
+
+### Fixed
+
+- **Promotion semantics — `frame_excluded` claims no longer block section
+  promotion.** A section whose only failing claims are frame-excluded is
+  eligible for promotion; promotion gates count admitted claims only.
+- **Soft-fail policy inverted — critic-unavailable now defaults to
+  `frame_excluded: true` (conservative exclusion), not admission.** Live
+  evidence on 2026-05-12 showed the prior soft-fail-admit behavior was
+  admitting chrome content as on-topic high-confidence claims purely
+  because the critic call failed mid-page. The safe default when topicality
+  cannot be determined is to exclude.
+- **Effective-publisher gate honors source-card overrides for
+  `min_independent_publishers`** — the override ledger is now consulted in
+  the gate's publisher-diversity check.
+- **`claim extract` CLI summary text reconciled with persisted state.** The
+  `supports_section (admitted)` label was a pre-persist critic tally that
+  diverged from the actual `claims.jsonl` admitted count after dedup /
+  rejection. The summary now prints the critic decision as
+  `supports_section (pre-persist)` and adds a separate
+  `admitted (persisted on disk)` line whose source is the persistence
+  write loop. The stale `critic_call_failed (admit)` label is renamed to
+  `critic_call_failed (conservatively excluded)` to match the
+  soft-fail-inversion behavior.
+
+### Architecture recovery
+
+The research-os README has declared `ollama-intern-mcp` as a runtime
+requirement since the v0.1 scaffold (2026-05-06), but the code carried
+internal direct-Ollama stubs that bypassed the MCP. v0.8.0 closes that
+drift by reconnecting to the declared substrate. The framing is
+deliberately not "new LLM integration"; it is "the declared integration is
+now actually wired".
+
+### Out of scope (deliberately)
+
+- Pack-level narrative prose synthesis. Section-level synth is
+  evidence-citation, not narrative. Pack-level narrative drafting remains a
+  future release.
+- 33→20 synth-layer claim filter mystery — observed on the fresh pack at
+  `local-first-vs-cloud-research`; deferred to v0.8.x backlog.
+- Calibration receipt re-baselining for the MCP path — documented,
+  deferred. No `trusted_baseline` reviewer profile is admitted at v0.8.0.
+- Window-paging-aware extraction — deferred to v0.9.x backlog.
 
 ### Section-level synthesis + gate effective-publisher
 
