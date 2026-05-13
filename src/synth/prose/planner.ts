@@ -16,7 +16,7 @@ import {
   renderPlannerPrompt,
   PLANNER_ROLES_ENUM,
 } from './prompt.js';
-import type { AcceptedClaimInput, PlannerAssignment, PlannerResult, ProseCallToolClient, ProseRole } from './types.js';
+import type { AcceptedClaimInput, PlannerAssignment, PlannerResult, PlannerRole, ProseCallToolClient } from './types.js';
 
 // Maximum claims per planner MCP call. Keeps each call well within the
 // workhorse tier's 20s budget for hermes3:8b with 8K context.
@@ -31,7 +31,7 @@ interface MCPEnvelope {
   };
 }
 
-function isProseRole(v: unknown): v is ProseRole {
+function isPlannerRole(v: unknown): v is PlannerRole {
   return typeof v === 'string' && (PLANNER_ROLES_ENUM as readonly string[]).includes(v);
 }
 
@@ -110,12 +110,17 @@ async function runPlannerChunk(
   for (const item of rawAssignments) {
     if (!item || typeof item !== 'object') continue;
     const obj = item as Record<string, unknown>;
-    const cid = typeof obj.claim_id === 'string' ? obj.claim_id : null;
-    const role = isProseRole(obj.role) ? obj.role : null;
+    const cid = typeof obj.claim_id === 'string' ? obj.claim_id.trim() : null;
+    const role = isPlannerRole(obj.role) ? obj.role : null;
     if (!cid || !role) continue;
     if (seenIds.has(cid)) continue;
+    // role_rationale is required; reject assignment if empty or missing.
+    const rationale = typeof obj.role_rationale === 'string' ? obj.role_rationale.trim() : '';
+    if (rationale.length === 0) {
+      return { ok: false, error: `claim ${cid} is missing role_rationale` };
+    }
     seenIds.add(cid);
-    assignments.push({ claim_id: cid, role });
+    assignments.push({ claim_id: cid, role, role_rationale: rationale });
   }
 
   return { ok: true, assignments };
@@ -156,7 +161,11 @@ export async function runPlanner(
   // Fill in any claims the model omitted — default to 'evidence'.
   for (const c of claims) {
     if (!seenIds.has(c.claim_id)) {
-      allAssignments.push({ claim_id: c.claim_id, role: 'evidence' });
+      allAssignments.push({
+        claim_id: c.claim_id,
+        role: 'evidence',
+        role_rationale: 'Not assigned by planner; defaulted to evidence role.',
+      });
     }
   }
 

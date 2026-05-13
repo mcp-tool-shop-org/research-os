@@ -32,11 +32,17 @@ function makeFakeClient(): ProseCallToolClient {
       const text = typeof args.text === 'string' ? args.text : '';
 
       // Planner: extract claim IDs from the text, assign all to 'evidence'.
-      if (text.includes('Assign each') || text.includes('assign each')) {
+      if (text.includes('Assign each') || text.includes('assign each') || text.includes('Admission rule')) {
         // Extract claim IDs from the text (format: "clm_... | asserts")
-        const idPattern = /clm_[a-f0-9_]+/g;
+        const idPattern = /clm_\w+/g;
         const ids = Array.from(new Set(text.match(idPattern) ?? []));
-        const assignments = ids.map((id) => ({ claim_id: id, role: 'evidence' }));
+        const assignments = ids.map((id, i) => ({
+          claim_id: id,
+          role: i === 0 ? 'answer' : 'evidence',
+          role_rationale: i === 0
+            ? 'directly answers the section purpose'
+            : 'provides supporting evidence for the section purpose',
+        }));
         return {
           content: [{
             type: 'text',

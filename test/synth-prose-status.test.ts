@@ -28,13 +28,24 @@ function makeFakeClient(): ProseCallToolClient {
     async callTool(params) {
       const args = params.arguments as Record<string, unknown>;
       const text = typeof args.text === 'string' ? args.text : '';
-      if (text.includes('Assign each') || text.includes('assign each')) {
-        const ids = Array.from(new Set((text.match(/clm_[a-f0-9_]+/g) ?? [])));
+      if (text.includes('Assign each') || text.includes('assign each') || text.includes('Admission rule')) {
+        const ids = Array.from(new Set((text.match(/clm_\w+/g) ?? [])));
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
-              result: { ok: true, data: { assignments: ids.map((id) => ({ claim_id: id, role: 'evidence' })) } },
+              result: {
+                ok: true,
+                data: {
+                  assignments: ids.map((id, i) => ({
+                    claim_id: id,
+                    role: i === 0 ? 'answer' : 'evidence',
+                    role_rationale: i === 0
+                      ? 'directly answers the section purpose'
+                      : 'provides supporting evidence for the section purpose',
+                  })),
+                },
+              },
             }),
           }],
         };

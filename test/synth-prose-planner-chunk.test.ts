@@ -46,7 +46,11 @@ function makeCapturingClient(): {
       claimIdsPerCall.push(ids);
 
       // Return valid assignments for the claims we see.
-      const assignments = ids.map((id) => ({ claim_id: id, role: 'evidence' as const }));
+      const assignments = ids.map((id, i) => ({
+        claim_id: id,
+        role: i === 0 ? 'answer' as const : 'evidence' as const,
+        role_rationale: i === 0 ? 'directly answers the section purpose' : 'provides supporting evidence',
+      }));
       return {
         content: [{
           type: 'text',
@@ -143,7 +147,7 @@ describe('Shape A: planner chunks large claim lists (Slice 1b regression)', () =
         return {
           content: [{
             type: 'text',
-            text: JSON.stringify({ result: { ok: true, data: { assignments: ids.map((id) => ({ claim_id: id, role: 'evidence' })) } } }),
+            text: JSON.stringify({ result: { ok: true, data: { assignments: ids.map((id, i) => ({ claim_id: id, role: i === 0 ? 'answer' : 'evidence', role_rationale: i === 0 ? 'answers the purpose' : 'supporting evidence' })) } } }),
           }],
         };
       },

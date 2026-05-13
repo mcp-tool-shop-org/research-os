@@ -9,6 +9,9 @@ export const PROSE_ROLES = [
 
 export type ProseRole = (typeof PROSE_ROLES)[number];
 
+// Planner-only role: 'unused' means accepted but does not help answer this section purpose.
+export type PlannerRole = ProseRole | 'unused';
+
 export const VERIFIER_DECISIONS = [
   'faithful',
   'unsupported_connective',
@@ -19,12 +22,31 @@ export type VerifierDecision = (typeof VERIFIER_DECISIONS)[number];
 
 export interface PlannerAssignment {
   claim_id: string;
-  role: ProseRole;
+  role: PlannerRole;
+  // One-sentence explanation of how this claim helps (or fails to help) answer the section purpose.
+  role_rationale: string;
 }
 
 export type PlannerResult =
   | { ok: true; assignments: PlannerAssignment[] }
   | { ok: false; error: string };
+
+// Disclosure record for an accepted claim the planner could not map to the section purpose.
+export interface UnusedClaimDisclosure {
+  claim_id: string;
+  source_card_ids: string[];
+  role_rationale: string;
+}
+
+// Structured error for the no-answer-cluster failure mode (returned when no claim earns role=answer).
+export interface ProseNoAnswerClusterError {
+  code: 'no_answer_cluster';
+  message: string;
+  accepted_claim_count: number;
+  unused_count: number;
+  section_purpose: string;
+  unused_claims: UnusedClaimDisclosure[];
+}
 
 export type DraftResult =
   | { ok: true; paragraph: string }
@@ -52,6 +74,7 @@ export interface DraftedParagraph {
 export interface ProseDisclosures {
   waivers: Array<{ waiver_id: string; reason: string }>;
   thin_evidence_paragraphs: string[];
+  unused_claims: UnusedClaimDisclosure[];
 }
 
 export interface ProseGenerator {
@@ -115,4 +138,4 @@ export interface ProseRunInput {
 
 export type ProseRunResult =
   | { ok: true; block: ProseBlock }
-  | { ok: false; error: string };
+  | { ok: false; error: string; noAnswerCluster?: ProseNoAnswerClusterError };

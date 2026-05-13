@@ -39,8 +39,8 @@ import { RESEARCH_OS_VERSION } from '../index.js';
 import { MCPClientHandle } from '../mcp/client.js';
 
 import { runProseSynthesis } from './prose/run.js';
-import { renderSectionSynthesisMarkdown } from './prose/markdown.js';
-import type { AcceptedClaimInput, ProseCallToolClient, SourceCardMeta, WaiverMeta } from './prose/types.js';
+import { renderSectionSynthesisMarkdown, renderNoAnswerClusterMarker } from './prose/markdown.js';
+import type { AcceptedClaimInput, ProseCallToolClient, ProseNoAnswerClusterError, SourceCardMeta, WaiverMeta } from './prose/types.js';
 import type { SectionSynthesisOptions, SectionSynthesisSummary } from './types.js';
 
 type SectionState = ReturnType<typeof CoworkHandoffPayloadSchema.parse>['sections'][number];
@@ -374,6 +374,7 @@ export async function sectionSynthesis(
   let proseGenerated = false;
   let proseMarkdownPath: string | null = null;
   let proseError: string | null = null;
+  let noAnswerCluster: ProseNoAnswerClusterError | undefined;
 
   // Resolve the MCP client. Use injected client (tests) or spawn MCPClientHandle
   // only when options.spawnMcpClient === true (CLI path). Tests that predate
@@ -430,6 +431,15 @@ export async function sectionSynthesis(
         proseGenerated = true;
       } else {
         proseError = proseResult.error;
+        noAnswerCluster = proseResult.noAnswerCluster;
+        if (noAnswerCluster) {
+          // Write structured error to JSON so operators can inspect the planner rationale.
+          await writeFile(
+            jsonPath,
+            JSON.stringify({ ...manifest, proseError: noAnswerCluster }, null, 2),
+            'utf8',
+          );
+        }
       }
     } catch (err) {
       proseError = err instanceof Error ? err.message : 'prose synthesis threw unexpectedly';
@@ -442,14 +452,19 @@ export async function sectionSynthesis(
 
   // Write a failure artifact so the operator knows prose was attempted.
   if (!proseGenerated) {
-    const errorMsg = proseError ?? 'unknown error';
-    const failMd = [
-      '> **Status:** generation_failed',
-      `> **Error:** ${errorMsg}`,
-      '>',
-      '> Prose synthesis did not complete. Consult `section-brief.md` for the evidence index.',
-      '',
-    ].join('\n');
+    let failMd: string;
+    if (noAnswerCluster) {
+      failMd = renderNoAnswerClusterMarker(noAnswerCluster, manifest.section_purpose);
+    } else {
+      const errorMsg = proseError ?? 'unknown error';
+      failMd = [
+        '> **Status:** generation_failed',
+        `> **Error:** ${errorMsg}`,
+        '>',
+        '> Prose synthesis did not complete. Consult `section-brief.md` for the evidence index.',
+        '',
+      ].join('\n');
+    }
     await writeFile(proseMdPath, failMd, 'utf8');
     proseMarkdownPath = proseMdPath;
   }

@@ -75,13 +75,16 @@ function makeFakeClient(): ProseCallToolClient {
       const text = typeof args.text === 'string' ? args.text : '';
 
       // Planner: extract accepted claim IDs from the text and assign roles.
-      if (text.includes('Assign each') || text.includes('assign each')) {
-        const matches = text.match(/clm_[a-f0-9_]+/g) ?? [];
+      if (text.includes('Assign each') || text.includes('Admission rule')) {
+        const matches = text.match(/clm_\w+/g) ?? [];
         const ids = Array.from(new Set(matches)).filter((id) => ACCEPTED_CLAIM_ID_SET.has(id));
         const ROLE_CYCLE = ['answer', 'evidence', 'evidence', 'qualifier', 'evidence', 'caveat', 'evidence', 'implication'] as const;
         const assignments = ids.map((id, i) => ({
           claim_id: id,
           role: ROLE_CYCLE[i % ROLE_CYCLE.length],
+          role_rationale: i === 0
+            ? 'directly answers the evidence custody section purpose'
+            : 'provides supporting evidence or context for the section purpose',
         }));
         return {
           content: [{

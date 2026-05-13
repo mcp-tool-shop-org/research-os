@@ -34,6 +34,7 @@ export const PLANNER_ROLES_ENUM = [
   'caveat',
   'implication',
   'thin_evidence',
+  'unused',
 ] as const;
 
 // ollama_extract rejects top-level JSON arrays (its parse step requires an object).
@@ -48,8 +49,9 @@ export const PLANNER_RESULT_SCHEMA: Record<string, unknown> = {
         properties: {
           claim_id: { type: 'string' },
           role: { type: 'string', enum: [...PLANNER_ROLES_ENUM] },
+          role_rationale: { type: 'string', minLength: 1 },
         },
-        required: ['claim_id', 'role'],
+        required: ['claim_id', 'role', 'role_rationale'],
         additionalProperties: false,
       },
     },
@@ -66,13 +68,24 @@ export function renderPlannerPrompt(
   lines.push('Section purpose:');
   lines.push(sectionPurpose);
   lines.push('');
+  lines.push('Admission rule (read this before assigning roles):');
+  lines.push('accepted_for_synthesis means a claim passed extraction, frame-bound relevance review, and gate');
+  lines.push('scrutiny — it does NOT mean it helps answer THIS section\'s specific purpose. For each claim,');
+  lines.push('ask: "Does this claim help answer the section purpose?" If yes → assign a prose role. If the');
+  lines.push('claim is on-topic for its source but not for this section\'s question → assign role=unused.');
+  lines.push('');
   lines.push('Assign each of the following accepted claims to exactly one role:');
-  lines.push('- answer: directly answers the section purpose');
+  lines.push('- answer: DIRECTLY answers the section purpose (reserve for claims that address the question head-on)');
   lines.push('- evidence: provides facts or data that support the answer');
   lines.push('- qualifier: scopes or qualifies the answer (conditions, caveats about scope)');
   lines.push('- caveat: notes limitations, counterpoints, or known failure modes');
   lines.push('- implication: points to downstream consequences or recommended actions');
-  lines.push('- thin_evidence: accepted but weak; use ONLY when confidence is low and the claim is not directly answering the purpose');
+  lines.push('- thin_evidence: accepted but weak; use ONLY when confidence is low and not directly answering');
+  lines.push('- unused: claim is accepted but does NOT help answer this section purpose — assign unused when');
+  lines.push('  the claim content is unrelated to what the section purpose asks, even if the claim is true');
+  lines.push('');
+  lines.push('If no claim directly answers the section purpose, leave the answer slot empty — do NOT promote');
+  lines.push('a tangential claim to answer just to fill it.');
   lines.push('');
   lines.push('Claims (id | asserts | scope | not):');
   for (const c of claims) {
@@ -81,13 +94,17 @@ export function renderPlannerPrompt(
     lines.push(`${c.claim_id} | ${c.asserts} | scope: ${scopeStr} | not: ${notStr}`);
   }
   lines.push('');
-  lines.push('Return {"assignments": [...]} where every claim_id appears exactly once, each with its assigned role.');
-  lines.push('Every claim must be assigned. Do not omit any claim_id.');
+  lines.push('Return {"assignments": [...]} where every claim_id appears exactly once.');
+  lines.push('Each assignment MUST include: claim_id, role, and role_rationale.');
+  lines.push('role_rationale is REQUIRED — provide a one-sentence explanation of why this claim was assigned');
+  lines.push('this role relative to the section purpose. Empty rationale is not accepted.');
   return lines.join('\n');
 }
 
 export const PLANNER_HINT =
-  'Assign every claim to exactly one role from the enum. Return {"assignments":[...]} where the array contains one entry per claim — every claim_id must appear exactly once.';
+  'Assign every claim to one role. Each entry needs claim_id, role, and role_rationale (required, non-empty). ' +
+  'Use role=unused for accepted claims that do not help answer the section purpose. ' +
+  'Return {"assignments":[...]} with one entry per claim.';
 
 // ── Drafter ───────────────────────────────────────────────────────────────────
 // One call per role cluster: generate one readable paragraph FROM claim text.
@@ -212,4 +229,4 @@ export const VERIFIER_HINT =
   'Check whether the paragraph is fully supported by the listed claims. ' +
   'Return faithful, unsupported_connective, or omits_critical_qualifier, plus a one-sentence rationale.';
 
-export const PROSE_PROMPT_VERSION = 'section-prose-v2';
+export const PROSE_PROMPT_VERSION = 'section-prose-v3';

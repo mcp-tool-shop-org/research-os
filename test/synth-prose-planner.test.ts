@@ -82,6 +82,7 @@ describe('runPlanner', () => {
       claims.map((c, i) => ({
         claim_id: c.claim_id,
         role: PLANNER_ROLES_ENUM[i % PLANNER_ROLES_ENUM.length],
+        role_rationale: `fixture rationale for claim ${i + 1}`,
       })),
     );
     const result = await runPlanner(makeClient(response), 'section purpose', claims);
@@ -95,7 +96,7 @@ describe('runPlanner', () => {
   it('fills in missing claims with role=evidence when model omits them', async () => {
     const claims = makeClaims(3);
     // Model only returns assignment for the first claim.
-    const partial = [{ claim_id: claims[0]!.claim_id, role: 'answer' }];
+    const partial = [{ claim_id: claims[0]!.claim_id, role: 'answer', role_rationale: 'directly answers the purpose' }];
     const result = await runPlanner(makeClient(envelopeOk(partial)), 'purpose', claims);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -107,7 +108,7 @@ describe('runPlanner', () => {
   it('uses ollama_extract as the tool name', async () => {
     const called: string[] = [];
     const claims = makeClaims(1);
-    const response = envelopeOk([{ claim_id: claims[0]!.claim_id, role: 'answer' }]);
+    const response = envelopeOk([{ claim_id: claims[0]!.claim_id, role: 'answer', role_rationale: 'test rationale' }]);
     await runPlanner(makeClient(response, called), 'purpose', claims);
     expect(called).toContain('ollama_extract');
   });
@@ -139,8 +140,8 @@ describe('runPlanner', () => {
   it('skips items with unknown roles instead of crashing', async () => {
     const claims = makeClaims(2);
     const response = envelopeOk([
-      { claim_id: claims[0]!.claim_id, role: 'answer' },
-      { claim_id: claims[1]!.claim_id, role: 'not_a_real_role' }, // invalid
+      { claim_id: claims[0]!.claim_id, role: 'answer', role_rationale: 'directly answers the purpose' },
+      { claim_id: claims[1]!.claim_id, role: 'not_a_real_role', role_rationale: 'invalid role' }, // invalid
     ]);
     const result = await runPlanner(makeClient(response), 'purpose', claims);
     expect(result.ok).toBe(true);
@@ -149,5 +150,24 @@ describe('runPlanner', () => {
     const byId = new Map(result.assignments.map((a) => [a.claim_id, a.role]));
     expect(byId.get(claims[0]!.claim_id)).toBe('answer');
     expect(byId.get(claims[1]!.claim_id)).toBe('evidence');
+  });
+
+  it('returns ok:false when role_rationale is empty', async () => {
+    const claims = makeClaims(1);
+    const response = envelopeOk([{ claim_id: claims[0]!.claim_id, role: 'answer', role_rationale: '   ' }]);
+    const result = await runPlanner(makeClient(response), 'purpose', claims);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/role_rationale/);
+  });
+
+  it('fills in missing claims preserves role_rationale on returned assignments', async () => {
+    const claims = makeClaims(2);
+    const partial = [{ claim_id: claims[0]!.claim_id, role: 'answer', role_rationale: 'answers the purpose' }];
+    const result = await runPlanner(makeClient(envelopeOk(partial)), 'purpose', claims);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const byId = new Map(result.assignments.map((a) => [a.claim_id, a]));
+    expect(byId.get(claims[0]!.claim_id)?.role_rationale).toBe('answers the purpose');
+    expect(typeof byId.get(claims[1]!.claim_id)?.role_rationale).toBe('string');
   });
 });

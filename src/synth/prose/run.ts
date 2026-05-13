@@ -20,13 +20,16 @@ import { PROSE_PROMPT_VERSION, PLANNER_ROLES_ENUM } from './prompt.js';
 import type {
   AcceptedClaimInput,
   DraftedParagraph,
+  PlannerRole,
   ProseBlock,
   ProseCallToolClient,
+  ProseNoAnswerClusterError,
   ProseRole,
   ProseRunInput,
   ProseRunResult,
   SourceCardMeta,
   SupportBundle,
+  UnusedClaimDisclosure,
   WaiverMeta,
 } from './types.js';
 
@@ -100,15 +103,52 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
     return { ok: false, error: `planner failed: ${plannerResult.error}` };
   }
 
-  // Build role buckets from planner assignments.
-  const roleMap = new Map<string, ProseRole>();
-  for (const a of plannerResult.assignments) roleMap.set(a.claim_id, a.role);
+  // Build role and rationale maps from planner assignments.
+  const roleMap = new Map<string, PlannerRole>();
+  const rationaleMap = new Map<string, string>();
+  for (const a of plannerResult.assignments) {
+    roleMap.set(a.claim_id, a.role);
+    rationaleMap.set(a.claim_id, a.role_rationale);
+  }
 
-  const buckets = new Map<ProseRole, AcceptedClaimInput[]>();
-  for (const role of PLANNER_ROLES_ENUM) buckets.set(role as ProseRole, []);
+  // Separate unused claims (admitted by gate, but off-topic for this section purpose).
+  const unusedClaims: UnusedClaimDisclosure[] = [];
   for (const claim of acceptedClaims) {
     const role = roleMap.get(claim.claim_id) ?? 'evidence';
-    buckets.get(role)!.push(claim);
+    if (role === 'unused') {
+      unusedClaims.push({
+        claim_id: claim.claim_id,
+        source_card_ids: claim.source_ids,
+        role_rationale: rationaleMap.get(claim.claim_id) ?? '(no rationale provided)',
+      });
+    }
+  }
+
+  // Build prose role buckets — exclude unused claims entirely.
+  const buckets = new Map<ProseRole, AcceptedClaimInput[]>();
+  for (const role of PLANNER_ROLES_ENUM) {
+    if (role !== 'unused') buckets.set(role as ProseRole, []);
+  }
+  for (const claim of acceptedClaims) {
+    const role = roleMap.get(claim.claim_id) ?? 'evidence';
+    if (role === 'unused') continue;
+    buckets.get(role as ProseRole)!.push(claim);
+  }
+
+  // Fail with structured error if no claim earned the answer role.
+  // Better to signal the gap honestly than to produce off-topic prose.
+  const answerBucket = buckets.get('answer') ?? [];
+  if (answerBucket.length === 0) {
+    const noAnswerCluster: ProseNoAnswerClusterError = {
+      code: 'no_answer_cluster',
+      message:
+        'No accepted claim was assigned the answer role. The section has accepted claims but none directly address the section purpose.',
+      accepted_claim_count: acceptedClaims.length,
+      unused_count: unusedClaims.length,
+      section_purpose: sectionPurpose,
+      unused_claims: unusedClaims,
+    };
+    return { ok: false, error: noAnswerCluster.message, noAnswerCluster };
   }
 
   // ── Step 2: Draft + Verify ───────────────────────────────────────────────
@@ -242,6 +282,7 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
     disclosures: {
       waivers: waiverDisclosures,
       thin_evidence_paragraphs: thinParagraphIds,
+      unused_claims: unusedClaims,
     },
     generator: {
       activity_id: activityId(),

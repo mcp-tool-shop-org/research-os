@@ -4,7 +4,7 @@
 // Body: prose paragraphs in role order with footnote-style support markers.
 // Footnotes: claim IDs + source card IDs per paragraph.
 
-import type { DraftedParagraph, ProseBlock } from './types.js';
+import type { DraftedParagraph, ProseBlock, ProseNoAnswerClusterError } from './types.js';
 
 export interface SectionSynthesisMarkdownInput {
   sectionId: string;
@@ -136,6 +136,18 @@ export function renderSectionSynthesisMarkdown(
     }
   }
 
+  // ── Unused accepted claims ─────────────────────────────────────────────────
+  if (disclosures.unused_claims.length > 0) {
+    lines.push('## Unused accepted claims');
+    lines.push('');
+    lines.push(`${disclosures.unused_claims.length} accepted claim(s) passed gate review but were not used in this synthesis because they do not address the section purpose:`);
+    lines.push('');
+    for (const u of disclosures.unused_claims) {
+      lines.push(`- \`${u.claim_id}\` — ${u.role_rationale}`);
+    }
+    lines.push('');
+  }
+
   // ── Guardrails ────────────────────────────────────────────────────────────
   lines.push('## Guardrails');
   lines.push('');
@@ -146,6 +158,35 @@ export function renderSectionSynthesisMarkdown(
   lines.push('- The JSON provenance layer (`section-synthesis.json` `.prose.paragraphs[*].support_bundle`) is the canonical traceability layer.');
   lines.push('');
 
+  return lines.join('\n');
+}
+
+// Render the no-answer-cluster failure marker for section-synthesis.md.
+export function renderNoAnswerClusterMarker(
+  err: ProseNoAnswerClusterError,
+  sectionPurpose: string,
+): string {
+  const lines: string[] = [];
+  lines.push('> **Status:** generation_failed');
+  lines.push('> **Error code:** no_answer_cluster');
+  lines.push('>');
+  lines.push('> No accepted claim directly answers the section purpose. The planner declined to');
+  lines.push('> produce off-topic prose. This is the correct outcome — consult `section-brief.md`');
+  lines.push('> for the full evidence index and consider sourcing on-topic evidence.');
+  lines.push('');
+  lines.push(`**Section purpose:** ${sectionPurpose}`);
+  lines.push(`**Accepted claims:** ${err.accepted_claim_count} (${err.unused_count} assigned unused)`);
+  lines.push('');
+  if (err.unused_claims.length > 0) {
+    lines.push('## Unused accepted claims');
+    lines.push('');
+    lines.push(`${err.unused_claims.length} of ${err.accepted_claim_count} accepted claim(s) assigned role=unused:`);
+    lines.push('');
+    for (const u of err.unused_claims) {
+      lines.push(`- \`${u.claim_id}\` — ${u.role_rationale}`);
+    }
+    lines.push('');
+  }
   return lines.join('\n');
 }
 
