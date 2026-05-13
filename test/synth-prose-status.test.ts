@@ -34,7 +34,7 @@ function makeFakeClient(): ProseCallToolClient {
           content: [{
             type: 'text',
             text: JSON.stringify({
-              result: { ok: true, data: ids.map((id) => ({ claim_id: id, role: 'evidence' })) },
+              result: { ok: true, data: { assignments: ids.map((id) => ({ claim_id: id, role: 'evidence' })) } },
             }),
           }],
         };

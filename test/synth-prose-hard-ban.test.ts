@@ -40,7 +40,7 @@ function makeFakeClient(): ProseCallToolClient {
         return {
           content: [{
             type: 'text',
-            text: JSON.stringify({ result: { ok: true, data: assignments } }),
+            text: JSON.stringify({ result: { ok: true, data: { assignments } } }),
           }],
         };
       }

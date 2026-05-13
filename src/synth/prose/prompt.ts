@@ -20,17 +20,26 @@ export const PLANNER_ROLES_ENUM = [
   'thin_evidence',
 ] as const;
 
+// ollama_extract rejects top-level JSON arrays (its parse step requires an object).
+// Wrap in { assignments: [...] } so the model returns an object the tool accepts.
 export const PLANNER_RESULT_SCHEMA: Record<string, unknown> = {
-  type: 'array',
-  items: {
-    type: 'object',
-    properties: {
-      claim_id: { type: 'string' },
-      role: { type: 'string', enum: [...PLANNER_ROLES_ENUM] },
+  type: 'object',
+  properties: {
+    assignments: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          claim_id: { type: 'string' },
+          role: { type: 'string', enum: [...PLANNER_ROLES_ENUM] },
+        },
+        required: ['claim_id', 'role'],
+        additionalProperties: false,
+      },
     },
-    required: ['claim_id', 'role'],
-    additionalProperties: false,
   },
+  required: ['assignments'],
+  additionalProperties: false,
 };
 
 export function renderPlannerPrompt(
@@ -56,13 +65,13 @@ export function renderPlannerPrompt(
     lines.push(`${c.claim_id} | ${c.asserts} | scope: ${scopeStr} | not: ${notStr}`);
   }
   lines.push('');
-  lines.push('Return a JSON array where every claim_id appears exactly once, each with its assigned role.');
+  lines.push('Return {"assignments": [...]} where every claim_id appears exactly once, each with its assigned role.');
   lines.push('Every claim must be assigned. Do not omit any claim_id.');
   return lines.join('\n');
 }
 
 export const PLANNER_HINT =
-  'Assign every claim to exactly one role from the enum. Return the full array — every claim_id must appear.';
+  'Assign every claim to exactly one role from the enum. Return {"assignments":[...]} where the array contains one entry per claim — every claim_id must appear exactly once.';
 
 // ── Drafter ───────────────────────────────────────────────────────────────────
 // One call per role cluster: generate one readable paragraph FROM claim text.

@@ -1,10 +1,14 @@
 // Prose synthesis planner: assigns each accepted claim to exactly one role.
 //
-// One batch MCP call (ollama_extract) classifies all accepted claims at once.
-// The planner's contract: every claim in → every claim out, each with a role.
-// Frame_excluded, rejected, needs_repair, and unreviewed claims MUST NOT enter.
-// That exclusion is enforced at the call site (section-run.ts) before the
-// planner is invoked — the planner trusts its input is already clean.
+// Claims are processed in chunks of PLANNER_CHUNK_SIZE. Each chunk is one
+// ollama_extract call (workhorse tier, 20s budget). Chunking avoids the
+// timeout that occurs when all 20+ claims are batched in a single call —
+// the workhorse tier handles ≤10 claims comfortably within its budget once
+// the model is loaded. Merge is a deterministic set union keyed by claim_id.
+//
+// Frame_excluded, rejected, needs_repair, and unreviewed claims MUST NOT
+// enter. That exclusion is enforced at the call site (section-run.ts) before
+// the planner is invoked — the planner trusts its input is already clean.
 
 import {
   PLANNER_RESULT_SCHEMA,
@@ -13,6 +17,11 @@ import {
   PLANNER_ROLES_ENUM,
 } from './prompt.js';
 import type { AcceptedClaimInput, PlannerAssignment, PlannerResult, ProseCallToolClient, ProseRole } from './types.js';
+
+// Maximum claims per planner MCP call. Keeps each call well within the
+// workhorse tier's 20s budget for hermes3:8b with 8K context.
+// Shape A regression test asserts no chunk exceeds this value.
+export const PLANNER_CHUNK_SIZE = 10;
 
 interface MCPEnvelope {
   result?: {
@@ -48,17 +57,13 @@ export function buildPlannerToolArgs(
   return args;
 }
 
-export async function runPlanner(
+async function runPlannerChunk(
   client: ProseCallToolClient,
   sectionPurpose: string,
-  claims: AcceptedClaimInput[],
+  chunk: AcceptedClaimInput[],
   model?: string,
-): Promise<PlannerResult> {
-  if (claims.length === 0) {
-    return { ok: true, assignments: [] };
-  }
-
-  const toolArgs = buildPlannerToolArgs(sectionPurpose, claims, model);
+): Promise<{ ok: true; assignments: PlannerAssignment[] } | { ok: false; error: string }> {
+  const toolArgs = buildPlannerToolArgs(sectionPurpose, chunk, model);
 
   let response: Awaited<ReturnType<ProseCallToolClient['callTool']>>;
   try {
@@ -69,7 +74,12 @@ export async function runPlanner(
 
   const text = extractText(response);
   if (text === null) {
-    return { ok: false, error: response.isError ? (response.content?.[0]?.text ?? 'MCP tool returned isError') : 'MCP response had no text content' };
+    return {
+      ok: false,
+      error: response.isError
+        ? (response.content?.[0]?.text ?? 'MCP tool returned isError')
+        : 'MCP response had no text content',
+    };
   }
 
   let envelope: MCPEnvelope;
@@ -87,15 +97,17 @@ export async function runPlanner(
     return { ok: false, error: result.error ?? 'MCP ollama_extract returned ok:false' };
   }
 
-  const data = result.data;
-  if (!Array.isArray(data)) {
-    return { ok: false, error: 'MCP planner result.data was not an array' };
+  // ollama_extract returns data as an object; the assignments live in data.assignments.
+  const dataObj = result.data as Record<string, unknown> | undefined;
+  const rawAssignments = dataObj?.assignments;
+  if (!Array.isArray(rawAssignments)) {
+    return { ok: false, error: 'MCP planner result.data.assignments was not an array' };
   }
 
   const assignments: PlannerAssignment[] = [];
   const seenIds = new Set<string>();
 
-  for (const item of data) {
+  for (const item of rawAssignments) {
     if (!item || typeof item !== 'object') continue;
     const obj = item as Record<string, unknown>;
     const cid = typeof obj.claim_id === 'string' ? obj.claim_id : null;
@@ -106,12 +118,47 @@ export async function runPlanner(
     assignments.push({ claim_id: cid, role });
   }
 
-  // Fill in any claims the model omitted — default to 'evidence'.
-  for (const c of claims) {
-    if (!seenIds.has(c.claim_id)) {
-      assignments.push({ claim_id: c.claim_id, role: 'evidence' });
+  return { ok: true, assignments };
+}
+
+export async function runPlanner(
+  client: ProseCallToolClient,
+  sectionPurpose: string,
+  claims: AcceptedClaimInput[],
+  model?: string,
+): Promise<PlannerResult> {
+  if (claims.length === 0) {
+    return { ok: true, assignments: [] };
+  }
+
+  // Split into chunks of PLANNER_CHUNK_SIZE.
+  const chunks: AcceptedClaimInput[][] = [];
+  for (let i = 0; i < claims.length; i += PLANNER_CHUNK_SIZE) {
+    chunks.push(claims.slice(i, i + PLANNER_CHUNK_SIZE));
+  }
+
+  const allAssignments: PlannerAssignment[] = [];
+  const seenIds = new Set<string>();
+
+  for (const chunk of chunks) {
+    const chunkResult = await runPlannerChunk(client, sectionPurpose, chunk, model);
+    if (!chunkResult.ok) {
+      return { ok: false, error: chunkResult.error };
+    }
+    for (const a of chunkResult.assignments) {
+      if (!seenIds.has(a.claim_id)) {
+        seenIds.add(a.claim_id);
+        allAssignments.push(a);
+      }
     }
   }
 
-  return { ok: true, assignments };
+  // Fill in any claims the model omitted — default to 'evidence'.
+  for (const c of claims) {
+    if (!seenIds.has(c.claim_id)) {
+      allAssignments.push({ claim_id: c.claim_id, role: 'evidence' });
+    }
+  }
+
+  return { ok: true, assignments: allAssignments };
 }

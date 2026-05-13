@@ -17,8 +17,8 @@ function makeClaims(n: number, confidence: 'low' | 'medium' | 'high' = 'medium')
   }));
 }
 
-function envelopeOk(data: unknown): string {
-  return JSON.stringify({ result: { ok: true, data } });
+function envelopeOk(assignments: unknown): string {
+  return JSON.stringify({ result: { ok: true, data: { assignments } } });
 }
 
 function envelopeError(error: string): string {
