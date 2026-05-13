@@ -151,7 +151,7 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
       );
 
       if (!draftResult.ok) {
-        // Drafter failed — disclose cluster as omitted, move on.
+        if (attempt === 0) continue; // retry once (covers banned opener, transient failure)
         paragraph = null;
         break;
       }

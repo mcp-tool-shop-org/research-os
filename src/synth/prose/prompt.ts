@@ -4,9 +4,25 @@
 // If you change a template, change the associated drift-prevention test in
 // the same commit and surface it in the closing report.
 //
-// prompt_version: 'section-prose-v1'
+// prompt_version: 'section-prose-v2'
 
 import type { AcceptedClaimInput, ProseRole, SourceCardMeta } from './types.js';
+
+// Meta-opener phrases that signal the model is describing the artifact instead
+// of answering the section purpose. Applied only to role=answer paragraphs.
+// Stored lowercase; check is case-insensitive.
+export const BANNED_OPENERS = [
+  'this guide aims',
+  'this section discusses',
+  'this section provides',
+  'this section explores',
+  'this synthesis provides',
+  'this synthesis explores',
+  'this report explores',
+  'this report provides',
+  'this document',
+  'in this section',
+] as const;
 
 // ── Planner ──────────────────────────────────────────────────────────────────
 // One batch call: assign every accepted claim to exactly one role.
@@ -122,7 +138,10 @@ export function renderDrafterPrompt(
   lines.push('- Do not invent or modify claim IDs. Refer only to the claims provided.');
   lines.push('- Preserve scope and not-constraints; do not widen any claim.');
   if (role === 'answer') {
-    lines.push('- This is the answer paragraph: it MUST directly address the section purpose.');
+    lines.push('- ANSWER RULE: The first sentence MUST directly state the answer to the section purpose.');
+    lines.push('- Do NOT begin with meta-preamble such as "This guide aims", "This section discusses",');
+    lines.push('  "This synthesis provides", "This report explores", or any phrase that describes the');
+    lines.push('  artifact rather than delivering the content. Write the answer itself, not about the answer.');
   } else if (role === 'thin_evidence') {
     lines.push('- This cluster has thin evidence; write conservatively and note the limited basis.');
   }
@@ -193,4 +212,4 @@ export const VERIFIER_HINT =
   'Check whether the paragraph is fully supported by the listed claims. ' +
   'Return faithful, unsupported_connective, or omits_critical_qualifier, plus a one-sentence rationale.';
 
-export const PROSE_PROMPT_VERSION = 'section-prose-v1';
+export const PROSE_PROMPT_VERSION = 'section-prose-v2';

@@ -11,6 +11,7 @@
 import {
   DRAFTER_RESULT_SCHEMA,
   DRAFTER_HINT,
+  BANNED_OPENERS,
   renderDrafterPrompt,
 } from './prompt.js';
 import type {
@@ -27,6 +28,11 @@ interface MCPEnvelope {
     data?: unknown;
     error?: string;
   };
+}
+
+function hasBannedOpener(text: string): boolean {
+  const lower = text.trimStart().toLowerCase();
+  return (BANNED_OPENERS as readonly string[]).some((p) => lower.startsWith(p));
 }
 
 function asTrimmedString(v: unknown): string | null {
@@ -104,6 +110,10 @@ export async function runDrafter(
   const paragraph = asTrimmedString((data as Record<string, unknown>).paragraph);
   if (paragraph === null) {
     return { ok: false, error: 'MCP drafter returned empty paragraph' };
+  }
+
+  if (role === 'answer' && hasBannedOpener(paragraph)) {
+    return { ok: false, error: 'answer paragraph opens with meta-description instead of direct answer' };
   }
 
   return { ok: true, paragraph };
