@@ -31,6 +31,7 @@ import { handoff as coworkHandoff } from './cowork/index.js';
 import {
   workspace as synthWorkspace,
   sectionSynthesis as synthSection,
+  partialPackSynthesis as synthPartialPack,
 } from './synth/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
@@ -1100,6 +1101,44 @@ synthCmd
           `\nwarning: section accepted_claim_ids drift from pack-wide accepted_claim_ids in the cowork handoff. ` +
             `Re-run \`research-os cowork handoff\` to refresh.\n`,
         );
+      }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+synthCmd
+  .command('pack')
+  .description(
+    'Pack-level synthesis. With --partial, produces a partial-pack synthesis that consumes ' +
+      'section prose from sections that have valid Slice 1 output and discloses blocked / unrun / ' +
+      'failed sections by reason. The pack remains NOT freezable and NOT publishable.',
+  )
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--partial', 'Produce partial-pack synthesis instead of full-pack synthesis')
+  .action(async (opts) => {
+    try {
+      if (!opts.partial) {
+        process.stderr.write(
+          'research-os: synth pack currently supports --partial only. ' +
+            'For full-pack synthesis use `research-os synth workspace`.\n',
+        );
+        process.exitCode = 2;
+        return;
+      }
+      const result = await synthPartialPack({ packPath: opts.pack, spawnMcpClient: true });
+      process.stdout.write(`synthesis pack: PARTIAL\n`);
+      process.stdout.write(`  pack mode:                ${result.packMode}\n`);
+      process.stdout.write(`  included sections:        ${result.includedCount}\n`);
+      process.stdout.write(`  excluded sections:        ${result.excludedCount}\n`);
+      process.stdout.write(`  paragraphs:               ${result.paragraphCount}\n`);
+      process.stdout.write(`  not freezable as pack:    ${result.notFreezableAsPack}\n`);
+      process.stdout.write(`  not publishable as pack:  ${result.notPublishableAsPack}\n`);
+      process.stdout.write(`  json:                     ${result.jsonPath}\n`);
+      process.stdout.write(`  markdown:                 ${result.markdownPath}\n`);
+      process.stdout.write(`  prose generated:          ${result.proseGenerated}\n`);
+      if (result.proseError) {
+        process.stdout.write(`  prose error:              ${result.proseError}\n`);
       }
     } catch (err) {
       reportError(err);
