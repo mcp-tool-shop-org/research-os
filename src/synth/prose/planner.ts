@@ -2,9 +2,11 @@
 //
 // Claims are processed in chunks of PLANNER_CHUNK_SIZE. Each chunk is one
 // ollama_extract call (workhorse tier, 20s budget). Chunking avoids the
-// timeout that occurs when all 20+ claims are batched in a single call —
-// the workhorse tier handles ≤10 claims comfortably within its budget once
-// the model is loaded. Merge is a deterministic set union keyed by claim_id.
+// timeout that occurs when many claims are batched in a single call. The
+// chunk size was reduced from 10 to 5 in Slice 1f after Slice 2b's
+// multi-section acceptance bed surfaced TIER_TIMEOUT on real-world 10-claim
+// chunks under generation-rate variance. Merge is a deterministic set union
+// keyed by claim_id.
 //
 // Frame_excluded, rejected, needs_repair, and unreviewed claims MUST NOT
 // enter. That exclusion is enforced at the call site (section-run.ts) before
@@ -19,9 +21,20 @@ import {
 import type { AcceptedClaimInput, PlannerAssignment, PlannerResult, PlannerRole, ProseCallToolClient } from './types.js';
 
 // Maximum claims per planner MCP call. Keeps each call well within the
-// workhorse tier's 20s budget for hermes3:8b with 8K context.
-// Shape A regression test asserts no chunk exceeds this value.
-export const PLANNER_CHUNK_SIZE = 10;
+// workhorse tier's 20s budget for hermes3:8b with 8K context, even under
+// real-world generation-rate variance.
+//
+// History: started at 10 in Slice 1b. Reduced to 5 in Slice 1f after
+// Slice 2b's multi-section acceptance bed surfaced TIER_TIMEOUT on
+// real-world 10-claim chunks (workhorse 20s + instant 15s fallback both
+// exhausted). The single-section happy path was the wrong sample size for
+// the product-level chunking decision; multi-section beds with substantive
+// claims need headroom against generation-rate noise.
+//
+// Shape A regression test asserts no chunk exceeds this value AND that
+// the constant is exactly 5 (locks the operationally-proven value against
+// future drift).
+export const PLANNER_CHUNK_SIZE = 5;
 
 interface MCPEnvelope {
   result?: {

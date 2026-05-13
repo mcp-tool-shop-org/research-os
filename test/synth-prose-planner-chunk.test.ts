@@ -64,9 +64,18 @@ function makeCapturingClient(): {
 }
 
 describe('Shape A: planner chunks large claim lists (Slice 1b regression)', () => {
-  it('PLANNER_CHUNK_SIZE is at most 12 (dispatch upper bound)', () => {
+  it('PLANNER_CHUNK_SIZE is at most 12 (Slice 1b upper bound)', () => {
     expect(PLANNER_CHUNK_SIZE).toBeGreaterThanOrEqual(1);
     expect(PLANNER_CHUNK_SIZE).toBeLessThanOrEqual(12);
+  });
+
+  it('PLANNER_CHUNK_SIZE is exactly 5 (Slice 1f operationally-proven value)', () => {
+    // Locked at 5 after Slice 2b's multi-section bed surfaced TIER_TIMEOUT
+    // at chunk size 10 under real-world generation-rate variance. Drift to a
+    // larger value re-introduces the brittleness; drift to a smaller value
+    // multiplies MCP round-trips without product justification. Any change
+    // requires a fresh multi-section live run + advisor sign-off.
+    expect(PLANNER_CHUNK_SIZE).toBe(5);
   });
 
   it('makes multiple calls for 30+ claims', async () => {
