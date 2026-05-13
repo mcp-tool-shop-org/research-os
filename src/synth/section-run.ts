@@ -36,7 +36,11 @@ import {
   type CoworkHandoffPayload,
 } from '../cowork/schema.js';
 import { RESEARCH_OS_VERSION } from '../index.js';
+import { MCPClientHandle } from '../mcp/client.js';
 
+import { runProseSynthesis } from './prose/run.js';
+import { renderSectionSynthesisMarkdown } from './prose/markdown.js';
+import type { AcceptedClaimInput, ProseCallToolClient, SourceCardMeta, WaiverMeta } from './prose/types.js';
 import type { SectionSynthesisOptions, SectionSynthesisSummary } from './types.js';
 
 type SectionState = ReturnType<typeof CoworkHandoffPayloadSchema.parse>['sections'][number];
@@ -333,12 +337,122 @@ export async function sectionSynthesis(
   await mkdir(synthDir, { recursive: true });
   const jsonPath = join(synthDir, 'section-synthesis.json');
   const mdPath = join(synthDir, 'section-brief.md');
+  const proseMdPath = join(synthDir, 'section-synthesis.md');
 
-  // Always overwrite both: section-synthesis is derived state. Re-running is
-  // safe; we do NOT preserve operator drafts here (no equivalent of cowork
-  // working-report.md at the section level in v0.7.1).
+  // Write section-brief.md and section-synthesis.json (existing behavior, preserved).
   await writeFile(jsonPath, JSON.stringify(manifest, null, 2), 'utf8');
   await writeFile(mdPath, renderSectionBrief(manifest, acceptedClaims, cards), 'utf8');
+
+  // ── Prose synthesis (v0.9 slice 1) ─────────────────────────────────────────
+  // Build clean prose inputs — only accepted_for_synthesis claims. Frame_excluded,
+  // rejected, needs_repair, and unreviewed claims were already excluded above when
+  // we filtered to sectionAcceptedIds (which comes from handoff.accepted_claim_ids).
+  const proseClaimInputs: AcceptedClaimInput[] = acceptedClaims.map((c) => ({
+    claim_id: c.claim_id,
+    asserts: c.asserts,
+    scope: c.scope,
+    not: c.not,
+    source_ids: c.source_ids,
+    confidence: c.confidence,
+  }));
+
+  const proseSourceCards: SourceCardMeta[] = cards.map((c) => ({
+    source_id: c.source_id,
+    title: c.title ?? null,
+    publisher: c.publisher ?? null,
+    source_type: c.source_type,
+    url: c.url,
+  }));
+
+  const proseWaivers: WaiverMeta[] = manifest.waivers_applied.map((w, i) => ({
+    waiver_id: `w${i + 1}`,
+    family: w.family,
+    reason: w.reason,
+    applied_to: w.applied_to,
+  }));
+
+  let proseGenerated = false;
+  let proseMarkdownPath: string | null = null;
+  let proseError: string | null = null;
+
+  // Resolve the MCP client. Use injected client (tests) or spawn MCPClientHandle
+  // only when options.spawnMcpClient === true (CLI path). Tests that predate
+  // prose synthesis call sectionSynthesis without either option; they get prose
+  // skipped immediately rather than hanging on a subprocess connect.
+  let resolvedClient: ProseCallToolClient | null = options.mcpClient ?? null;
+  let mcpHandle: MCPClientHandle | null = null;
+
+  if (resolvedClient === null && options.spawnMcpClient) {
+    try {
+      mcpHandle = new MCPClientHandle();
+      const sdkClient = await mcpHandle.connect();
+      resolvedClient = sdkClient as unknown as ProseCallToolClient;
+    } catch (err) {
+      proseError = `MCP unavailable: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  } else if (resolvedClient === null) {
+    proseError = 'prose skipped: no mcpClient provided';
+  }
+
+  if (resolvedClient !== null) {
+    try {
+      const proseResult = await runProseSynthesis({
+        sectionPurpose: manifest.section_purpose,
+        acceptedClaims: proseClaimInputs,
+        sourceCards: proseSourceCards,
+        waivers: proseWaivers,
+        gateVerdict: manifest.gate_verdict,
+        packMode: manifest.pack_mode,
+        client: resolvedClient,
+        model: options.proseModel,
+      });
+
+      if (proseResult.ok) {
+        // Overwrite section-synthesis.json with the prose block added.
+        await writeFile(
+          jsonPath,
+          JSON.stringify({ ...manifest, prose: proseResult.block }, null, 2),
+          'utf8',
+        );
+        // Write section-synthesis.md.
+        const proseMd = renderSectionSynthesisMarkdown({
+          sectionId: options.sectionId,
+          sectionPurpose: manifest.section_purpose,
+          packMode: manifest.pack_mode,
+          gateVerdict: manifest.gate_verdict,
+          waiversApplied: manifest.waivers_applied,
+          proseBlock: proseResult.block,
+          generatedAt,
+          researchOsVersion: manifest.research_os_version,
+        });
+        await writeFile(proseMdPath, proseMd, 'utf8');
+        proseMarkdownPath = proseMdPath;
+        proseGenerated = true;
+      } else {
+        proseError = proseResult.error;
+      }
+    } catch (err) {
+      proseError = err instanceof Error ? err.message : 'prose synthesis threw unexpectedly';
+    } finally {
+      if (mcpHandle) {
+        try { await mcpHandle.close(); } catch { /* swallow — cleanup only */ }
+      }
+    }
+  }
+
+  // Write a failure artifact so the operator knows prose was attempted.
+  if (!proseGenerated) {
+    const errorMsg = proseError ?? 'unknown error';
+    const failMd = [
+      '> **Status:** generation_failed',
+      `> **Error:** ${errorMsg}`,
+      '>',
+      '> Prose synthesis did not complete. Consult `section-brief.md` for the evidence index.',
+      '',
+    ].join('\n');
+    await writeFile(proseMdPath, failMd, 'utf8');
+    proseMarkdownPath = proseMdPath;
+  }
 
   return {
     packPath,
@@ -352,6 +466,9 @@ export async function sectionSynthesis(
     gateVerdict: handoffSection.gate_verdict,
     jsonPath,
     markdownPath: mdPath,
+    proseGenerated,
+    proseMarkdownPath,
+    proseError,
     acceptedIdsCrossCheckOk: acceptedIdsForThisSection.length === sectionAcceptedIds.size,
   };
 }

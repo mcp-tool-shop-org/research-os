@@ -1018,7 +1018,7 @@ synthCmd
     try {
       const sectionId = opts.section as string | undefined;
       if (sectionId) {
-        const result = await synthSection({ sectionId, packPath: opts.pack });
+        const result = await synthSection({ sectionId, packPath: opts.pack, spawnMcpClient: true });
         process.stdout.write(`synthesis section: PARTIAL\n`);
         process.stdout.write(`  section:                  ${result.sectionId}\n`);
         process.stdout.write(`  pack mode:                ${result.packMode}\n`);
@@ -1029,7 +1029,14 @@ synthCmd
         process.stdout.write(`  not freezable as pack:    ${result.notFreezableAsPack}\n`);
         process.stdout.write(`  not publishable as pack:  ${result.notPublishableAsPack}\n`);
         process.stdout.write(`  json:                     ${result.jsonPath}\n`);
-        process.stdout.write(`  markdown:                 ${result.markdownPath}\n`);
+        process.stdout.write(`  brief:                    ${result.markdownPath}\n`);
+        process.stdout.write(`  prose generated:          ${result.proseGenerated}\n`);
+        if (result.proseMarkdownPath) {
+          process.stdout.write(`  prose:                    ${result.proseMarkdownPath}\n`);
+        }
+        if (result.proseError) {
+          process.stdout.write(`  prose error:              ${result.proseError}\n`);
+        }
         if (!result.acceptedIdsCrossCheckOk) {
           process.stdout.write(
             `\nwarning: section accepted_claim_ids drift from pack-wide accepted_claim_ids in the cowork handoff. ` +
@@ -1069,7 +1076,7 @@ synthCmd
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
   .action(async (section: string, opts) => {
     try {
-      const result = await synthSection({ sectionId: section, packPath: opts.pack });
+      const result = await synthSection({ sectionId: section, packPath: opts.pack, spawnMcpClient: true });
       process.stdout.write(`synthesis section: PARTIAL\n`);
       process.stdout.write(`  section:                  ${result.sectionId}\n`);
       process.stdout.write(`  pack mode:                ${result.packMode}\n`);
@@ -1080,7 +1087,14 @@ synthCmd
       process.stdout.write(`  not freezable as pack:    ${result.notFreezableAsPack}\n`);
       process.stdout.write(`  not publishable as pack:  ${result.notPublishableAsPack}\n`);
       process.stdout.write(`  json:                     ${result.jsonPath}\n`);
-      process.stdout.write(`  markdown:                 ${result.markdownPath}\n`);
+      process.stdout.write(`  brief:                    ${result.markdownPath}\n`);
+      process.stdout.write(`  prose generated:          ${result.proseGenerated}\n`);
+      if (result.proseMarkdownPath) {
+        process.stdout.write(`  prose:                    ${result.proseMarkdownPath}\n`);
+      }
+      if (result.proseError) {
+        process.stdout.write(`  prose error:              ${result.proseError}\n`);
+      }
       if (!result.acceptedIdsCrossCheckOk) {
         process.stdout.write(
           `\nwarning: section accepted_claim_ids drift from pack-wide accepted_claim_ids in the cowork handoff. ` +
