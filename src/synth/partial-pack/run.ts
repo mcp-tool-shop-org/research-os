@@ -1,11 +1,19 @@
-// v0.9 Slice 2 — partial-pack synthesis orchestrator.
+// v0.9 Slice 2c — partial-pack synthesis orchestrator.
 //
 // Pipeline:
 //   1. Read research.yaml + cowork-handoff.json.
 //   2. Classify every section as included or excluded (pure function).
-//   3. If zero included: write artifact with no_included_sections proseError.
-//   4. Otherwise: run partial-pack drafter against included sections' prose.
-//   5. Write partial-pack-synthesis.{md,json} to synthesis/ at pack root.
+//   3a. If zero included: write artifact with no_included_sections proseError.
+//   3b. If ≥2 included: call bundle planner to preselect the answer
+//       paragraph's required cross-section support bundle.
+//       - On insufficient_cross_section_candidates: write failure marker.
+//   3c. If exactly 1 included: skip bundle planner (Slice 2 behavior).
+//   4. Run partial-pack drafter with the required bundle (or null for
+//      single-section).
+//   5. Validate the answer paragraph against the required bundle. On
+//      failure, retry the drafter ONCE with a strengthened addendum.
+//      On second failure, write cross_section_answer_support_missing.
+//   6. Write partial-pack-synthesis.{md,json} to synthesis/ at pack root.
 //
 // Hard invariants (enforced here):
 //   - status is always PARTIAL_PACK_STATUS.
@@ -14,6 +22,9 @@
 //   - Pack-level support_bundle references section_paragraph_ids only.
 //   - Existing full-pack synthesis files in synthesis/ are NEVER touched —
 //     this writes new files (partial-pack-synthesis.{md,json}).
+//   - When ≥2 sections are included, the answer paragraph's support_bundle
+//     MUST satisfy validateAnswerBundle or the drafter is retried; persistent
+//     failure emits a structured proseError.
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -34,12 +45,21 @@ import { runPartialPackDrafter } from './drafter.js';
 import { renderPartialPackMarkdown } from './markdown.js';
 import { PartialPackArtifactSchema } from './schema.js';
 import {
+  planAnswerBundle,
+  validateAnswerBundle,
+  type AnswerBundleValidationResult,
+} from './bundle-planner.js';
+import {
   PARTIAL_PACK_STATUS,
   type PartialPackArtifact,
+  type PartialPackCrossSectionAnswerSupportMissingError,
+  type PartialPackInsufficientCrossSectionCandidatesError,
   type PartialPackNoIncludedSectionsError,
   type PartialPackOptions,
   type PartialPackParagraph,
+  type PartialPackSectionInput,
   type PartialPackSummary,
+  type RequiredAnswerBundle,
 } from './types.js';
 import type { ProseCallToolClient } from '../prose/types.js';
 
@@ -72,6 +92,86 @@ async function readPackInputs(packPath: string): Promise<{
   return { research, handoff };
 }
 
+/**
+ * Map a drafter call's raw paragraphs into the persisted PartialPackParagraph
+ * shape. Derives section_ids from each paragraph's section_paragraph_ids and
+ * assigns stable pp1.. paragraph_ids.
+ */
+function mapDrafterOutput(
+  rawParagraphs: Array<{ role: string; text: string; section_paragraph_ids: string[] }>,
+): PartialPackParagraph[] {
+  return rawParagraphs.map((d, i) => {
+    const sectionIds: string[] = [];
+    for (const spid of d.section_paragraph_ids) {
+      const sid = spid.split(':')[0]!;
+      if (!sectionIds.includes(sid)) sectionIds.push(sid);
+    }
+    const synthPaths = sectionIds.map(
+      (sid) => `sections/${sid}/synthesis/section-synthesis.json`,
+    );
+    return {
+      paragraph_id: paragraphId(i),
+      // Drafter only produces roles in PartialPackRole — coerce by trust.
+      role: d.role as PartialPackParagraph['role'],
+      text: d.text,
+      support_bundle: {
+        section_ids: sectionIds,
+        section_paragraph_ids: d.section_paragraph_ids,
+        section_synthesis_paths: synthPaths,
+      },
+    };
+  });
+}
+
+/**
+ * Run the drafter once and validate its answer paragraph. Returns the
+ * mapped paragraphs + the validation outcome for the orchestrator to act on.
+ */
+async function runOnceWithValidation(args: {
+  packTopic: string;
+  packMode: string;
+  drafterInputs: PartialPackSectionInput[];
+  excludedForPrompt: Array<{ section_id: string; reason: string }>;
+  requiredBundle: RequiredAnswerBundle | null;
+  rejectionAddendum: string | null;
+  client: ProseCallToolClient;
+  model: string | undefined;
+  includedCount: number;
+}): Promise<
+  | {
+      ok: true;
+      paragraphs: PartialPackParagraph[];
+      validation: AnswerBundleValidationResult;
+    }
+  | { ok: false; error: string }
+> {
+  const draftResult = await runPartialPackDrafter({
+    packTopic: args.packTopic,
+    packMode: args.packMode,
+    includedSections: args.drafterInputs,
+    excludedSections: args.excludedForPrompt,
+    requiredAnswerBundle: args.requiredBundle,
+    rejectionAddendum: args.rejectionAddendum,
+    client: args.client,
+    model: args.model,
+  });
+  if (!draftResult.ok) {
+    return { ok: false, error: draftResult.error };
+  }
+  const paragraphs = mapDrafterOutput(draftResult.paragraphs);
+  if (paragraphs.length === 0) {
+    return { ok: false, error: 'drafter produced no usable paragraphs' };
+  }
+  const answerPara = paragraphs[0]!;
+  const validation = validateAnswerBundle({
+    answerSupportSectionIds: answerPara.support_bundle.section_ids,
+    answerSupportSectionParagraphIds: answerPara.support_bundle.section_paragraph_ids,
+    required: args.requiredBundle,
+    includedSectionsCount: args.includedCount,
+  });
+  return { ok: true, paragraphs, validation };
+}
+
 export async function partialPackSynthesis(
   options: PartialPackOptions = {},
 ): Promise<PartialPackSummary> {
@@ -97,14 +197,13 @@ export async function partialPackSynthesis(
 
   const sourceSynthPaths = included.map((s) => s.section_synthesis_path);
 
-  // ── Step 2: Zero-included-sections → honest failure marker ────────────────
-  if (included.length === 0) {
-    const noIncluded: PartialPackNoIncludedSectionsError = {
-      code: 'no_included_sections',
-      message:
-        'No section has valid section-level prose. Partial-pack synthesis cannot generate without at least one included section.',
-      excluded_sections: excluded,
-    };
+  // Helper to write the artifact + return the summary.
+  const writeArtifact = async (args: {
+    paragraphs: PartialPackParagraph[];
+    requiredAnswerBundle: RequiredAnswerBundle | null;
+    proseError?: PartialPackArtifact['proseError'];
+    proseErrorMsg: string | null;
+  }): Promise<PartialPackSummary> => {
     const artifact: PartialPackArtifact = {
       status: PARTIAL_PACK_STATUS,
       scope: 'pack',
@@ -116,12 +215,12 @@ export async function partialPackSynthesis(
       included_sections: included,
       excluded_sections: excluded,
       source_section_syntheses: sourceSynthPaths,
-      prose: null,
-      proseError: noIncluded,
+      required_answer_bundle: args.requiredAnswerBundle,
+      prose: args.paragraphs.length > 0 ? { paragraphs: args.paragraphs } : null,
+      ...(args.proseError ? { proseError: args.proseError } : {}),
       generated_at: generatedAt,
       research_os_version: RESEARCH_OS_VERSION,
     };
-    // Validate the artifact before persistence — catches contract drift early.
     PartialPackArtifactSchema.parse(artifact);
     await writeFile(jsonPath, JSON.stringify(artifact, null, 2), 'utf8');
     await writeFile(mdPath, renderPartialPackMarkdown({ artifact }), 'utf8');
@@ -131,17 +230,52 @@ export async function partialPackSynthesis(
       packMode: handoff.mode,
       notFreezableAsPack: true,
       notPublishableAsPack: true,
-      includedCount: 0,
+      includedCount: included.length,
       excludedCount: excluded.length,
-      paragraphCount: 0,
+      paragraphCount: args.paragraphs.length,
       jsonPath,
       markdownPath: mdPath,
-      proseGenerated: false,
-      proseError: noIncluded.message,
+      proseGenerated: args.paragraphs.length > 0,
+      proseError: args.proseErrorMsg,
     };
+  };
+
+  // ── Step 2: Zero-included-sections → honest failure marker ────────────────
+  if (included.length === 0) {
+    const noIncluded: PartialPackNoIncludedSectionsError = {
+      code: 'no_included_sections',
+      message:
+        'No section has valid section-level prose. Partial-pack synthesis cannot generate without at least one included section.',
+      excluded_sections: excluded,
+    };
+    return writeArtifact({
+      paragraphs: [],
+      requiredAnswerBundle: null,
+      proseError: noIncluded,
+      proseErrorMsg: noIncluded.message,
+    });
   }
 
-  // ── Step 3: Resolve MCP client ────────────────────────────────────────────
+  // ── Step 3: Multi-section bundle planning (Slice 2c) ──────────────────────
+  // For 1-included input, bundle planner is bypassed (Slice 2 behavior).
+  let requiredBundle: RequiredAnswerBundle | null = null;
+  if (included.length >= 2) {
+    const planResult = planAnswerBundle(drafterInputs);
+    if (!planResult.ok) {
+      // No viable cross-section candidates — write failure marker. Bundle is
+      // null because there was no bundle to construct.
+      const err: PartialPackInsufficientCrossSectionCandidatesError = planResult.error;
+      return writeArtifact({
+        paragraphs: [],
+        requiredAnswerBundle: null,
+        proseError: err,
+        proseErrorMsg: err.message,
+      });
+    }
+    requiredBundle = planResult.bundle;
+  }
+
+  // ── Step 4: Resolve MCP client ────────────────────────────────────────────
   let resolvedClient: ProseCallToolClient | null = options.mcpClient ?? null;
   let mcpHandle: MCPClientHandle | null = null;
 
@@ -156,44 +290,73 @@ export async function partialPackSynthesis(
     );
   }
 
-  // ── Step 4: Draft pack-level prose ────────────────────────────────────────
+  // ── Step 5: Draft + validate + retry once ─────────────────────────────────
   let paragraphs: PartialPackParagraph[] = [];
-  let proseError: string | null = null;
+  let proseErrorMsg: string | null = null;
+  let proseErrorStructured: PartialPackArtifact['proseError'] | undefined;
+  const excludedForPrompt = excluded.map((e) => ({ section_id: e.section_id, reason: e.reason }));
+
   try {
-    const draftResult = await runPartialPackDrafter({
+    // First attempt.
+    const attempt1 = await runOnceWithValidation({
       packTopic: handoff.pack_topic,
       packMode: handoff.mode,
-      includedSections: drafterInputs,
-      excludedSections: excluded.map((e) => ({ section_id: e.section_id, reason: e.reason })),
+      drafterInputs,
+      excludedForPrompt,
+      requiredBundle,
+      rejectionAddendum: null,
       client: resolvedClient,
       model: options.proseModel,
+      includedCount: included.length,
     });
 
-    if (draftResult.ok) {
-      // Map drafter output → PartialPackParagraph[] with stable paragraph_ids.
-      paragraphs = draftResult.paragraphs.map((d, i) => {
-        // Derive section_ids from section_paragraph_ids ("<section_id>:<p_id>").
-        const sectionIds: string[] = [];
-        for (const spid of d.section_paragraph_ids) {
-          const sid = spid.split(':')[0]!;
-          if (!sectionIds.includes(sid)) sectionIds.push(sid);
-        }
-        const synthPaths = sectionIds.map(
-          (sid) => `sections/${sid}/synthesis/section-synthesis.json`,
-        );
-        return {
-          paragraph_id: paragraphId(i),
-          role: d.role,
-          text: d.text,
-          support_bundle: {
-            section_ids: sectionIds,
-            section_paragraph_ids: d.section_paragraph_ids,
-            section_synthesis_paths: synthPaths,
-          },
-        };
-      });
+    if (!attempt1.ok) {
+      // Drafter call failed entirely; no usable paragraphs to persist.
+      proseErrorMsg = attempt1.error;
+    } else if (attempt1.validation.valid) {
+      paragraphs = attempt1.paragraphs;
     } else {
-      proseError = draftResult.error;
+      // Validation failed — retry ONCE with strengthened addendum.
+      const firstFailureReason = attempt1.validation.detail;
+      const attempt2 = await runOnceWithValidation({
+        packTopic: handoff.pack_topic,
+        packMode: handoff.mode,
+        drafterInputs,
+        excludedForPrompt,
+        requiredBundle,
+        rejectionAddendum: firstFailureReason,
+        client: resolvedClient,
+        model: options.proseModel,
+        includedCount: included.length,
+      });
+
+      if (attempt2.ok && attempt2.validation.valid) {
+        paragraphs = attempt2.paragraphs;
+      } else {
+        // Persistent failure — emit structured proseError. Keep the second
+        // attempt's paragraphs (or empty) so the operator can see what the
+        // model produced, but flag it as failed and don't claim success.
+        const answerPara = attempt2.ok ? attempt2.paragraphs[0] : attempt1.paragraphs[0];
+        const observedIds = answerPara?.support_bundle.section_paragraph_ids ?? [];
+        const finalReason = attempt2.ok && !attempt2.validation.valid
+          ? attempt2.validation.detail
+          : attempt2.ok
+          ? 'unknown validation failure on retry'
+          : attempt2.error;
+        const err: PartialPackCrossSectionAnswerSupportMissingError = {
+          code: 'cross_section_answer_support_missing',
+          message:
+            'Drafter failed to produce an answer paragraph citing the required cross-section support bundle after one retry.',
+          required_section_paragraph_ids: requiredBundle?.required_section_paragraph_ids ?? [],
+          observed_section_paragraph_ids: observedIds,
+          final_reason: finalReason,
+        };
+        proseErrorStructured = err;
+        proseErrorMsg = err.message;
+        // Intentionally leave `paragraphs` empty so the artifact's prose is
+        // null — operators see honest failure, not silently-admitted prose
+        // that violated the contract.
+      }
     }
   } finally {
     if (mcpHandle) {
@@ -205,38 +368,10 @@ export async function partialPackSynthesis(
     }
   }
 
-  // ── Step 5: Build and persist the artifact ────────────────────────────────
-  const artifact: PartialPackArtifact = {
-    status: PARTIAL_PACK_STATUS,
-    scope: 'pack',
-    pack_id: handoff.pack_id,
-    pack_topic: handoff.pack_topic,
-    pack_mode: handoff.mode,
-    not_freezable_as_pack: true,
-    not_publishable_as_pack: true,
-    included_sections: included,
-    excluded_sections: excluded,
-    source_section_syntheses: sourceSynthPaths,
-    prose: paragraphs.length > 0 ? { paragraphs } : null,
-    generated_at: generatedAt,
-    research_os_version: RESEARCH_OS_VERSION,
-  };
-
-  PartialPackArtifactSchema.parse(artifact);
-  await writeFile(jsonPath, JSON.stringify(artifact, null, 2), 'utf8');
-  await writeFile(mdPath, renderPartialPackMarkdown({ artifact }), 'utf8');
-
-  return {
-    packPath,
-    packMode: handoff.mode,
-    notFreezableAsPack: true,
-    notPublishableAsPack: true,
-    includedCount: included.length,
-    excludedCount: excluded.length,
-    paragraphCount: paragraphs.length,
-    jsonPath,
-    markdownPath: mdPath,
-    proseGenerated: paragraphs.length > 0,
-    proseError,
-  };
+  return writeArtifact({
+    paragraphs,
+    requiredAnswerBundle: requiredBundle,
+    proseError: proseErrorStructured,
+    proseErrorMsg,
+  });
 }

@@ -21,6 +21,7 @@ import {
   type PartialPackDraftResult,
   type PartialPackRole,
   type PartialPackSectionInput,
+  type RequiredAnswerBundle,
 } from './types.js';
 import type { ProseCallToolClient } from '../prose/types.js';
 
@@ -46,6 +47,15 @@ export interface PartialPackDrafterInput {
   packMode: string;
   includedSections: PartialPackSectionInput[];
   excludedSections: Array<{ section_id: string; reason: string }>;
+  // Slice 2c: when ≥2 sections are included, the orchestrator preselects
+  // the answer paragraph's support bundle via `bundle-planner.ts`. Pass it
+  // here so the prompt + retry path can communicate the contract to the
+  // model. null in single-section runs (Slice 2 behavior).
+  requiredAnswerBundle?: RequiredAnswerBundle | null;
+  // Slice 2c: on the retry call, the orchestrator names the validator's
+  // rejection reason so the model can see why its previous draft was
+  // rejected. null on the first attempt.
+  rejectionAddendum?: string | null;
   client: ProseCallToolClient;
   model?: string;
 }
@@ -59,6 +69,8 @@ export function buildPartialPackDrafterArgs(
       packMode: input.packMode,
       includedSections: input.includedSections,
       excludedSections: input.excludedSections,
+      requiredAnswerBundle: input.requiredAnswerBundle ?? null,
+      rejectionAddendum: input.rejectionAddendum ?? null,
     }),
     schema: PARTIAL_PACK_DRAFTER_SCHEMA,
     hint: PARTIAL_PACK_DRAFTER_HINT,

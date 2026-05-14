@@ -43,6 +43,7 @@ function makeArtifactBase(): unknown {
       },
     ],
     source_section_syntheses: ['sections/06-good/synthesis/section-synthesis.json'],
+    required_answer_bundle: null,
     prose: {
       paragraphs: [
         {

@@ -67,6 +67,49 @@ export const PartialPackNoIncludedSectionsErrorSchema = z
   })
   .strict();
 
+// Slice 2c — bundle planner failure when <2 sections qualify for the
+// cross-section answer bundle.
+export const PartialPackInsufficientCrossSectionCandidatesErrorSchema = z
+  .object({
+    code: z.literal('insufficient_cross_section_candidates'),
+    message: z.string().min(1),
+    candidate_pool: z.array(
+      z.object({
+        section_id: z.string().min(1),
+        qualified: z.boolean(),
+        reason: z.string(),
+      }).strict(),
+    ),
+  })
+  .strict();
+
+// Slice 2c — validator failure persisting after the one allowed retry.
+export const PartialPackCrossSectionAnswerSupportMissingErrorSchema = z
+  .object({
+    code: z.literal('cross_section_answer_support_missing'),
+    message: z.string().min(1),
+    required_section_paragraph_ids: z.array(z.string()),
+    observed_section_paragraph_ids: z.array(z.string()),
+    final_reason: z.string(),
+  })
+  .strict();
+
+// Discriminated union of all partial-pack prose-error shapes.
+export const PartialPackProseErrorSchema = z.union([
+  PartialPackNoIncludedSectionsErrorSchema,
+  PartialPackInsufficientCrossSectionCandidatesErrorSchema,
+  PartialPackCrossSectionAnswerSupportMissingErrorSchema,
+]);
+
+// Slice 2c — required answer support bundle preselected by the planner.
+export const RequiredAnswerBundleSchema = z
+  .object({
+    role: z.literal('answer'),
+    required_section_paragraph_ids: z.array(z.string().min(1)).min(1),
+    required_section_ids: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
 // Top-level artifact. `prose` is null when proseError is set; both can be
 // present in a single artifact but only one is expected to be active.
 export const PartialPackArtifactSchema = z
@@ -81,13 +124,16 @@ export const PartialPackArtifactSchema = z
     included_sections: z.array(PartialPackIncludedSectionSchema),
     excluded_sections: z.array(PartialPackExcludedSectionSchema),
     source_section_syntheses: z.array(z.string()),
+    // Slice 2c — bundle planner output (null in single-section or
+    // pre-planner-failure cases).
+    required_answer_bundle: RequiredAnswerBundleSchema.nullable(),
     prose: z
       .object({
         paragraphs: z.array(PartialPackParagraphSchema),
       })
       .strict()
       .nullable(),
-    proseError: PartialPackNoIncludedSectionsErrorSchema.optional(),
+    proseError: PartialPackProseErrorSchema.optional(),
     generated_at: z.string().min(1),
     research_os_version: z.string().min(1),
   })

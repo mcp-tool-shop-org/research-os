@@ -104,13 +104,63 @@ export interface PartialPackNoIncludedSectionsError {
   excluded_sections: PartialPackExcludedSection[];
 }
 
+// Slice 2c — structural cross-section enforcement.
+//
+// The bundle planner deterministically selects which section paragraphs
+// MUST support the answer paragraph when ≥2 sections are included. The
+// drafter writes prose against this preselected set; the validator
+// enforces that the model didn't add, omit, or substitute supports.
+export interface RequiredAnswerBundle {
+  role: 'answer';
+  // Format: "<section_id>:<paragraph_id>". One entry per qualifying section,
+  // selected via priority order (faithful answer-role → faithful evidence-role).
+  required_section_paragraph_ids: string[];
+  // Distinct section IDs covered by the bundle. Length must be ≥ 2 when the
+  // bundle was constructed for a multi-section input.
+  required_section_ids: string[];
+}
+
+// Emitted when the classifier produces ≥2 included sections but fewer than
+// 2 of them have at least one faithful answer-role or evidence-role
+// paragraph. The bundle planner refuses to construct a one-section bundle
+// in the multi-section case — that's the failure shape this code surfaces.
+export interface PartialPackInsufficientCrossSectionCandidatesError {
+  code: 'insufficient_cross_section_candidates';
+  message: string;
+  // Per-section qualification record so operators can see which sections
+  // qualified and why the others did not.
+  candidate_pool: Array<{
+    section_id: string;
+    qualified: boolean;
+    reason: string;
+  }>;
+}
+
+// Emitted when the validator rejects the drafter's answer-paragraph support
+// bundle on both the initial call and the one allowed retry. The drafter
+// either omitted, added, or substituted required supports relative to the
+// bundle planner's preselection.
+export interface PartialPackCrossSectionAnswerSupportMissingError {
+  code: 'cross_section_answer_support_missing';
+  message: string;
+  required_section_paragraph_ids: string[];
+  observed_section_paragraph_ids: string[];
+  // The validator's reason on the final (post-retry) failure.
+  final_reason: string;
+}
+
 // Run input for the partial-pack drafter pipeline (after classification).
+// `requiredAnswerBundle` is non-null whenever the orchestrator decided this
+// is a multi-section run and the bundle planner produced a viable bundle;
+// it is null when only one section is included (Slice 2's single-section
+// behavior remains unchanged).
 export interface PartialPackRunInput {
   packId: string;
   packTopic: string;
   packMode: string;
   includedSections: PartialPackSectionInput[];
   excludedSections: PartialPackExcludedSection[];
+  requiredAnswerBundle: RequiredAnswerBundle | null;
   client: ProseCallToolClient;
   model?: string;
 }
@@ -141,6 +191,14 @@ export type PartialPackRunResult =
       noIncludedSections?: PartialPackNoIncludedSectionsError;
     };
 
+// Discriminated union of all prose-error shapes the partial-pack pipeline
+// can emit. Each carries enough structured detail for operators to
+// understand the failure mode without re-running the pipeline.
+export type PartialPackProseError =
+  | PartialPackNoIncludedSectionsError
+  | PartialPackInsufficientCrossSectionCandidatesError
+  | PartialPackCrossSectionAnswerSupportMissingError;
+
 // Top-level artifact shape written to partial-pack-synthesis.json.
 export interface PartialPackArtifact {
   status: typeof PARTIAL_PACK_STATUS;
@@ -153,10 +211,13 @@ export interface PartialPackArtifact {
   included_sections: PartialPackIncludedSection[];
   excluded_sections: PartialPackExcludedSection[];
   source_section_syntheses: string[];
+  // Bundle planner output for the answer paragraph (null in single-section
+  // mode where no bundle is constructed).
+  required_answer_bundle: RequiredAnswerBundle | null;
   prose: {
     paragraphs: PartialPackParagraph[];
   } | null;
-  proseError?: PartialPackNoIncludedSectionsError;
+  proseError?: PartialPackProseError;
   generated_at: string;
   research_os_version: string;
 }

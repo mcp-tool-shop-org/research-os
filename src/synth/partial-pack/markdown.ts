@@ -11,10 +11,13 @@
 
 import type {
   PartialPackArtifact,
+  PartialPackCrossSectionAnswerSupportMissingError,
   PartialPackExcludedSection,
   PartialPackIncludedSection,
+  PartialPackInsufficientCrossSectionCandidatesError,
   PartialPackNoIncludedSectionsError,
   PartialPackParagraph,
+  PartialPackProseError,
 } from './types.js';
 
 function roleLabel(role: string): string {
@@ -75,9 +78,9 @@ export function renderPartialPackMarkdown(input: PartialPackMarkdownInput): stri
   lines.push(`**research-os version:** \`${artifact.research_os_version}\``);
   lines.push('');
 
-  // ── Prose body (or no_included_sections failure marker) ─────────────────
+  // ── Prose body (or proseError failure marker) ───────────────────────────
   if (artifact.proseError) {
-    lines.push(...renderNoIncludedSectionsBody(artifact.proseError));
+    lines.push(...renderProseErrorBody(artifact.proseError));
   } else {
     lines.push(...renderProseBody(artifact.prose?.paragraphs ?? []));
   }
@@ -201,6 +204,29 @@ function renderExcludedList(excluded: PartialPackExcludedSection[]): string[] {
   return lines;
 }
 
+function renderProseErrorBody(err: PartialPackProseError): string[] {
+  switch (err.code) {
+    case 'no_included_sections':
+      return renderNoIncludedSectionsBody(err);
+    case 'insufficient_cross_section_candidates':
+      return renderInsufficientCandidatesBody(err);
+    case 'cross_section_answer_support_missing':
+      return renderCrossSectionSupportMissingBody(err);
+    default:
+      // Unknown error shape — defensive fallback.
+      return [
+        '> **Generation status:** generation_failed',
+        '> **Error code:** unknown',
+        '>',
+        '> An unrecognized prose-error code was emitted by the partial-pack orchestrator.',
+        '',
+        '## Generation failed',
+        '',
+        '',
+      ];
+  }
+}
+
 function renderNoIncludedSectionsBody(err: PartialPackNoIncludedSectionsError): string[] {
   const lines: string[] = [];
   lines.push('> **Generation status:** generation_failed');
@@ -219,6 +245,87 @@ function renderNoIncludedSectionsBody(err: PartialPackNoIncludedSectionsError): 
   lines.push('## Generation failed');
   lines.push('');
   lines.push(err.message);
+  lines.push('');
+  return lines;
+}
+
+function renderInsufficientCandidatesBody(
+  err: PartialPackInsufficientCrossSectionCandidatesError,
+): string[] {
+  const lines: string[] = [];
+  lines.push('> **Generation status:** generation_failed');
+  lines.push('> **Error code:** insufficient_cross_section_candidates');
+  lines.push('>');
+  lines.push(
+    '> The pack has ≥2 included sections, but fewer than 2 of them have at least one faithful',
+  );
+  lines.push(
+    '> answer-role or evidence-role paragraph available. The cross-section answer bundle cannot',
+  );
+  lines.push(
+    '> be constructed deterministically. Resolve the source-side gap (run or repair section',
+  );
+  lines.push(
+    '> synthesis for the missing sections) and re-run partial-pack synthesis.',
+  );
+  lines.push('');
+  lines.push('## Generation failed');
+  lines.push('');
+  lines.push(err.message);
+  lines.push('');
+  lines.push('### Candidate pool');
+  lines.push('');
+  for (const c of err.candidate_pool) {
+    const marker = c.qualified ? '✓' : '✗';
+    lines.push(`- ${marker} **${c.section_id}** — ${c.reason}`);
+  }
+  lines.push('');
+  return lines;
+}
+
+function renderCrossSectionSupportMissingBody(
+  err: PartialPackCrossSectionAnswerSupportMissingError,
+): string[] {
+  const lines: string[] = [];
+  lines.push('> **Generation status:** generation_failed');
+  lines.push('> **Error code:** cross_section_answer_support_missing');
+  lines.push('>');
+  lines.push(
+    '> The drafter produced an answer paragraph whose support bundle violates the cross-section',
+  );
+  lines.push(
+    '> contract on both the initial call and the one allowed retry. Partial-pack synthesis refuses',
+  );
+  lines.push(
+    '> to admit the off-spec output. Inspect the drafter prompt, the section paragraph substrate,',
+  );
+  lines.push(
+    '> or the drafter model selection before re-running.',
+  );
+  lines.push('');
+  lines.push('## Generation failed');
+  lines.push('');
+  lines.push(err.message);
+  lines.push('');
+  lines.push('### Required answer support bundle');
+  lines.push('');
+  for (const spid of err.required_section_paragraph_ids) {
+    lines.push(`- \`${spid}\``);
+  }
+  lines.push('');
+  lines.push('### Observed answer support bundle (final attempt)');
+  lines.push('');
+  if (err.observed_section_paragraph_ids.length === 0) {
+    lines.push('_None._');
+  } else {
+    for (const spid of err.observed_section_paragraph_ids) {
+      lines.push(`- \`${spid}\``);
+    }
+  }
+  lines.push('');
+  lines.push(`### Final validation reason`);
+  lines.push('');
+  lines.push(err.final_reason);
   lines.push('');
   return lines;
 }

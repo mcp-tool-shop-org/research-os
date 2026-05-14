@@ -6,6 +6,8 @@ export {
   renderPartialPackMarkdown,
   runPartialPackDrafter,
   buildPartialPackDrafterArgs,
+  planAnswerBundle,
+  validateAnswerBundle,
   PartialPackArtifactSchema,
   PartialPackParagraphSchema,
   PartialPackSupportBundleSchema,
@@ -14,6 +16,10 @@ export {
   PartialPackExclusionReasonSchema,
   PartialPackRoleSchema,
   PartialPackNoIncludedSectionsErrorSchema,
+  PartialPackInsufficientCrossSectionCandidatesErrorSchema,
+  PartialPackCrossSectionAnswerSupportMissingErrorSchema,
+  PartialPackProseErrorSchema,
+  RequiredAnswerBundleSchema,
   SectionSynthesisProsePartSchema,
   PARTIAL_PACK_STATUS,
   PARTIAL_PACK_ROLES,
@@ -21,16 +27,20 @@ export {
 } from './partial-pack/index.js';
 export type {
   PartialPackArtifact,
+  PartialPackCrossSectionAnswerSupportMissingError,
   PartialPackExcludedSection,
   PartialPackIncludedSection,
+  PartialPackInsufficientCrossSectionCandidatesError,
   PartialPackNoIncludedSectionsError,
   PartialPackOptions,
   PartialPackParagraph,
+  PartialPackProseError,
   PartialPackRole,
   PartialPackSectionInput,
   PartialPackSummary,
   PartialPackSupportBundle,
   PartialPackExclusionReason,
+  RequiredAnswerBundle,
 } from './partial-pack/index.js';
 export { deriveCrossSectionMap } from './derive.js';
 export {

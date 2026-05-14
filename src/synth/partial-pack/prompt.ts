@@ -7,11 +7,21 @@
 
 import { BANNED_OPENERS } from '../prose/prompt.js';
 import { PARTIAL_PACK_ROLES } from './types.js';
-import type { PartialPackSectionInput } from './types.js';
+import type { PartialPackSectionInput, RequiredAnswerBundle } from './types.js';
 
 export { BANNED_OPENERS };
 
-export const PARTIAL_PACK_PROMPT_VERSION = 'partial-pack-prose-v1';
+// v1 -> v2 (Slice 2b): added natural-language CROSS-SECTION RULE + product
+// reason. Hermes3:8b read the rule and still produced single-section answers
+// on the multi-section bed.
+//
+// v2 -> v3 (Slice 2c): the contract changed materially. The drafter no
+// longer chooses the answer paragraph's support bundle — the orchestrator
+// preselects it deterministically via the bundle planner. The v2 prompt
+// language stays as natural-language reinforcement, but the structural
+// constraint is now enforced post-generation by a validator and a retry
+// path. See `bundle-planner.ts`.
+export const PARTIAL_PACK_PROMPT_VERSION = 'partial-pack-prose-v3';
 
 export const PARTIAL_PACK_DRAFTER_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -42,21 +52,44 @@ export const PARTIAL_PACK_DRAFTER_SCHEMA: Record<string, unknown> = {
 export const PARTIAL_PACK_DRAFTER_HINT =
   'Write pack-level prose. Each paragraph has a role (answer/evidence/qualifier/caveat/implication), ' +
   'a text body of 2-5 sentences, and a list of section_paragraph_ids it draws from. The first ' +
-  'paragraph MUST have role=answer and must directly answer the pack-level question. Do NOT invent ' +
-  'claim citations. Do NOT add facts not present in the section paragraphs above.';
+  'paragraph MUST have role=answer. When a REQUIRED ANSWER SUPPORT BUNDLE is given, the answer ' +
+  'paragraph MUST cite exactly those section_paragraph_ids — no omissions, no additions. ' +
+  'Other paragraphs may draw from any included section. Do NOT invent claim citations. Do NOT add ' +
+  'facts not present in the section paragraphs above.';
 
 /**
- * Render the prompt body for the partial-pack drafter. The pack-level
- * "question" is derived from the included sections' purposes — the drafter
- * synthesizes across them rather than restating any single section.
+ * Render the prompt body for the partial-pack drafter.
+ *
+ * `requiredAnswerBundle` is set by the orchestrator when ≥2 sections are
+ * included; it identifies the section paragraphs the drafter MUST use as
+ * the answer paragraph's support bundle. The structural constraint is
+ * enforced post-generation by `validateAnswerBundle` in `bundle-planner.ts`;
+ * the prompt's job here is to communicate the contract clearly and give
+ * the model the substrate it needs.
+ *
+ * When `requiredAnswerBundle` is null (single-section input or v1/v2 callers),
+ * the prompt falls back to the Slice 2 / Slice 2b behavior — the model picks
+ * a single-section answer paragraph.
+ *
+ * `rejectionAddendum` is set on a retry call: it names the validator's
+ * rejection reason so the model can see why the previous draft was rejected.
  */
 export function renderPartialPackPrompt(args: {
   packTopic: string;
   packMode: string;
   includedSections: PartialPackSectionInput[];
   excludedSections: Array<{ section_id: string; reason: string }>;
+  requiredAnswerBundle?: RequiredAnswerBundle | null;
+  rejectionAddendum?: string | null;
 }): string {
-  const { packTopic, packMode, includedSections, excludedSections } = args;
+  const {
+    packTopic,
+    packMode,
+    includedSections,
+    excludedSections,
+    requiredAnswerBundle = null,
+    rejectionAddendum = null,
+  } = args;
   const lines: string[] = [];
 
   lines.push('Pack topic:');
@@ -67,6 +100,11 @@ export function renderPartialPackPrompt(args: {
   lines.push('You are drafting a PARTIAL pack-level synthesis. The pack is not freezable and not');
   lines.push('publishable. Some sections are excluded; you must NOT speak for them. Your prose');
   lines.push('synthesizes across the INCLUDED sections only.');
+  lines.push('');
+  lines.push('Do not merely restate the strongest included section. The purpose of');
+  lines.push('partial-pack synthesis is to combine what the included sections');
+  lines.push('collectively establish while disclosing what excluded sections prevent');
+  lines.push('us from claiming.');
   lines.push('');
   lines.push('Included sections (these are the ONLY allowed sources of assertion):');
   for (const section of includedSections) {
@@ -86,6 +124,43 @@ export function renderPartialPackPrompt(args: {
     lines.push('');
   }
 
+  // ── REQUIRED ANSWER SUPPORT BUNDLE (v3) ────────────────────────────────
+  // This block is the load-bearing structural contract. When the orchestrator
+  // preselects a cross-section bundle, the drafter writes prose against that
+  // exact set — no additions, no omissions.
+  if (requiredAnswerBundle !== null) {
+    lines.push('===== REQUIRED ANSWER SUPPORT BUNDLE =====');
+    lines.push('The answer paragraph MUST use EXACTLY this required support bundle:');
+    for (const spid of requiredAnswerBundle.required_section_paragraph_ids) {
+      lines.push(`  - ${spid}`);
+    }
+    lines.push('');
+    lines.push('Contract for the answer paragraph (non-negotiable):');
+    lines.push('- Do NOT omit any of the required support IDs above.');
+    lines.push('- Do NOT add support IDs beyond the required set.');
+    lines.push('- Every assertion in the answer paragraph MUST be traceable to material in those');
+    lines.push('  specific section paragraphs.');
+    lines.push('- You may quote, paraphrase, or combine claims FROM those paragraphs, but the');
+    lines.push('  answer paragraph must visibly synthesize across all of them, not restate one.');
+    lines.push('');
+    lines.push('Other paragraphs (evidence / qualifier / caveat / implication) follow the general');
+    lines.push('partial-pack rules below and MAY draw from any included section as appropriate.');
+    lines.push('==========================================');
+    lines.push('');
+  }
+
+  // Retry addendum: tell the model exactly why the previous draft was
+  // rejected. The orchestrator passes this on the second attempt.
+  if (rejectionAddendum !== null && rejectionAddendum.length > 0) {
+    lines.push('===== RETRY ADDENDUM =====');
+    lines.push('Your previous draft was rejected. Reason:');
+    lines.push(`  ${rejectionAddendum}`);
+    lines.push('The required support bundle above is non-negotiable. Use exactly those supports');
+    lines.push('on the answer paragraph. Do not omit. Do not add extras.');
+    lines.push('==========================');
+    lines.push('');
+  }
+
   lines.push('Rules:');
   lines.push('- Write FROM the section paragraphs above — not from general knowledge.');
   lines.push('- Do not introduce any assertion not present in the section paragraphs.');
@@ -102,6 +177,9 @@ export function renderPartialPackPrompt(args: {
   lines.push('  Do NOT begin with meta-preamble such as "This synthesis provides", "This report');
   lines.push('  explores", "This document describes", or "In this section". Write the answer itself,');
   lines.push('  not about the answer.');
+  lines.push('- CROSS-SECTION RULE: When more than one section is included, the answer paragraph MUST');
+  lines.push('  draw support from at least two included sections. A single-section answer paragraph');
+  lines.push('  is allowed only when exactly one section is included.');
   lines.push('');
   lines.push('Return {"paragraphs": [...]} with each paragraph having: role, text, section_paragraph_ids.');
   return lines.join('\n');
