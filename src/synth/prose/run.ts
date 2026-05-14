@@ -22,7 +22,6 @@ import type {
   DraftedParagraph,
   PlannerRole,
   ProseBlock,
-  ProseCallToolClient,
   ProseNoAnswerClusterError,
   ProseRole,
   ProseRunInput,
@@ -62,22 +61,6 @@ function activityId(): string {
 
 function paragraphId(n: number): string {
   return `p${n + 1}`;
-}
-
-// Derive the drafter_model / verifier_model from the MCP response envelope.
-// If the envelope carries a `model` field, use it; otherwise record 'unknown'.
-// We can only extract this from a real MCP response, so we thread it through
-// a mutable ref rather than adding another round-trip.
-function modelFromEnvelope(text: string): string {
-  try {
-    const obj = JSON.parse(text) as Record<string, unknown>;
-    if (typeof obj.model === 'string' && obj.model.trim().length > 0) {
-      return obj.model.trim();
-    }
-  } catch {
-    /* ignore */
-  }
-  return 'unknown';
 }
 
 // Resolve which waivers apply to a given support bundle. We record all
@@ -164,8 +147,8 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
 
   const paragraphs: DraftedParagraph[] = [];
   const thinParagraphIds: string[] = [];
-  let drafterModel = 'unknown';
-  let verifierModel = 'unknown';
+  const drafterModel = 'unknown';
+  const verifierModel = 'unknown';
   let paraIndex = 0;
 
   for (const role of ROLE_ORDER) {

@@ -9,7 +9,6 @@ import type {
   AdvisorPath,
   RecoveryAdvice,
   RecoveryArtifact,
-  RecoveryProseError,
   SectionRecoveryResult,
 } from './types.js';
 

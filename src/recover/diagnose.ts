@@ -122,18 +122,6 @@ async function readSectionSynthesis(
   }
 }
 
-function gateFailureFamilies(gate: Record<string, unknown> | null): Set<string> {
-  if (!gate) return new Set();
-  const failures = Array.isArray(gate.failures) ? gate.failures : [];
-  const families = new Set<string>();
-  for (const f of failures) {
-    if (f && typeof f === 'object' && typeof (f as Record<string, unknown>).family === 'string') {
-      families.add((f as Record<string, unknown>).family as string);
-    }
-  }
-  return families;
-}
-
 function gateFailureChecks(gate: Record<string, unknown> | null): Set<string> {
   if (!gate) return new Set();
   const failures = Array.isArray(gate.failures) ? gate.failures : [];

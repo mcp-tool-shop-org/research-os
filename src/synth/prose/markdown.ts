@@ -4,7 +4,7 @@
 // Body: prose paragraphs in role order with footnote-style support markers.
 // Footnotes: claim IDs + source card IDs per paragraph.
 
-import type { DraftedParagraph, ProseBlock, ProseNoAnswerClusterError } from './types.js';
+import type { ProseBlock, ProseNoAnswerClusterError } from './types.js';
 
 export interface SectionSynthesisMarkdownInput {
   sectionId: string;

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,13 +182,48 @@ Quando `--runs <n>` é usado, os relatórios de cada execução são gravados em
 
 **Perfis de revisor determinísticos** — utilize `review_profiles.<nome>.reviewer_options` em `research.yaml` para incluir os parâmetros de amostragem do Ollama, como `temperature` e `seed`, em cada instância de `OllamaInternReviewer` no fluxo de revisão de produção. O perfil `hermes-two-pass-deterministic` é fornecido como um exemplo integrado. Consulte [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) e a [página do manual de calibração do revisor](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## Novidades na v0.8.0
+## Novo no v0.9.0 — Artefato do Produto Arc
 
-A v0.8.0 é uma versão de recuperação da arquitetura: o research-os agora usa `ollama-intern-mcp@^2.4.0` como a base local para o processamento de evidências, utilizada para extração de afirmações, adiciona a aplicação de relevância restrita a seções, preserva evidências fora do tópico como excluídas em vez de utilizáveis, e adiciona a síntese de evidências com escopo de seção para seções elegíveis para avaliação em pacotes que requerem correção.
+O research-os agora produz artefatos legíveis de seções e pacotes parciais, preservando a rastreabilidade e a integridade do pacote.
+
+### O que você pode executar
+
+```sh
+research-os synth section <section-id>       # readable section prose + paragraph-level provenance
+research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
+research-os recover pack                      # lawful recovery guidance for blocked sections
+```
+
+### A cadeia de artefatos
+
+```
+claims → section prose → partial-pack synthesis → recovery guidance
+```
+
+Cada camada consome a camada anterior como evidência. O pipeline de seção-texto executa um planejador determinístico sobre as afirmações aceitas, um redator que escreve texto com base em clusters pré-definidos e um verificador de nível de parágrafo que aprova antes da saída. A síntese de pacotes parciais lê o texto da seção (nunca as afirmações brutas) e divulga as seções excluídas com motivos estruturados. A orientação de recuperação lê o grafo de ações determinístico calculado para cada seção excluída; a IA escreve texto dentro desse espaço de ação definido; um verificador aprova antes da saída. O mesmo objeto de recuperação que alimenta o comando independente `recover pack` é projetado em `partial-pack-synthesis.{md,json}` sob cada seção excluída, para que o operador veja "o que está bloqueado + o que fazer a seguir" no mesmo local.
+
+### Limite legal
+
+Artefatos legíveis não tornam um pacote incompleto congelável ou publicável. Os comandos `pack freeze` e `pack publish` continuam a rejeitar pacotes com seções não executadas, bloqueadas ou que requerem reparo. O produto produz uma saída parcial e honesta em vez de fingir que o pacote está completo.
+
+### O que o v0.9.0 NÃO afirma
+
+- Prontidão para a versão 1.
+- Uma vitória sobre as ferramentas de pesquisa baseadas na nuvem.
+- Um modelo completo de calibração de revisores confiáveis.
+- Que um operador possa executar um pacote novo para gerar um único artefato útil.
+
+O "arc" tornou a camada de artefatos real. A questão da operação individual permanece em aberto e será testada separadamente após o lançamento desta versão.
 
 Consulte [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) e [CHANGELOG.md](CHANGELOG.md).
 
+## Anteriormente: v0.8.0 — Recuperação da Arquitetura
+
+A versão 0.8.0 reconectou o research-os ao seu substrato local de LLM declarado (`ollama-intern-mcp@^2.4.0`) para extração de afirmações, adicionou a aplicação de relevância da seção com base em limites e adicionou a síntese de citações de evidências com escopo de seção para seções elegíveis para "gate" em pacotes que requerem reparo. Consulte [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md).
+
 ## Status
+
+**v0.9.0 — Product Artifact Arc** — publicado no npm como `@mcptoolshop/research-os@0.9.0`, em 13 de maio de 2026. A versão v0.9.0 transforma a estrutura de evidências da versão v0.8 em artefatos úteis para os operadores. A síntese de texto por seção (`research-os synth section <id>`) produz Markdown legível, com pacotes de suporte por parágrafo que apontam para as afirmações aceitas. A síntese de pacotes parciais (`research-os synth pack --partial`) utiliza o texto das seções (nunca as afirmações brutas) e revela as seções excluídas, com razões estruturadas; um planejador de pacotes determinístico pré-seleciona o suporte transversal necessário quando ≥2 seções são incluídas. O consultor de recuperação (`research-os recover pack`) fornece orientações para os operadores em relação às seções bloqueadas, utilizando uma arquitetura de quatro camadas: diagnóstico determinístico + grafo de ações válidas + aconselhamento de IA + verificador, com três caminhos de aconselhamento (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`) e enumerações fechadas para nove tipos de falhas e sete ações de recuperação. As orientações de recuperação estão incorporadas em `partial-pack-synthesis.{md,json}` em cada seção excluída, através de uma projeção compacta do objeto de recuperação canônico — uma única fonte de verdade entre as interfaces independentes e as interfaces integradas; um estado de união discriminada `recovery_unavailable` expõe explicitamente os casos de falha do motor (sem omissões silenciosas). A semântica de congelamento e publicação permanece inalterada: os artefatos parciais legíveis não tornam um pacote incompleto congelável ou publicável. O `accepted_claim_floor` permanece inalterável; o consultor de recuperação se recusa a recomendar a ação `apply_waiver` para falhas inalteráveis. **Requer `ollama-intern-mcp@^2.4.0`** (inalterado da versão v0.8.0). 1266/1266 testes vitest aprovados (de 1013 para 1266, +253 testes em toda a versão). **Todos os quatro pacotes congelados verificam a identidade dos bytes em relação às referências da versão v0.3.3** (sexta versão consecutiva). **Não é uma versão v1.** A versão v0.9.0 torna a camada de artefatos uma realidade; a prontidão para a versão v1, a capacidade do operador de trabalhar sozinho com um novo pacote, um modelo de revisor confiável e a garantia de uma linha de base na nuvem são explicitamente não incluídas nesta versão. Consulte [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) e [CHANGELOG.md](CHANGELOG.md).
 
 **v0.8.0 — Recuperação da Arquitetura + Relevância Restrita a Seções** — publicado no npm como `@mcptoolshop/research-os@0.8.0`, 12 de maio de 2026. A v0.8.0 é uma versão de recuperação da arquitetura: o research-os agora usa `ollama-intern-mcp@^2.4.0` como a base local para o processamento de evidências, utilizada para extração de afirmações (anteriormente, o README declarava a dependência, mas o código tinha "stubs" internos que ignoravam essa dependência desde a versão 0.1 — a v0.8.0 corrige essa inconsistência). Adiciona: base do cliente MCP (`OLLAMA_INTERN_MCP_BIN` variável de ambiente + descoberta via PATH + ciclo de vida do `StdioClientTransport`); avaliação de evidências por seção para cada afirmação, via `ollama_extract`, com um esquema de 4 rótulos (`supports_section` / `off_topic` / `background_only` / `source_chrome`); novo `ReviewDecision` `frame_excluded` (a revisão ignora o LLM para afirmações excluídas, emitindo um `ClaimReview` sintético); o `ClaimSchema` ganha `frame_excluded` + `frame_exclusion_reason` (enumeração com 4 valores, incluindo `critic_unavailable` para falhas no estado do sistema) + `frame_exclusion_rationale`; síntese de evidências com escopo de seção via `synth section <id>` para seções elegíveis para avaliação em pacotes que requerem correção (índice de citação de evidências — ID da afirmação → asserção → trecho de evidência → URL da fonte — NÃO texto narrativo); o sistema de avaliação respeita o registro de substituição da fonte via `getEffectivePublisher` / `getEffectiveSourceType` (incorporando o objetivo da v0.7.1); o valor padrão de `DEFAULT_WINDOW_CHARS` é alterado de 5000 para 3000 (tamanho adequado para `hermes3:8b` com um contexto de trabalho de 8K no perfil `dev-rtx5080`); a política de "falha suave" na chamada do avaliador é invertida (qualquer um dos 5 modos de falha — transporte / análise / rótulo inválido / justificativa vazia / tempo limite — resulta em `frame_excluded: true` com a razão `critic_unavailable`, em vez de aceitação); a semântica de promoção: afirmações `frame_excluded` não bloqueiam a promoção da seção; a transferência de trabalho expõe `frame_excluded` como um bucket separado, distinto dos buckets de afirmações aceitas, em correção ou rejeitadas. **Requer `ollama-intern-mcp@^2.4.0`**. 1013 testes passaram (de 901 para 1013, +112 testes). **Todos os quatro pacotes "frozen" são verificados byte a byte em relação às versões base da v0.3.3.** **Não é uma versão 1** — o trabalho para a versão 1 continua; consulte [`docs/roadmap.md`](docs/roadmap.md). Consulte [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) e [CHANGELOG.md](CHANGELOG.md).
 
@@ -220,11 +255,12 @@ Consulte [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) e [CHANG
 
 ### O que o research-os não é (e o que a versão v0.7.0 não pretende ser)
 
-- Não foi testado em larga escala por usuários externos, além dos testes internos. Seis experimentos internos foram finalizados — um de referência interna, cinco em domínios externos (ComfyUI, XRPL, Godot, calibração de revisores, revisor determinístico) — mas o uso em larga escala por operadores externos ainda é um trabalho futuro.
-- Não é um gerador de texto. O comando `synth workspace` gera o ambiente de trabalho estruturado; humanos (ou Cowork) escrevem o texto com base nos IDs de reivindicação estabelecidos.
-- Não é uma validação de nenhum modelo de revisor. A versão 1.0 não inclui, por padrão, um perfil de revisor "trusted_baseline"; os comprovantes de calibração são evidências, não validações. Consulte a [página do manual de calibração de revisores](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
-- Não está livre de artefatos históricos em pacotes congelados. Os pacotes congelados anteriores à versão 1.0 contêm `research_os_version: '0.1.0'` devido a uma marcação de estrutura anterior à versão 0.4; a correção foi implementada, mas os pacotes históricos são imutáveis de acordo com a Lei 15 (veja [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
-- Não possui autenticação de origem no npm. A autenticação de origem da Sigstore será implementada na versão 1.x; verifique os pacotes npm da versão 1.0 usando o package-shasum e o commit da versão no GitHub.
+- Não foi testado em condições reais por usuários externos, além dos testes internos. Seis experimentos internos foram concluídos — um de referência, cinco em domínios externos (ComfyUI, XRPL, Godot, calibração de revisores, revisor determinístico) — mas o uso em larga escala por operadores externos ainda é um trabalho futuro. A funcionalidade de operação independente em um novo conjunto de dados (uma pergunta de evidência não preparada, sem etapas iniciais pré-definidas) ainda não foi comprovada novamente em relação à versão 0.9.0.
+- Não é um gerador de conteúdo completo. A versão 0.9.0 produz texto legível no escopo de uma seção (`synth section`) e no escopo de um conjunto parcial (`synth pack --partial`), cada um com uma declaração explícita de prontidão para uso. A geração de conteúdo completo ainda requer um conjunto de dados `synthesis_ready` e a criação de conteúdo por humanos (ou colaboradores) com base em IDs de reivindicações aprovados, usando o `synth workspace`.
+- Não é uma validação de nenhum modelo de revisor. A versão 0.9.0 não inclui, por padrão, um perfil de revisor `trusted_baseline`; os registros de calibração são evidências, não validações. Os registros de calibração existentes da versão 0.6.0 são anteriores à arquitetura MCP da versão 0.8.0 e não foram reavaliados sob o caminho MCP. Consulte a [página do manual de calibração de revisores](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+- Não está livre de artefatos históricos em conjuntos de dados congelados. Os conjuntos de dados congelados anteriores à versão 0.4 contêm `research_os_version: '0.1.0'` devido a uma constante de estrutura codificada na versão anterior à 0.4; a correção foi implementada na versão 0.4.0, mas os conjuntos de dados congelados anteriores são imutáveis de acordo com a Lei 15 (veja [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
+- Não possui certificação de origem no npm. A certificação de origem Sigstore será implementada em uma versão futura; verifique os pacotes npm da versão 0.9.0 usando `package-shasum` e o commit da versão no GitHub.
+- Não representa uma vantagem em relação à nuvem. A análise comparativa em `local-first-vs-cloud-research/` da versão 0.7.x identificou as vantagens da nuvem em termos de legibilidade e carga de trabalho do operador; a versão 0.9.0 não afirma que essas vantagens foram superadas.
 
 ### Limitações conhecidas
 
@@ -234,7 +270,7 @@ A versão 1.0 inclui três limitações conhecidas que são visíveis aos usuár
 - **B-E-004 — A autenticação de origem no npm será implementada na versão 1.x.** A versão 1.0 do pacote npm é verificada apenas por meio do package-shasum. A migração do fluxo de publicação para um fluxo de trabalho de CI com o OIDC da Sigstore conflita com a disciplina de "traduzir antes de publicar" (o TranslateGemma 12B é executado localmente); a migração está planejada para a versão 1.x. Verifique os pacotes npm da versão 1.0 usando o package-shasum e o commit da versão no GitHub.
 - **B-A-003 — A migração do esquema de versão do indexador está documentada, mas não é obrigatória.** A versão 1.0 inclui um inteiro `SCHEMA_VERSION` para escrita, mas não um executável de migração para leitura. Ao atualizar a `SCHEMA_VERSION` conforme documentado, exclua o arquivo `.research-os/index.sqlite` e execute novamente `research-os index build --all`. O próprio pacote não é afetado — o indexador é uma camada de aceleração sobre evidências e reivindicações (Lei 8); a reconstrução é idempotente.
 
-**Não é permitido nenhum perfil de revisor "trusted_baseline" na versão 1.0.** Isso é uma postura de confiança intencional, não uma lacuna: os comprovantes de calibração no repositório (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) registram as evidências. A confiança é conquistada por meio de recalls repetidos de falhas simuladas, não é presumida.
+**Nenhum perfil de revisor `trusted_baseline` é aceito na versão 0.9.0.** Isso é uma postura de confiança intencional, não uma lacuna: os registros de calibração no repositório (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) registram as evidências. A confiança é conquistada por meio de testes repetidos de recuperação de falhas simuladas, não é presumida. Esses registros são anteriores à arquitetura MCP da versão 0.8.0 e não foram reavaliados sob o caminho MCP.
 
 ## Roteiro para a versão 1.0
 

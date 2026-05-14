@@ -4,6 +4,38 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-13 — Product Artifact Arc
+
+v0.9.0 turns the v0.8 evidence spine into operator-useful artifacts. It adds section-level prose with paragraph-level provenance, partial-pack synthesis that consumes section prose rather than raw claims, and lawful recovery guidance embedded where blocked sections are disclosed. Freeze and publish semantics are unchanged: readable partial artifacts do not make an incomplete pack freezable or publishable.
+
+### Added
+
+- **Section-level prose synthesis** (`research-os synth section <id>`) — readable Markdown prose with paragraph-level support bundles pointing to accepted_for_synthesis claims. Three-stage pipeline: deterministic planner (claim-to-role assignment) → drafter (writes prose against pre-assigned clusters) → verifier (paragraph-level faithfulness admission). Outputs `sections/<id>/synthesis/section-synthesis.{md,json}` alongside the existing `section-brief.md` evidence index. Admission gate refuses sections where no accepted claim can carry an answer role (proseError `no_answer_cluster`).
+- **Partial-pack synthesis** (`research-os synth pack --partial`) — cross-section pack-level prose drawn from section-synthesis artifacts in a `repair_required` pack. Honest disclosure: every excluded section is named with a structured reason (`gate_blocked` / `unrun` / `repair_required` / `prose_error` / `no_section_synthesis` / `brief_only`). When ≥2 sections are included, a deterministic bundle planner preselects the required cross-section support; the drafter writes against that preselected set; a validator + one-retry path enforces compliance (proseError `cross_section_answer_support_missing` on persistent failure). Outputs `synthesis/partial-pack-synthesis.{md,json}`.
+- **Lawful recovery advisor** (`research-os recover pack`) — four-layer advisor (deterministic diagnosis + lawful action graph + AI advice + verifier) producing operator guidance for blocked, unrun, or failed sections. Nine closed failure shapes; seven closed recovery actions; three closed advisor paths (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`); seven closed verifier rejection reasons. Output includes contrastive framing ("you might think X, but..."), information-boundary disclosure (`system_cannot_see`), Hick's-Law-capped also-consider (≤2). Pack-law forbiddings are data-driven: `accepted_claim_floor → apply_waiver` and `prose_error_no_answer_cluster → rerun_stage` are permanently forbidden by code, not LLM judgment. Outputs `recovery/blocked-section-recovery.{md,json}`.
+- **Recovery guidance embedded in `partial-pack-synthesis.{md,json}`** under each excluded section. Compact projection of the canonical recovery advice: `recommended_action_id`, 1-sentence `recommended_action`, 1-sentence `why_this_action`, `do_not[]` with reasons, `advisor_path` provenance tag, and a pointer back to the canonical artifact. Discriminated-union schema includes a 4th explicit `recovery_unavailable` state (with closed `reason` + `detail`) for engine-failure cases — silent omission is forbidden; every excluded section in fresh output carries a populated `recovery_summary`.
+
+### Changed
+
+- **`synth section` now produces `section-synthesis.{md,json}`** (readable prose) alongside the existing `section-brief.md` (evidence index). The evidence index continues to be the cite-back surface; the prose surface is human-readable narrative with paragraph-level provenance.
+- **`synth pack --partial` consumes section prose artifacts** as input substrate, not raw claims. This preserves Law 4 (extraction may overproduce; synthesis may not inherit abundance) — pack-level prose draws from already-admitted section-level prose, never from claims directly.
+- **Recovery guidance uses a deterministic action graph + AI advice + verifier.** The system enforces pack law (closed enums of failure shapes and recovery actions, forbiddings table); the AI writes prose, contextual framing, and prioritization within that lawful action space; the verifier admits before output. Deterministic fallback floor when AI fails twice.
+
+### Preserved
+
+- **`pack freeze` semantics unchanged.** Readable partial artifacts do not make a `repair_required` pack freezable.
+- **`pack publish` semantics unchanged.** Readable partial artifacts do not make a pack publishable; admission still requires a valid freeze receipt.
+- **Frozen-pack regression byte-identical** against v0.3.3 baselines for all four frozen packs (sixth consecutive release where this holds).
+- **`accepted_claim_floor` remains unwaiveable.** The recovery advisor refuses to recommend `apply_waiver` for unwaiveable failures; the deterministic action graph never lists it among allowed actions.
+- **Slice 1d admission gate.** A section with accepted claims that none can carry an answer role still refuses synthesis as `no_answer_cluster`. Accepted ≠ sufficient.
+
+### Not shipped
+
+- v1 readiness.
+- Fresh-pack operator-aloneness proof.
+- Trusted reviewer calibration model.
+- Cloud-baseline win claim.
+
 ## [0.8.0] - 2026-05-12
 
 v0.8.0 is an architecture recovery release: research-os now uses

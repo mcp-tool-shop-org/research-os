@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,13 +182,48 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **再現性のあるレビュー担当者プロファイル** — `research.yaml`の`review_profiles.<name>.reviewer_options`を使用して、`temperature`、`seed`、およびその他のOllamaのサンプリングパラメータを、本番環境のレビュープロセスにおけるすべての`OllamaInternReviewer`の構築に適用します。`hermes-two-pass-deterministic`プロファイルは、組み込みのサンプルとして提供されています。詳細は[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)と、[レビュー担当者キャリブレーションハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
 
-## v0.8.0 での変更点
+## v0.9.0 で新機能：プロダクト・アーティファクト・アーク
 
-v0.8.0 は、アーキテクチャの改善を目的としたリリースです。`research-os` は、主張の抽出のためのローカル証拠処理基盤として、`ollama-intern-mcp@^2.4.0` を使用するようになりました。また、セクションの関連性をフレームに制限する機能を追加し、関連性のない証拠を「使用不可」として扱い、修正が必要なパッケージ内のセクションに対して、セクション範囲の証拠合成機能を追加しました。
+research-os は、追跡可能性と整合性を維持しながら、読みやすいセクションと部分的なパッケージのアーティファクトを生成します。
+
+### 実行できること
+
+```sh
+research-os synth section <section-id>       # readable section prose + paragraph-level provenance
+research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
+research-os recover pack                      # lawful recovery guidance for blocked sections
+```
+
+### アーティファクトの連鎖
+
+```
+claims → section prose → partial-pack synthesis → recovery guidance
+```
+
+各レイヤーは、前のレイヤーを証拠として利用します。セクション・プローズ・パイプラインは、承認された主張に対して決定論的なプランナーを実行し、事前に割り当てられたクラスタに対して文章を作成するドラフターを実行し、出力前に段落レベルの検証を行います。部分的なパッケージ合成は、セクションの文章（生の主張は一切使用しません）を読み込み、除外されたセクションとその理由を構造化された形式で公開します。リカバリのガイダンスは、各除外されたセクションに対して計算された決定論的なアクション・グラフから読み込みます。AI は、その制約されたアクション空間内で文章を作成し、検証者が出力前に承認します。スタンドアロンの `recover pack` コマンドで利用されているのと同じリカバリ・オブジェクトが、各除外されたセクションの下の `partial-pack-synthesis.{md,json}` に投影されるため、オペレーターは「何がブロックされているか + 次に何をすべきか」を同じ場所で確認できます。
+
+### 制約
+
+読みやすいアーティファクトは、不完全なパッケージをフリーズ可能または公開可能にすることはありません。`pack freeze` および `pack publish` は、未実行、ブロックされている、または修正が必要なセクションを含むパッケージを拒否し続けます。このプロダクトは、パッケージが完全であるかのように見せかけるのではなく、正直な部分的な出力を生成します。
+
+### v0.9.0 が主張しないこと
+
+- v1 の対応状況。
+- クラウドベースの研究ツールに対する優位性。
+- 完全な信頼できるレビューアのキャリブレーションモデル。
+- オペレーターが新しいパッケージを実行して、有用なアーティファクトのみを生成できること。
+
+このアークによって、アーティファクトのレイヤーが現実のものになりました。オペレーターのみで動作できるかどうかという問題は未解決であり、このリリースが公開された後、別途テストされます。
 
 詳細については、[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## 以前のバージョン：v0.8.0 — アーキテクチャ・リカバリ
+
+v0.8.0 では、research-os を、主張抽出のための宣言されたローカル LLM 基盤 (`ollama-intern-mcp@^2.4.0`) に再接続し、フレームに依存したセクションの関連性強制機能を追加し、修正が必要なパッケージ内のゲート対象セクションに対して、セクション範囲の証拠引用合成を追加しました。詳細は、[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) を参照してください。
+
 ## ステータス
+
+**v0.9.0 — Product Artifact Arc** — npmに `@mcptoolshop/research-os@0.9.0` として公開。2026年5月13日。v0.9.0では、v0.8の証拠データ構造を、オペレーターにとって有用な成果物へと変換します。セクションレベルの文章合成機能 (`research-os synth section <id>`) は、読みやすいMarkdown形式で出力され、段落レベルでのサポート情報が、承認された主張へのリンクとして含まれます。部分的なパッケージ合成機能 (`research-os synth pack --partial`) は、セクションの文章データ（生の主張データは使用しません）を処理し、除外されたセクションとその理由を構造化された形式で表示します。また、2つ以上のセクションが含まれる場合、決定論的なバンドルプランナーが、必要なサポート情報を事前に選択します。障害回復アドバイザー (`research-os recover pack`) は、問題が発生したセクションに対して、オペレーター向けのガイダンスを提供します。このガイダンスは、4層のアーキテクチャ（決定論的な診断 + 適切なアクショングラフ + AIによるアドバイス + 検証機能）に基づいており、3つのアドバイスパス (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`) と、9種類の障害パターンと7種類の復旧アクションに対応した定義済みの列挙型を使用します。復旧ガイダンスは、各除外されたセクションの下の `partial-pack-synthesis.{md,json}` ファイルに、標準的な復旧オブジェクトからの簡潔な情報として埋め込まれています。これにより、スタンドアロン環境と組み込み環境で一貫した情報を提供します。`recovery_unavailable` 状態は、エンジンエラーを明示的に示し、サイレントなスキップは行われません。フリーズおよび公開の動作は変更されていません。読みやすい部分的な成果物は、不完全なパッケージがフリーズ可能または公開可能になることを意味しません。`accepted_claim_floor` は依然として変更できません。復旧アドバイザーは、変更できないエラーに対して `apply_waiver` を推奨しません。**`ollama-intern-mcp@^2.4.0` が必要です**（v0.8.0からの変更なし）。1266/1266のvitestテストが成功しました（1013 → 1266、全テストで+253）。**4つのフリーズされたパッケージはすべて、v0.3.3のベースラインと比較して、バイト単位で同一であることを検証済みです**（6回目の連続リリース）。**これはv1のリリースではありません。** v0.9.0では、成果物層が実用化されます。v1のリリース、新しいパッケージのオペレーター単独での利用可能性、信頼できるレビューモデル、およびクラウドベースの基準を満たす主張の実現は、今回のリリースには含まれていません。詳細は、[`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 **v0.8.0 — アーキテクチャの改善 + トピックの関連性のフレーム制限** — npm で `@mcptoolshop/research-os@0.8.0` として公開されました (2026-05-12)。v0.8.0 は、アーキテクチャの改善を目的としたリリースです。`research-os` は、主張の抽出のためのローカル証拠処理基盤として、`ollama-intern-mcp@^2.4.0` を使用するようになりました (以前はREADMEで依存関係が宣言されていましたが、コードはv0.1の初期バージョンから、それを回避する内部の直接Ollamaのスタブを使用しており、v0.8.0でその乖離を解消しました)。 以下の機能が追加されました。MCPクライアント基盤 (`OLLAMA_INTERN_MCP_BIN` 環境変数 + PATH検出 + StdioClientTransportライフサイクル); `ollama_extract` を使用した、各主張に対するセクション証拠の評価 (4つのラベル: `supports_section` / `off_topic` / `background_only` / `source_chrome`); 新しい `ReviewDecision` の `frame_excluded` (除外された主張に対してLLMの処理をスキップし、合成された `ClaimReview` を生成); `ClaimSchema` に `frame_excluded` + `frame_exclusion_reason` (システムの状態異常の場合に `critic_unavailable` を含む4つの値のenum) + `frame_exclusion_rationale` が追加; 修正が必要なパッケージ内の、ゲートの対象となるセクションに対して、セクション範囲の証拠合成機能 (証拠の参照インデックス: 主張ID → アサーション → 証拠の抜粋 → ソースURL — これは、記述的な文章ではありません); ゲートは、`getEffectivePublisher` / `getEffectiveSourceType` を使用した、ソースカードのオーバーライドレジスタを尊重します (v0.7.1 の目標を吸収)。`DEFAULT_WINDOW_CHARS` のデフォルト値が 5000 から 3000 に変更されました (dev-rtx5080 プロファイルにおける、8Kのコンテキストサイズを持つ `hermes3:8b` に最適化)。評価者の呼び出しに対する、ソフトフェイルポリシーが反転されました (5つの失敗モードのうちのいずれか — トランスポート / 解析 / 無効なラベル / 空の理由 / タイムアウト — の場合、デフォルトでは `frame_excluded: true` となり、理由として `critic_unavailable` が設定されます。ただし、正常な状態ではありません)。プロモーションのセマンティクス: `frame_excluded` の主張は、セクションのプロモーションをブロックしません。コワークハンドオフでは、`frame_excluded` が、受け入れられた/修正が必要な/拒否されたものとは別の、独自のバケットとして表示されます。**`ollama-intern-mcp@^2.4.0` が必要です。** 1013/1013 の vitest が成功しました (901 → 1013、+112 テスト)。**すべての4つの凍結されたパッケージが、v0.3.3 のベースラインに対して、バイト単位で完全に一致します。** **これは、v1 リリースではありません** — v1 のための作業は継続中です。詳細については、[`docs/roadmap.md`](docs/roadmap.md) を参照してください。詳細については、[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
@@ -220,11 +255,12 @@ v0.8.0 は、アーキテクチャの改善を目的としたリリースです�
 
 ### research-osとは何か（およびv0.7.0が主張するもの）
 
-- 外部ユーザーによる実戦テストは、内部テスト段階にとどまっています。6つの内部テストが完了しました（自己参照型1つ、外部ドメイン関連型5つ：ComfyUI、XRPL、Godot、レビューア校正、決定論的レビューア）、しかし、大規模な外部オペレーターの利用は今後の課題です。
-- これは、コンテンツ生成ツールではありません。`synth workspace` コマンドは、構造化された作業環境を生成します。コンテンツは、人間（または Cowork）が、承認されたクレームIDに基づいて記述します。
-- 特定のレビューモデルを推奨するものではありません。v1.0 には、デフォルトで `trusted_baseline` レビューアプロファイルは含まれていません。校正記録は、推奨を意味するものではありません。詳細については、[レビューア校正に関するマニュアルページ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) を参照してください。
-- 過去のアーティファクトが、一部のパッケージに含まれている可能性があります。v1.0 以前のパッケージには、v0.4以前の初期設定による `research_os_version: '0.1.0'` が含まれています。この問題は修正されましたが、過去のパッケージは Law 15 により変更できません（[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) を参照）。
-- npm 上でのプロヴェナンス認証は、v1.x 以降で実装予定です。v1.0 の npm パッケージは、package-shasum と GitHub のリリースコミットを使用して検証してください。
+- 外部ユーザーによる実証テストは、社内での検証段階にとどまっています。6つの社内実験が終了しました（自己参照型1つ、外部ドメイン関連型5つ：ComfyUI、XRPL、Godot、レビューア校正、決定論的レビューア）。しかし、大規模な外部オペレーターの利用は今後の課題です。新しい環境でのオペレーター単独での利用（準備されていない証拠データ、事前準備されたアップストリーム処理がない状態）について、v0.9.0に対する再検証はまだ行われていません。
+- 完全な合成機能を持つものではありません。v0.9.0は、セクション単位（`synth section`）および部分的なパッケージ単位（`synth pack --partial`）で、読みやすい文章を生成します。ただし、各パッケージの利用可能状況を明示的に示します。完全なパッケージの合成には、`synthesis_ready` パッケージと、`synth workspace` を使用した、承認されたクレームIDに対する人間の（または Cowork の）執筆が必要です。
+- 特定のレビューアモデルを推奨するものではありません。v0.9.0には、デフォルトで `trusted_baseline` レビューアプロファイルは含まれていません。校正記録は、推奨を意味するものではなく、証拠です。既存のv0.6.0の校正記録は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパス下では再基準化されていません。詳細は、[レビューア校正ハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) を参照してください。
+- 過去の遺物が、フリーズされたパッケージに残っている可能性があります。v0.4以前のフリーズされたパッケージには、`research_os_version: '0.1.0'` が含まれています。これは、v0.4以前にハードコードされた定数によるものです。この問題はv0.4.0で修正されましたが、以前のフリーズされたパッケージは、Law 15により変更できません（[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) を参照）。
+- npm上で、改ざん防止の証明は行われていません。Sigstoreによる改ざん防止の証明は、今後のリリースで実装予定です。v0.9.0のnpmパッケージは、package-shasumとGitHubのリリースコミットを使用して検証してください。
+- クラウドベースの利点を克服したものではありません。v0.7.xの `local-first-vs-cloud-research/` で行われた検証では、クラウドの読みやすさやオペレーターの負担軽減という利点が示されました。v0.9.0は、これらの点が克服されたことを主張するものではありません。
 
 ### 既知の制限事項
 
@@ -234,7 +270,7 @@ v1.0 には、オペレーターが認識する既知の制限事項が3つ含�
 - **B-E-004 — npm のプロヴェナンス認証は、v1.x 以降で実装予定。** v1.0 の npm tarball は、package-shasum のみで検証できます。公開プロセスを CI ワークフローに移行し、Sigstore OIDC を統合することは、公開前の翻訳という原則（TranslateGemma 12B はローカルで実行）と競合するため、この移行は v1.x で計画されています。v1.0 の npm パッケージは、package-shasum と GitHub のリリースコミットを使用して検証してください。
 - **B-A-003 — インデクサのスキーマバージョンの移行は、ドキュメントに記載されていますが、強制はされていません。** v1.0 には、書き込み側の `SCHEMA_VERSION` 整数が含まれていますが、読み込み側の移行ツールはありません。ドキュメントに記載されている `SCHEMA_VERSION` の変更があった場合、`.research-os/index.sqlite` を削除し、`research-os index build --all` を再実行してください。パッケージ自体には影響はありません。インデクサは、エビデンスとクレームに対する高速化レイヤーであり（Law 8）、再構築は冪等です。
 
-**v1.0 には、信頼されたベースラインのレビューアプロファイルは含まれていません。** これは、意図的な信頼性の設定であり、欠陥ではありません。リポジトリ内の校正記録（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）は、その証拠を記録しています。信頼は、繰り返し行われる意図的なエラー検出によって得られるものであり、当然のことではありません。
+**v0.9.0では、`trusted_baseline` レビューアプロファイルはサポートされていません。** これは、機能不足ではなく、意図的なセキュリティ対策です。リポジトリ内の校正記録（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）は、その証拠を記録しています。信頼は、繰り返し行われる意図的なエラー再現によって得られるものであり、当然のことではありません。これらの記録は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパス下では再基準化されていません。
 
 ## v1.0 へのロードマップ
 

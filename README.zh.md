@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -90,7 +90,7 @@ research-os pack publish \
 
 **要查看一个实际的示例**，请参阅 `research-os-packs/research-os-spec/` 目录下的研究包——每个文件、每个记录、每个结论、每个冻结的指纹，都以只追加的日志形式存储在磁盘上。该研究包生成了 `docs/dogfood-proof.md`。
 
-**需要本地运行 [`ollama-intern-mcp@^2.4.0`](https://github.com/mcp-tool-shop-org/ollama-intern-mcp)**，用于LLM提取、初步评估、审查和发现。MCP服务器通过环境变量 `OLLAMA_INTERN_MCP_BIN` 或 PATH 环境变量来发现。默认模型是 `hermes3:8b`；可以使用 `OLLAMA_INTERN_MODEL=<model>` 覆盖该设置（或者在每次调用时使用 `--model <name>`）。如果Ollama没有安装在默认的 `localhost:11434` 上，请设置 `OLLAMA_HOST`。
+**需要本地运行 [`ollama-intern-mcp@^2.4.0`](https://github.com/mcp-tool-shop-org/ollama-intern-mcp)**，用于LLM的提取、分诊、审查和发现。MCP服务器通过环境变量 `OLLAMA_INTERN_MCP_BIN` 或 PATH 自动发现。默认模型为 `hermes3:8b`；可以通过设置 `OLLAMA_INTERN_MODEL=<模型名称>`（或通过 `--model <名称>` 参数）进行覆盖。如果Ollama没有安装在默认的 `localhost:11434` 上，请设置 `OLLAMA_HOST`。
 
 ## 16 条核心规则
 
@@ -182,15 +182,50 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
 
-## 新功能，版本 v0.8.0
+## v0.9.0 新增功能：产品构件归档
 
-v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取主张，增加了对框架边界内的相关性的强制执行，将不相关的信息保留为排除项而不是可用的信息，并为需要修复的包中的符合条件的章节，增加了章节范围内的证据综合功能。
+research-os 现在可以生成可读的章节和部分构件，同时保留可追溯性，并遵循构件规范。
 
-请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+### 您可以运行的内容
+
+```sh
+research-os synth section <section-id>       # readable section prose + paragraph-level provenance
+research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
+research-os recover pack                      # lawful recovery guidance for blocked sections
+```
+
+### 构件链
+
+```
+claims → section prose → partial-pack synthesis → recovery guidance
+```
+
+每一层都将前一层作为证据。章节内容处理流水线运行一个确定性规划器，用于处理已接受的声明；一个撰稿人，用于根据预先分配的集群撰写内容；以及一个段落级验证器，在输出之前进行验证。部分构件合成读取章节内容（而不是原始声明），并以结构化的方式披露被排除的章节及其原因。恢复指南读取为每个被排除的章节计算的确定性行动图；AI 在此合规的行动空间内撰写内容；一个验证器在输出之前进行验证。与独立的 `recover pack` 命令相同的恢复对象，会被投影到 `partial-pack-synthesis.{md,json}` 文件中，每个被排除的章节下，这样操作人员可以在同一位置看到“哪些内容被阻止 + 下一步该做什么”。
+
+### 规范边界
+
+可读的构件并不能使不完整的构件可以被冻结或发布。`pack freeze` 和 `pack publish` 命令仍然会拒绝包含未运行、被阻止或需要修复的章节的构件。产品会生成诚实的、部分输出，而不是假装构件是完整的。
+
+### v0.9.0 不声称的功能
+
+- v1 版本的可用性。
+- 优于基于云的研究工具。
+- 完整的、经过校准的受信任审查模型。
+- 能够仅通过运行新的构件来生成有用的构件。
+
+这个归档功能使构件层真正可用。关于是否可以仅由操作人员完成构件生成的问题，仍然是开放的，将在发布后单独进行测试。
+
+请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+## 之前版本：v0.8.0 — 架构恢复
+
+v0.8.0 将 research-os 重新连接到其声明的本地 LLM 基础 (`ollama-intern-mcp@^2.4.0`)，用于提取声明，增加了基于框架的章节相关性强制执行，并增加了面向需要修复的构件中，针对符合条件章节的、基于证据的引用合成。请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md)。
 
 ## 状态
 
-**v0.8.0 — 架构恢复 + 框架相关性** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.8.0`，发布日期：2026-05-12。v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取主张（此前 README 中声明了该依赖，但代码内部直接使用了 Ollama 的接口，绕过了该依赖，自 v0.1 版本以来一直存在这种情况，v0.8.0 修复了这个问题）。新增功能：MCP 客户端基础 (`OLLAMA_INTERN_MCP_BIN` 环境变量 + PATH 发现 + StdioClientTransport 生命周期)；通过 `ollama_extract` 和 4 标签模式（`supports_section` / `off_topic` / `background_only` / `source_chrome`）对每个主张的章节证据进行评估；新的 `ReviewDecision` 选项 `frame_excluded`（审查时跳过 LLM，对排除的主张生成 `ClaimReview`）；`ClaimSchema` 增加了 `frame_excluded` + `frame_exclusion_reason`（包含 4 个值，包括 `critic_unavailable`，用于表示系统状态错误）+ `frame_exclusion_rationale`；通过 `synth section <id>` 对需要修复的包中符合条件的章节，进行章节范围内的证据综合（证据引用索引：主张 ID → 断言 → 证据摘录 → 来源 URL，而不是叙述性文本）；门禁机制通过 `getEffectivePublisher` / `getEffectiveSourceType` 尊重来源卡覆盖信息（吸收了 v0.7.1 的目标）；`DEFAULT_WINDOW_CHARS` 默认值从 5000 更改为 3000（针对 `hermes3:8b` 在 `dev-rtx5080` 配置文件下的 8K 工作上下文进行了优化）；对评估器调用的软失败策略进行了反转（5 种失败模式中的任何一种，包括传输失败、解析失败、标签无效、缺少理由或超时，都默认设置为 `frame_excluded: true`，理由为 `critic_unavailable`，而不是直接拒绝）；推广语义：排除的主张不会阻止章节的推广；协同工作流程将 `frame_excluded` 作为独立的桶，与已接受、需要修复和已拒绝的主张分开。**需要 `ollama-intern-mcp@^2.4.0`**。1013/1013 个 vitest 测试通过（从 901 增加到 1013，增加了 112 个测试）。**所有四个冻结的包都与 v0.3.3 的基线完全一致（字节级别）**。**这不是 v1 版本** — v1 版本的开发工作仍在进行中；请参阅 [`docs/roadmap.md`](docs/roadmap.md)。请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+**v0.9.0 — 产品构件层** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.9.0`，发布日期：2026年5月13日。v0.9.0 将 v0.8 中的证据链转化为对操作人员有用的构件。分节级别的文本合成功能 (`research-os synth section <id>`) 生成可读的 Markdown 格式文档，并提供段落级别的支持信息，指向已接受的论点。部分构件合成功能 (`research-os synth pack --partial`) 消耗分节文本（而非原始论点），并明确列出被排除的分节，并提供结构化的原因；一个确定性的构件规划器会在包含 2 个或更多分节时，预先选择所需的交叉支持信息。故障恢复建议器 (`research-os recover pack`) 为受阻的分节提供操作人员指导，采用四层架构——确定性诊断 + 合法操作图 + AI 建议 + 验证器，并提供三种建议路径 (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`)，以及针对九种故障模式和七种恢复操作的封闭枚举。恢复建议信息嵌入在每个被排除的分节下的 `partial-pack-synthesis.{md,json}` 文件中，通过从规范的恢复对象进行紧凑的投影，实现独立和嵌入式表面之间的单一数据源；`recovery_unavailable` 状态明确地暴露引擎故障情况（不进行静默跳过）。冻结和发布的语义保持不变：可读的部分构件不会使不完整的构件可以被冻结或发布。`accepted_claim_floor` 仍然是不可放弃的；恢复建议器拒绝推荐 `apply_waiver` 用于不可放弃的故障。**需要 `ollama-intern-mcp@^2.4.0`** (与 v0.8.0 相同)。1266/1266 个 vitest 测试通过 (从 1013 增加到 1266，增加了 253 个测试)。**所有四个冻结的构件都与 v0.3.3 的基线进行字节级别的完全一致性验证** (连续第六次发布)。**这不是 v1 版本。** v0.9.0 使构件层成为现实；v1 版本的可用性、全新的独立操作性构件、可信的评审模型以及基于云的基线验证声明，明确地未包含在本次发布中。请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+**v0.8.0 — 架构恢复 + 框架边界内的相关性** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.8.0`，发布日期：2026年5月12日。v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取论点（此前 README 中声明了该依赖，但代码中存在绕过它的内部直接 Ollama 接口，自 v0.1 版本以来一直存在，v0.8.0 解决了这个问题）。新增功能：MCP 客户端基础 (`OLLAMA_INTERN_MCP_BIN` 环境变量 + PATH 自动发现 + StdioClientTransport 生命周期）；通过 `ollama_extract` 和 4 标签模式（`supports_section` / `off_topic` / `background_only` / `source_chrome`）对每个论点进行分段证据评估；新的 `ReviewDecision` 状态 `frame_excluded`（如果论点被排除，则审查会跳过 LLM，并生成合成的 ClaimReview）；`ClaimSchema` 增加了 `frame_excluded` + `frame_exclusion_reason`（包含 4 个枚举值，包括 `critic_unavailable`，用于系统状态故障）+ `frame_exclusion_rationale`；通过 `synth section <id>` 实现基于分段的证据合成，适用于需要修复的包中的符合条件的段落（证据引用索引：论点 ID → 断言 → 证据摘录 → 来源 URL，而非叙述性文本）；审查机制通过 `getEffectivePublisher` / `getEffectiveSourceType` 尊重来源卡覆盖设置（吸收了 v0.7.1 的目标）；`DEFAULT_WINDOW_CHARS` 默认值从 5000 更改为 3000（针对 `dev-rtx5080` 配置文件下的 hermes3:8b 模型，上下文大小为 8K）；对评估器调用采用软失败策略（5 种失败模式：传输 / 解析 / 无效标签 / 空理由 / 超时，默认情况下设置为 `frame_excluded: true`，理由为 `critic_unavailable`，不予通过）；推广语义：`frame_excluded` 论点不会阻止分段的推广；协同工作流程将 `frame_excluded` 状态作为独立的桶，与已接受/需要修复/已拒绝的状态分开。**需要 `ollama-intern-mcp@^2.4.0`**。1013/1013 个 vitest 测试通过（从 901 增加到 1013，增加了 112 个测试）。**所有四个冻结的包都与 v0.3.3 的基线版本完全一致。** **这不是 v1 版本** — v1 版本的准备工作仍在进行中，请参阅 [`docs/roadmap.md`](docs/roadmap.md)。请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 **v0.7.0 — 内部测试版本强化** — 已于2026年5月11日以 `@mcptoolshop/research-os@0.7.0` 的版本发布到 npm。 针对 v0.6.0 版本，进行了四阶段的内部测试（包括：错误/安全问题、主动增强稳定性、优化操作界面、完善界面设计）。 v0.7.0 版本包含以下强化改进：更安全的收集功能（针对每个 URL 采用 try/catch 机制，并在部分失败时保留正在处理的源 ID）；更具弹性的索引器（针对格式错误的 JSONL 文件，可以跳过并发出警告，针对每个记录/每个文件/每个部分）；结构化的错误恢复（12 个 `ResearchOSError` 子类，并提供参考手册链接）；进度反馈（通过 `--no-progress` 和 `--progress` 标志，自动检测终端环境，用于审查、收集、冲突映射和打包发布）；面向操作人员的可操作性改进（`pack publish --force` 命令的规范化和破坏性替换功能，已在 8 个方面进行了回归测试；修复了 `IndexNotBuiltError` 命令中的文本错误，并添加了命令文本注册测试；为 12 个 `ResearchOSError` 子类添加了错误参考手册链接）；供应链安全（CI 动作的 SHA 值固定，以及默认禁止读取文件内容；Dependabot 和 `github-actions` 生态系统覆盖）；新增了两个参考手册页面（`recovery.md` 和 `known-limitations.md`）；界面设计优化（规范化句子、重新排序侧边栏，并在破坏性操作处添加了警告提示）。 901 个 `vitest` 测试通过（从 713 个增加到 901 个，增加了 188 个测试）。 **所有四个冻结版本的打包文件都与 v0.3.3 版本的打包文件完全一致。** **这不是 v1 版本的发布** — v1 版本的准备工作仍在进行，详情请参见 [`docs/roadmap.md`](docs/roadmap.md) 和 [`docs/dogfood-swarm-proof.md`](docs/dogfood-swarm-proof.md)。 更多信息请参见 [`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -220,11 +255,12 @@ v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp
 
 ### research-os 并非（并且 v0.7.0 版本也不声称是）什么
 
-- 未经外部用户的大规模测试，仅在内部测试阶段使用。六个内部测试项目已结束，其中一个涉及自我引用，五个涉及外部领域（ComfyUI、XRPL、Godot、评审员校准、确定性评审员），但外部用户的规模化使用仍有待进一步研究。
-- 并非内容生成器。`synth workspace` 命令用于生成结构化的工作空间；人类（或 Cowork）根据已接受的声明 ID 编写内容。
-- 不代表对任何评审模型的认可。v1.0 版本默认不包含预设的“可信基准”评审员配置文件；校准记录是证据，而非认可。请参阅[评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
-- 冻结包中可能存在历史遗留信息。在 v1.0 之前的冻结包包含 `research_os_version: '0.1.0'`，这是由于一个在 v0.4 之前的构建模板。该问题已修复，但历史版本的包在第 15 条规定的条件下是不可变的（参见 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
-- npm 上的来源信息未进行验证。Sigstore 来源验证将在 v1.x 版本中实现；请通过 package-shasum 和 GitHub 发布提交来验证 v1.0 版本的 npm 包。
+- 尚未经过外部用户的广泛测试，仅限于内部测试阶段。六个内部测试项目已结束，其中一个为自引用项目，五个涉及外部领域（ComfyUI、XRPL、Godot、评审员校准、确定性评审），但大规模的外部用户使用仍有待进一步研究。在全新环境中，单独运行一个模块（例如，一个未准备好的证据问题，没有预先构建的上游流程）尚未在 v0.9.0 版本中得到重新验证。
+- 并非完整的合成器。v0.9.0 版本可以生成可读的文本，分别针对章节级别（`synth section`）和部分模块级别（`synth pack --partial`），每个级别都明确声明了模块的可用状态。完整的模块合成仍然需要一个 `synthesis_ready` 级别的模块，以及通过 `synth workspace` 使用人类（或协作者）进行基于已接受的声明 ID 的编写。
+- 不代表对任何评审模型的认可。v0.9.0 版本默认不包含 `trusted_baseline` 类型的评审员配置文件；校准记录是证据，而非认可。现有的 v0.6.0 版本的校准记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下进行重新校准。请参阅 [评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+- 冻结的模块可能包含历史遗留信息。在 v0.4 之前的冻结模块包含 `research_os_version: '0.1.0'`，这是由于 v0.4 之前的硬编码的常量；该问题已在 v0.4.0 版本中修复，但较早的冻结模块在 Law 15 的约束下是不可变的（参见 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
+- 未在 npm 上进行来源验证。Sigstore 来源验证将推迟到未来的版本；请通过 package-shasum 和 GitHub 发布提交来验证 v0.9.0 版本的 npm 包。
+- 并非云端解决方案的优势。v0.7.x 版本的 `local-first-vs-cloud-research/` 目录中的产品验证结果表明，云端解决方案在可读性和操作负担方面具有优势；v0.9.0 版本并未声称这些优势已被克服。
 
 ### 已知的局限性
 
@@ -234,7 +270,7 @@ v1.0 版本包含三个用户可见的已知限制。每个限制都记录在[�
 - **B-E-004 — npm 来源验证将在 v1.x 版本中实现。** v1.0 版本的 npm tarball 仅通过 package-shasum 进行验证。将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）存在冲突；该迁移计划在 v1.x 版本中进行。请通过 package-shasum 和 GitHub 发布提交来验证 v1.0 版本的 npm 包。
 - **B-A-003 — 索引器模式版本迁移已记录，但未强制执行。** v1.0 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。当 `SCHEMA_VERSION` 发生记录中的更改时，请删除 `.research-os/index.sqlite` 文件，然后重新运行 `research-os index build --all` 命令。这不会影响包本身——索引器是证据 + 声明的加速层（第 8 条）；重建操作是幂等的。
 
-**v1.0 版本不包含任何预设的“可信基准”评审员配置文件。** 这是一种有意的信任策略，而不是一个缺陷：存储在仓库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。信任是通过反复的、有针对性的失败测试来获得的，而不是默认信任。
+**v0.9.0 版本不包含 `trusted_baseline` 类型的评审员配置文件。** 这是一种有意的信任策略，而非缺陷：存储库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。信任是通过反复的、有预设错误的测试来获得的，而不是默认信任。这些记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下进行重新校准。
 
 ## 通往 v1.0 的路线图
 

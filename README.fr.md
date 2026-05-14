@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/version-0.8.0-blue" alt="version 0.8.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,13 +182,48 @@ Lorsque l'option `--runs <n>` est utilisée, les rapports pour chaque exécution
 
 **Profils d'évaluateurs déterministes** — utilisez `review_profiles.<name>.reviewer_options` dans `research.yaml` pour intégrer les paramètres d'échantillonnage d'Ollama tels que `temperature`, `seed`, et d'autres, dans chaque instance de `OllamaInternReviewer` dans le processus de révision en production. Le profil `hermes-two-pass-deterministic` est fourni comme exemple. Consultez [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) et la [page du manuel de calibrage des évaluateurs](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## Nouveautés dans la version 0.8.0
+## Nouvelle version v0.9.0 — Artefact de produit Arc
 
-La version 0.8.0 est une version de refonte de l'architecture : `research-os` utilise désormais `ollama-intern-mcp@^2.4.0` comme base locale pour le traitement des preuves, ce qui permet l'extraction des affirmations, l'application de la pertinence contextuelle, la conservation des preuves hors sujet en tant que "exclues" plutôt que "utilisables", et l'ajout de la synthèse des preuves spécifiques aux sections pour les sections éligibles dans les ensembles nécessitant des corrections.
+research-os produit désormais des artefacts lisibles, regroupés par sections et par paquets partiels, tout en préservant la traçabilité et le respect des règles de paquets.
+
+### Ce que vous pouvez exécuter
+
+```sh
+research-os synth section <section-id>       # readable section prose + paragraph-level provenance
+research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
+research-os recover pack                      # lawful recovery guidance for blocked sections
+```
+
+### La chaîne d'artefacts
+
+```
+claims → section prose → partial-pack synthesis → recovery guidance
+```
+
+Chaque couche utilise la couche précédente comme preuve. Le pipeline de rédaction de sections exécute un planificateur déterministe sur les affirmations acceptées, un rédacteur qui écrit du texte en fonction de clusters prédéfinis, et un vérificateur au niveau des paragraphes qui valide avant la sortie. La synthèse de paquets partiels lit le texte des sections (jamais les affirmations brutes) et indique les sections exclues avec des raisons structurées. Le guide de récupération lit les informations du graphe d'actions déterministe calculé pour chaque section exclue ; l'IA rédige du texte dans cet espace d'actions légal ; un vérificateur valide avant la sortie. Le même objet de récupération qui alimente la commande autonome `recover pack` est projeté dans `partial-pack-synthesis.{md,json}` sous chaque section exclue, de sorte que l'opérateur voit "ce qui est bloqué + ce qu'il faut faire ensuite" au même endroit.
+
+### Limites des règles
+
+Les artefacts lisibles ne rendent pas un paquet incomplet "figé" ou publiable. Les commandes `pack freeze` et `pack publish` continuent de refuser les paquets contenant des sections non exécutées, bloquées ou nécessitant une réparation. Le produit produit une sortie partielle honnête au lieu de prétendre que le paquet est complet.
+
+### Ce que la version v0.9.0 NE prétend PAS
+
+- Être prête pour la version 1.
+- Être supérieure aux outils de recherche basés sur le cloud.
+- Avoir un modèle de calibration complet pour les examinateurs.
+- Permettre à un opérateur d'exécuter un nouveau paquet pour produire un seul artefact utile.
+
+L'arc a rendu la couche d'artefacts réelle. La question de l'autonomie de l'opérateur reste ouverte et sera testée séparément après la sortie de cette version.
 
 Consultez [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) et [CHANGELOG.md](CHANGELOG.md).
 
+## Version précédente : v0.8.0 — Restauration de l'architecture
+
+La version v0.8.0 a reconnecté research-os à son substrat LLM local déclaré (`ollama-intern-mcp@^2.4.0`) pour l'extraction des affirmations, a ajouté l'application de règles de pertinence des sections, et a ajouté la synthèse de citations de preuves spécifiques aux sections pour les paquets nécessitant une réparation. Voir [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md).
+
 ## Statut
+
+**v0.9.0 — Arc des artefacts du produit** — publié sur npm en tant que `@mcptoolshop/research-os@0.9.0`, le 13 mai 2026. La version v0.9.0 transforme la structure de preuves de la version v0.8 en artefacts utiles pour les opérateurs. La synthèse textuelle au niveau des sections (`research-os synth section <id>`) produit du Markdown lisible, avec des regroupements de paragraphes qui renvoient aux affirmations acceptées. La synthèse partielle (`research-os synth pack --partial`) utilise le texte des sections (jamais les affirmations brutes) et indique les sections exclues avec des raisons structurées ; un planificateur de regroupements déterministe pré-sélectionne les supports transversaux requis lorsque ≥2 sections sont incluses. Le conseiller de récupération (`research-os recover pack`) fournit des instructions aux opérateurs pour les sections bloquées, en utilisant une architecture en quatre couches : diagnostic déterministe + graphe d'actions conformes + conseils d'IA + vérificateur, avec trois chemins de conseil (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`) et des énumérations fermées pour neuf types de défaillances et sept actions de récupération. Les instructions de récupération sont intégrées dans `partial-pack-synthesis.{md,json}` sous chaque section exclue, via une projection compacte de l'objet de récupération canonique, qui constitue une source unique de vérité entre les interfaces autonomes et intégrées ; un état `recovery_unavailable` de type union discriminée expose explicitement les cas de défaillance du moteur (pas de sauts silencieux). La sémantique de gel et de publication reste inchangée : les artefacts partiels lisibles ne rendent pas un regroupement incomplet gelable ou publiable. Le seuil `accepted_claim_floor` reste immuable ; le conseiller de récupération refuse de recommander `apply_waiver` pour les défaillances immuables. **Nécessite `ollama-intern-mcp@^2.4.0`** (inchangé par rapport à la version v0.8.0). 1266/1266 tests vitest réussis (1013 → 1266, +253 tests au total). **Les quatre regroupements gelés sont vérifiés de manière identique en termes de bytes par rapport aux références v0.3.3** (sixième publication consécutive). **Ce n'est pas une version v1.** La version v0.9.0 rend la couche d'artefacts réelle ; la préparation pour la version 1, l'autonomie des opérateurs pour les nouveaux regroupements, un modèle de réviseur de confiance et une affirmation de supériorité par rapport à la référence cloud ne sont pas inclus dans cette version. Consultez [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) et [CHANGELOG.md](CHANGELOG.md).
 
 **v0.8.0 — Refonte de l'architecture + Pertinence contextuelle** — publié sur npm en tant que `@mcptoolshop/research-os@0.8.0`, le 12 mai 2026. La version 0.8.0 est une version de refonte de l'architecture : `research-os` utilise désormais `ollama-intern-mcp@^2.4.0` comme base locale pour le traitement des preuves, ce qui permet l'extraction des affirmations (auparavant, le fichier README déclarait cette dépendance, mais le code contenait des raccourcis internes vers Ollama, contournant cette dépendance depuis la version 0.1 — la version 0.8.0 corrige ce problème). Ajout : Substrat client MCP (`OLLAMA_INTERN_MCP_BIN` variable d'environnement + découverte via le PATH + cycle de vie `StdioClientTransport`); critique des preuves par affirmation via `ollama_extract` avec un schéma à 4 étiquettes (`supports_section` / `off_topic` / `background_only` / `source_chrome`); nouvelle décision d'examen `frame_excluded` (l'examen ignore le LLM pour les affirmations exclues, génère un `ClaimReview` synthétique); le `ClaimSchema` gagne `frame_excluded` + `frame_exclusion_reason` (énumération à 4 valeurs, y compris `critic_unavailable` en cas de problèmes d'état du système) + `frame_exclusion_rationale`; synthèse des preuves spécifiques aux sections via `synth section <id>` pour les sections éligibles dans les ensembles nécessitant des corrections (index de citation des preuves — ID de l'affirmation → assertion → extrait de la preuve → URL de la source — PAS de prose narrative); la fonction de contrôle respecte le registre de remplacement de la carte source via `getEffectivePublisher` / `getEffectiveSourceType` (intégration de l'objectif v0.7.1); `DEFAULT_WINDOW_CHARS` passe de 5000 à 3000 (dimensionné pour `hermes3:8b` avec un contexte de travail de 8 Ko dans le profil `dev-rtx5080`); la politique de "échec progressif" pour l'appel du critique est inversée (en cas de l'un des 5 modes de défaillance — transport / analyse / étiquette invalide / raisonnement vide / délai d'attente — par défaut, `frame_excluded: true` avec la raison `critic_unavailable`, et non l'admission); sémantique de promotion : les affirmations `frame_excluded` n'empêchent pas la promotion de la section; le transfert de travail affiche `frame_excluded` dans un bucket distinct des affirmations acceptées / nécessitant une correction / rejetées. **Nécessite `ollama-intern-mcp@^2.4.0`**. 1013/1013 tests Vitest réussis (901 → 1013, +112 tests). **Tous les quatre ensembles de preuves figées sont vérifiés de manière identique en octets par rapport aux références de la version 0.3.3.** **Ce n'est pas une version 1** — le travail préparatoire pour la version 1 continue ; consultez [`docs/roadmap.md`](docs/roadmap.md). Consultez [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) et [CHANGELOG.md](CHANGELOG.md).
 
@@ -220,11 +255,12 @@ Consultez [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) et [CHA
 
 ### Ce qu'est `research-os` (et ce qu'il ne prétend pas être, version 0.7.0)
 
-- N'a pas été testé en conditions réelles par des utilisateurs externes, au-delà des phases de test interne. Six expériences de test interne ont été terminées — dont une auto-référentielle et cinq portant sur des domaines externes (ComfyUI, XRPL, Godot, calibrage des évaluateurs, évaluateur déterministe) — mais l'utilisation à grande échelle par des opérateurs externes reste un objectif futur.
-- N'est pas un outil de rédaction. La commande `synth workspace` génère l'environnement de travail structuré ; les humains (ou Cowork) rédigent le contenu en utilisant les identifiants de revendications établis.
-- Ne constitue pas une approbation de modèle d'évaluateur. La version 1.0 ne contient pas par défaut un profil d'évaluateur "fiable" (`trusted_baseline`); les reçus de calibrage sont des preuves, et non des approbations. Consultez la [page du manuel de calibrage des évaluateurs](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
-- Ne contient pas d'artefacts historiques dans les archives figées. Les archives figées antérieures à la version 1.0 contiennent `research_os_version: '0.1.0'` en raison d'une ancienne référence dans le modèle de base ; la correction a été apportée, mais les archives historiques ne peuvent pas être modifiées conformément à la loi 15 (voir [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
-- La provenance n'est pas certifiée sur npm. La certification de provenance Sigstore est reportée à la version 1.x ; vérifiez les packages npm de la version 1.0 à l'aide de package-shasum et du commit de la publication GitHub.
+- Non testé en conditions réelles par des utilisateurs externes, au-delà des phases de test interne. Six expériences de test interne ont été terminées : une auto-référentielle, cinq portant sur des domaines externes (ComfyUI, XRPL, Godot, calibrage des évaluateurs, évaluateur déterministe), mais l'utilisation à grande échelle par des opérateurs externes reste un objectif futur. La capacité à fonctionner de manière autonome sur un nouveau pack (une question de preuve non préparée, sans étapes préliminaires) n'a pas encore été vérifiée par rapport à la version 0.9.0.
+- Ne génère pas de documents complets. La version 0.9.0 produit un texte lisible à la portée d'une section (`synth section`) et à la portée d'un pack partiel (`synth pack --partial`), chacun avec une indication explicite de sa préparation pour être utilisé. La génération de documents complets nécessite toujours un pack marqué comme `synthesis_ready` et une rédaction humaine (ou par un collaborateur) basée sur les identifiants de revendications acceptés, via `synth workspace`.
+- Ne constitue pas une approbation de modèle d'évaluateur. La version 0.9.0 ne fournit pas par défaut un profil d'évaluateur `trusted_baseline`; les reçus de calibrage sont des preuves, et non des approbations. Les reçus de calibrage existants, datant de la version 0.6.0, sont antérieurs à l'architecture MCP de la version 0.8.0 et n'ont pas été réévalués dans le cadre du chemin MCP. Consultez la [page du manuel de calibrage des évaluateurs](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+- Ne garantit pas l'absence d'artefacts historiques dans les packs figés. Les packs figés antérieurs à la version 0.4 contiennent `research_os_version: '0.1.0'` en raison d'une constante de structure codée en dur antérieure à la version 0.4 ; la correction a été intégrée dans la version 0.4.0, mais les packs figés antérieurs sont immuables conformément à la règle 15 (voir [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
+- Ne possède pas d'attestation de provenance sur npm. L'attestation de provenance Sigstore est reportée à une version ultérieure ; vérifiez les packages npm de la version 0.9.0 à l'aide de package-shasum et du commit de la version sur GitHub.
+- Ne représente pas un avantage significatif par rapport au cloud. La démonstration du produit disponible à `local-first-vs-cloud-research/` (version 0.7.x) a identifié les avantages du cloud en termes de lisibilité et de charge de travail des opérateurs ; la version 0.9.0 ne prétend pas que ces avantages ont été surmontés.
 
 ### Limitations connues
 
@@ -234,7 +270,7 @@ La version 1.0 est livrée avec trois limitations connues, visibles par les util
 - **B-E-004 — La certification de provenance npm est reportée à la version 1.x.** La version 1.0 vérifie les archives npm uniquement via package-shasum. La migration du processus de publication vers un flux de travail CI avec sigstore OIDC est incompatible avec la règle de "traduction avant publication" (TranslateGemma 12B s'exécute localement) ; cette migration est prévue pour la version 1.x. Vérifiez les packages npm de la version 1.0 à l'aide de package-shasum et du commit de la publication GitHub.
 - **B-A-003 — La migration du schéma de version de l'index est documentée, mais n'est pas appliquée.** La version 1.0 inclut un entier `SCHEMA_VERSION` côté écriture, mais pas de programme de migration côté lecture. Lors d'une mise à jour documentée de `SCHEMA_VERSION`, supprimez `.research-os/index.sqlite` et relancez `research-os index build --all`. L'archive elle-même n'est pas affectée ; l'index est une couche d'accélération au-dessus des preuves et des revendications (loi 8) ; la reconstruction est idempotente.
 
-**Aucun profil d'évaluateur "fiable" n'est autorisé dans la version 1.0.** Il s'agit d'une posture de confiance intentionnelle, et non d'une lacune : les reçus de calibrage dans le dépôt (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) enregistrent les preuves. La confiance est gagnée par des tentatives répétées de rappel de pannes simulées, et non supposée.
+**Aucun profil d'évaluateur `trusted_baseline` n'est autorisé dans la version 0.9.0.** Il s'agit d'une posture de confiance délibérée, et non d'une lacune : les reçus de calibrage dans le dépôt (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) enregistrent les preuves. La confiance se gagne par des tests répétés de reproduction d'échecs, et non par une simple présomption. Ces reçus datent d'avant l'architecture MCP de la version 0.8.0 et n'ont pas été réévalués dans le cadre du chemin MCP.
 
 ## Feuille de route vers la version 1.0
 

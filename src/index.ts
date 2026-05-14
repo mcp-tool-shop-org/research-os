@@ -30,4 +30,4 @@ export {
   SynthesisNotReadyError,
 } from './errors.js';
 
-export const RESEARCH_OS_VERSION = '0.8.0';
+export const RESEARCH_OS_VERSION = '0.9.0';

@@ -179,8 +179,10 @@ async function recoverOneSection(args: {
   const systemCannotSee = defaultSystemCannotSee(diag);
 
   // Layer 3 + 4: advisor + verifier with one retry on validation failure.
-  let advice: RecoveryAdvice | null = null;
-  let advisorPath: AdvisorPath | null = null;
+  // `advice` and `advisorPath` are assigned in every branch below before use;
+  // declared without initializers so ESLint's no-useless-assignment is happy.
+  let advice: RecoveryAdvice;
+  let advisorPath: AdvisorPath;
   let proseError: RecoveryProseError | undefined;
   let verifierRejections = 0;
   let wasFallback = false;

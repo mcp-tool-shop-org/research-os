@@ -12,7 +12,6 @@
 // will be `deterministic_fallback`, distinguishing it from AI-produced advice
 // for downstream consumers.
 
-import { operatorTemptingForbiddenActions } from './action-graph.js';
 import { defaultSystemCannotSee } from './prompt.js';
 import type {
   LawfulActionGraph,
@@ -24,7 +23,7 @@ const FALLBACK_FRAMING_PREFIX =
   'The AI recovery advisor was unavailable for this section, so this guidance is rendered deterministically from pack law. ';
 
 function failureSummary(diagnosis: SectionDiagnosis): string {
-  const { failure_shape, waiveable, evidence_state, detail } = diagnosis;
+  const { failure_shape, waiveable, detail } = diagnosis;
   const waiveText = waiveable ? 'waiveable' : 'unwaiveable';
   return `Failure shape: ${failure_shape} (${waiveText}). ${detail}`;
 }
