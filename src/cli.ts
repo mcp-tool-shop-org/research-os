@@ -33,6 +33,7 @@ import {
   sectionSynthesis as synthSection,
   partialPackSynthesis as synthPartialPack,
 } from './synth/index.js';
+import { recoverPack } from './recover/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
 import { invalidateExtraction, invalidateReview } from './invalidate/index.js';
@@ -1140,6 +1141,38 @@ synthCmd
       if (result.proseError) {
         process.stdout.write(`  prose error:              ${result.proseError}\n`);
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+const recoverCmd = program
+  .command('recover')
+  .description(
+    'Lawful recovery advisor: turn blocked / failed / unrun sections into ranked, contextual, ' +
+      'operator-useful guidance. Deterministic diagnosis + action graph + AI advice + verifier.',
+  );
+
+recoverCmd
+  .command('pack')
+  .description(
+    'Generate recovery guidance for every section in the pack. Healthy sections appear as ' +
+      'no-action; blocked / failed / unrun sections get a ranked recovery plan with contrastive ' +
+      'framing and explicit "do not" warnings. The pack remains NOT freezable and NOT publishable.',
+  )
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .action(async (opts) => {
+    try {
+      const result = await recoverPack({ packPath: opts.pack, spawnMcpClient: true });
+      process.stdout.write(`recovery advisor complete\n`);
+      process.stdout.write(`  pack mode:              ${result.packMode}\n`);
+      process.stdout.write(`  total sections:         ${result.totalSections}\n`);
+      process.stdout.write(`  advised sections:       ${result.advisedSections}\n`);
+      process.stdout.write(`  healthy sections:       ${result.healthySections}\n`);
+      process.stdout.write(`  fallback sections:      ${result.fallbackSections}\n`);
+      process.stdout.write(`  verifier rejections:    ${result.verifierRejections}\n`);
+      process.stdout.write(`  json:                   ${result.jsonPath}\n`);
+      process.stdout.write(`  markdown:               ${result.markdownPath}\n`);
     } catch (err) {
       reportError(err);
     }

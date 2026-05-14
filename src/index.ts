@@ -14,6 +14,7 @@ export * from './invalidate/index.js';
 export * from './section_report/index.js';
 export * from './triage/index.js';
 export * from './discover/index.js';
+export * from './recover/index.js';
 export {
   ResearchOSError,
   IntakeValidationError,
