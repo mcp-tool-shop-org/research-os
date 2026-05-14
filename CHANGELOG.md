@@ -4,7 +4,7 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-05-13 — Product Artifact Arc
+## [0.9.0] - 2026-05-14 — Product Artifact Arc
 
 v0.9.0 turns the v0.8 evidence spine into operator-useful artifacts. It adds section-level prose with paragraph-level provenance, partial-pack synthesis that consumes section prose rather than raw claims, and lawful recovery guidance embedded where blocked sections are disclosed. Freeze and publish semantics are unchanged: readable partial artifacts do not make an incomplete pack freezable or publishable.
 
