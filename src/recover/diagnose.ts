@@ -61,12 +61,21 @@ export interface DiagnoseSectionInput {
 }
 
 async function readJsonl<T>(path: string, parse: (raw: unknown) => T): Promise<T[]> {
+  // Diagnose-layer tolerance: malformed JSONL lines are skipped rather than
+  // thrown so a degraded claims.jsonl / claim-reviews.jsonl never aborts the
+  // recovery engine entirely. The gate audit JSON is the load-bearing signal
+  // for failure-shape detection; claims/reviews supply supplementary counts
+  // for evidence_state. Best-effort parsing matches the source-card reader.
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: T[] = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    out.push(parse(JSON.parse(line)));
+    try {
+      out.push(parse(JSON.parse(line)));
+    } catch {
+      // Malformed line — skip. Diagnose produces best-effort output.
+    }
   }
   return out;
 }

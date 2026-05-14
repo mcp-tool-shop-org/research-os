@@ -16,9 +16,17 @@
 //            - retry invalid OR retry MCP error → fall back.
 //   3. Write recovery/blocked-section-recovery.{json,md}.
 //
-// The orchestrator does NOT touch synthesis/ or any partial-pack files;
-// the partial-pack integration that embeds recovery_summary into the
-// partial-pack artifact is invoked from a separate caller path.
+// Slice 3b refactor — single source of truth:
+//   - `buildRecoveryArtifact()` produces the full RecoveryArtifact in-memory
+//     from pre-resolved inputs (research, handoff, MCP client). Pure compute +
+//     advisor calls; no file I/O.
+//   - `writeRecoveryArtifact()` persists JSON + MD from an existing artifact.
+//   - `recoverPack()` is a thin wrapper: read pack inputs, resolve MCP client,
+//     call build + write, return summary.
+//
+// Both `recoverPack()` (standalone CLI) and `partialPackSynthesis()` (Slice 3b
+// integration) consume `buildRecoveryArtifact()` so the canonical recovery
+// artifact comes from the same in-memory object regardless of caller.
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -120,18 +128,244 @@ async function advisorAttempt(args: {
   return { ok: false, verifier: { valid: false, reason: verification.reason, detail: verification.detail } };
 }
 
+/**
+ * Per-section recovery. Returns the full SectionRecoveryResult + stats.
+ * Single source of truth for "what did the recovery engine decide for this
+ * section." Called by `buildRecoveryArtifact()` for each section.
+ */
+async function recoverOneSection(args: {
+  packPath: string;
+  packTopic: string;
+  packMode: string;
+  section: { id: string; purpose: string };
+  handoff: CoworkHandoffPayload;
+  client: ProseCallToolClient;
+  model: string | undefined;
+}): Promise<{
+  result: SectionRecoveryResult;
+  verifierRejections: number;
+  wasFallback: boolean;
+  wasHealthy: boolean;
+}> {
+  const { packPath, packTopic, packMode, section, handoff, client, model } = args;
+
+  // Layer 1: diagnose.
+  const diag = await diagnoseSection({
+    packPath,
+    sectionId: section.id,
+    sectionPurpose: section.purpose,
+    handoff,
+  });
+
+  if (isHealthy(diag)) {
+    return {
+      result: {
+        section_id: diag.section_id,
+        section_purpose: diag.section_purpose,
+        status: 'healthy',
+        diagnosis: null,
+        action_graph: null,
+        advice: null,
+        advisor_path: null,
+      },
+      verifierRejections: 0,
+      wasFallback: false,
+      wasHealthy: true,
+    };
+  }
+
+  // Layer 2: action graph.
+  const actionGraph = buildActionGraph(diag);
+  const systemCannotSee = defaultSystemCannotSee(diag);
+
+  // Layer 3 + 4: advisor + verifier with one retry on validation failure.
+  let advice: RecoveryAdvice | null = null;
+  let advisorPath: AdvisorPath | null = null;
+  let proseError: RecoveryProseError | undefined;
+  let verifierRejections = 0;
+  let wasFallback = false;
+
+  const attempt1 = await advisorAttempt({
+    packTopic,
+    packMode,
+    diagnosis: diag,
+    actionGraph,
+    systemCannotSee,
+    rejectionAddendum: null,
+    client,
+    model,
+  });
+
+  if (attempt1.ok) {
+    advice = attempt1.advice;
+    advisorPath = 'ai_with_verifier_pass';
+  } else {
+    const firstReason =
+      'mcp_error' in attempt1
+        ? `mcp_error: ${attempt1.mcp_error}`
+        : `${attempt1.verifier.reason}: ${attempt1.verifier.detail}`;
+    if ('verifier' in attempt1) verifierRejections += 1;
+
+    const attempt2 = await advisorAttempt({
+      packTopic,
+      packMode,
+      diagnosis: diag,
+      actionGraph,
+      systemCannotSee,
+      rejectionAddendum: firstReason,
+      client,
+      model,
+    });
+
+    if (attempt2.ok) {
+      advice = attempt2.advice;
+      advisorPath = 'ai_with_retry_pass';
+    } else {
+      if ('verifier' in attempt2) verifierRejections += 1;
+      // Both attempts failed → deterministic fallback.
+      const fallback = deterministicFallbackAdvice({ diagnosis: diag, actionGraph });
+      advice = fallback;
+      advisorPath = 'deterministic_fallback';
+      wasFallback = true;
+      proseError = {
+        code: 'advisor_verifier_exhausted',
+        message:
+          'Recovery advisor failed verifier checks twice. Deterministic recovery rendering applied.',
+        attempts: 2,
+        last_rejection_reason:
+          'mcp_error' in attempt2
+            ? `mcp_error: ${attempt2.mcp_error}`
+            : `${attempt2.verifier.reason}: ${attempt2.verifier.detail}`,
+      };
+    }
+  }
+
+  return {
+    result: {
+      section_id: diag.section_id,
+      section_purpose: diag.section_purpose,
+      status: 'recovery_advised',
+      diagnosis: diag,
+      action_graph: actionGraph,
+      advice,
+      advisor_path: advisorPath,
+      ...(proseError ? { prose_error: proseError } : {}),
+    },
+    verifierRejections,
+    wasFallback,
+    wasHealthy: false,
+  };
+}
+
+export interface BuildRecoveryArtifactInput {
+  packPath: string;
+  research: ResearchYaml;
+  handoff: CoworkHandoffPayload;
+  client: ProseCallToolClient;
+  model?: string;
+  // Optional override of generated_at — useful for deterministic tests.
+  generatedAt?: string;
+}
+
+export interface BuildRecoveryArtifactOutput {
+  artifact: RecoveryArtifact;
+  stats: {
+    advisedSections: number;
+    healthySections: number;
+    fallbackSections: number;
+    verifierRejections: number;
+  };
+}
+
+/**
+ * Build the canonical recovery artifact in-memory. Pure compute + advisor
+ * calls; no file I/O. Single source of truth for both `recoverPack()` and
+ * `partialPackSynthesis()` (Slice 3b).
+ */
+export async function buildRecoveryArtifact(
+  input: BuildRecoveryArtifactInput,
+): Promise<BuildRecoveryArtifactOutput> {
+  const { packPath, research, handoff, client, model } = input;
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
+
+  let verifierRejections = 0;
+  let advisedSections = 0;
+  let healthySections = 0;
+  let fallbackSections = 0;
+  const sectionResults: SectionRecoveryResult[] = [];
+
+  for (const section of research.sections) {
+    const out = await recoverOneSection({
+      packPath,
+      packTopic: handoff.pack_topic,
+      packMode: handoff.mode,
+      section: { id: section.id, purpose: section.purpose },
+      handoff,
+      client,
+      model,
+    });
+    sectionResults.push(out.result);
+    verifierRejections += out.verifierRejections;
+    if (out.wasHealthy) {
+      healthySections += 1;
+    } else {
+      advisedSections += 1;
+      if (out.wasFallback) fallbackSections += 1;
+    }
+  }
+
+  const artifact: RecoveryArtifact = {
+    status: RECOVERY_ARTIFACT_STATUS,
+    pack_id: handoff.pack_id,
+    pack_topic: handoff.pack_topic,
+    pack_mode: handoff.mode,
+    generated_at: generatedAt,
+    research_os_version: RESEARCH_OS_VERSION,
+    sections: sectionResults,
+  };
+
+  RecoveryArtifactSchema.parse(artifact);
+
+  return {
+    artifact,
+    stats: { advisedSections, healthySections, fallbackSections, verifierRejections },
+  };
+}
+
+export interface WriteRecoveryArtifactInput {
+  packPath: string;
+  artifact: RecoveryArtifact;
+}
+
+export interface WriteRecoveryArtifactOutput {
+  jsonPath: string;
+  markdownPath: string;
+}
+
+/**
+ * Persist the canonical recovery artifact as JSON + Markdown under
+ * `recovery/blocked-section-recovery.{json,md}`. The single canonical write
+ * path used by both `recoverPack()` and `partialPackSynthesis()`.
+ */
+export async function writeRecoveryArtifact(
+  input: WriteRecoveryArtifactInput,
+): Promise<WriteRecoveryArtifactOutput> {
+  const { packPath, artifact } = input;
+  const recoverDir = join(packPath, 'recovery');
+  await mkdir(recoverDir, { recursive: true });
+  const jsonPath = join(recoverDir, RECOVERY_JSON);
+  const mdPath = join(recoverDir, RECOVERY_MD);
+  await writeFile(jsonPath, JSON.stringify(artifact, null, 2), 'utf8');
+  await writeFile(mdPath, renderRecoveryMarkdown(artifact), 'utf8');
+  return { jsonPath, markdownPath: mdPath };
+}
+
 export async function recoverPack(
   options: RecoverPackOptions = {},
 ): Promise<RecoverPackSummary> {
   const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
   const { research, handoff } = await readPackInputs(packPath);
   if (!handoff) throw new HandoffNotFoundError();
-
-  const generatedAt = new Date().toISOString();
-  const recoverDir = join(packPath, 'recovery');
-  await mkdir(recoverDir, { recursive: true });
-  const jsonPath = join(recoverDir, RECOVERY_JSON);
-  const mdPath = join(recoverDir, RECOVERY_MD);
 
   // Resolve MCP client. To keep TypeScript's flow analysis happy across
   // the closure boundary, we hold the spawned handle in an object property
@@ -154,129 +388,28 @@ export async function recoverPack(
     );
   };
 
-  let verifierRejections = 0;
-  let advisedSections = 0;
-  let healthySections = 0;
-  let fallbackSections = 0;
-  const sectionResults: SectionRecoveryResult[] = [];
-
   try {
-    for (const section of research.sections) {
-      // Layer 1: diagnose.
-      const diag = await diagnoseSection({
-        packPath,
-        sectionId: section.id,
-        sectionPurpose: section.purpose,
-        handoff,
-      });
+    const client = await ensureClient();
+    const { artifact, stats } = await buildRecoveryArtifact({
+      packPath,
+      research,
+      handoff,
+      client,
+      model: options.advisorModel,
+    });
+    const { jsonPath, markdownPath } = await writeRecoveryArtifact({ packPath, artifact });
 
-      if (isHealthy(diag)) {
-        healthySections += 1;
-        sectionResults.push({
-          section_id: diag.section_id,
-          section_purpose: diag.section_purpose,
-          status: 'healthy',
-          diagnosis: null,
-          action_graph: null,
-          advice: null,
-          advisor_path: null,
-        });
-        continue;
-      }
-
-      // Layer 2: action graph.
-      const actionGraph = buildActionGraph(diag);
-      const systemCannotSee = defaultSystemCannotSee(diag);
-
-      // Layer 3 + 4: advisor + verifier with one retry on validation failure.
-      const client = await ensureClient();
-
-      let advice: RecoveryAdvice | null = null;
-      let advisorPath: AdvisorPath | null = null;
-      let proseError: RecoveryProseError | undefined;
-
-      const attempt1 = await advisorAttempt({
-        packTopic: handoff.pack_topic,
-        packMode: handoff.mode,
-        diagnosis: diag,
-        actionGraph,
-        systemCannotSee,
-        rejectionAddendum: null,
-        client,
-        model: options.advisorModel,
-      });
-
-      if (attempt1.ok) {
-        advice = attempt1.advice;
-        advisorPath = 'ai_with_verifier_pass';
-      } else {
-        // Either MCP error or verifier failure → retry once.
-        const firstReason =
-          'mcp_error' in attempt1
-            ? `mcp_error: ${attempt1.mcp_error}`
-            : `${attempt1.verifier.reason}: ${attempt1.verifier.detail}`;
-        if ('verifier' in attempt1) verifierRejections += 1;
-
-        const attempt2 = await advisorAttempt({
-          packTopic: handoff.pack_topic,
-          packMode: handoff.mode,
-          diagnosis: diag,
-          actionGraph,
-          systemCannotSee,
-          rejectionAddendum: firstReason,
-          client,
-          model: options.advisorModel,
-        });
-
-        if (attempt2.ok) {
-          advice = attempt2.advice;
-          advisorPath = 'ai_with_retry_pass';
-        } else {
-          if ('verifier' in attempt2) verifierRejections += 1;
-          // Both attempts failed → deterministic fallback.
-          const fallback = deterministicFallbackAdvice({ diagnosis: diag, actionGraph });
-          // Run the verifier on the fallback so the artifact is consistent.
-          // Fallback is constructed to satisfy all rules; this is a defensive check.
-          const fallbackVerify = verifyRecoveryAdvice({
-            advice: fallback,
-            actionGraph,
-            diagnosis: diag,
-          });
-          if (fallbackVerify.valid) {
-            advice = fallback;
-          } else {
-            // Fallback failed verifier — surface a bug, but still emit the
-            // fallback advice so the operator can see what we tried.
-            advice = fallback;
-          }
-          advisorPath = 'deterministic_fallback';
-          proseError = {
-            code: 'advisor_verifier_exhausted',
-            message:
-              'Recovery advisor failed verifier checks twice. Deterministic recovery rendering applied.',
-            attempts: 2,
-            last_rejection_reason:
-              'mcp_error' in attempt2
-                ? `mcp_error: ${attempt2.mcp_error}`
-                : `${attempt2.verifier.reason}: ${attempt2.verifier.detail}`,
-          };
-          fallbackSections += 1;
-        }
-      }
-
-      advisedSections += 1;
-
-      sectionResults.push({
-        section_id: diag.section_id,
-        section_purpose: diag.section_purpose,
-        status: 'recovery_advised',
-        diagnosis: diag,
-        action_graph: actionGraph,
-        advice,
-        advisor_path: advisorPath,
-        ...(proseError ? { prose_error: proseError } : {}),
-      });
-    }
+    return {
+      packPath,
+      packMode: handoff.mode,
+      jsonPath,
+      markdownPath,
+      totalSections: artifact.sections.length,
+      advisedSections: stats.advisedSections,
+      healthySections: stats.healthySections,
+      fallbackSections: stats.fallbackSections,
+      verifierRejections: stats.verifierRejections,
+    };
   } finally {
     if (mcpState.handle) {
       try {
@@ -286,30 +419,4 @@ export async function recoverPack(
       }
     }
   }
-
-  const artifact: RecoveryArtifact = {
-    status: RECOVERY_ARTIFACT_STATUS,
-    pack_id: handoff.pack_id,
-    pack_topic: handoff.pack_topic,
-    pack_mode: handoff.mode,
-    generated_at: generatedAt,
-    research_os_version: RESEARCH_OS_VERSION,
-    sections: sectionResults,
-  };
-
-  RecoveryArtifactSchema.parse(artifact);
-  await writeFile(jsonPath, JSON.stringify(artifact, null, 2), 'utf8');
-  await writeFile(mdPath, renderRecoveryMarkdown(artifact), 'utf8');
-
-  return {
-    packPath,
-    packMode: handoff.mode,
-    jsonPath,
-    markdownPath: mdPath,
-    totalSections: sectionResults.length,
-    advisedSections,
-    healthySections,
-    fallbackSections,
-    verifierRejections,
-  };
 }

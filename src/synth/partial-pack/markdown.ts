@@ -19,6 +19,7 @@ import type {
   PartialPackParagraph,
   PartialPackProseError,
 } from './types.js';
+import { renderRecoverySummaryMarkdown } from './recovery-embed.js';
 
 function roleLabel(role: string): string {
   const labels: Record<string, string> = {
@@ -183,23 +184,24 @@ function renderExcludedList(excluded: PartialPackExcludedSection[]): string[] {
   if (excluded.length === 0) {
     return ['_None._'];
   }
-  // Group by reason for readability.
-  const byReason = new Map<string, PartialPackExcludedSection[]>();
-  for (const e of excluded) {
-    const arr = byReason.get(e.reason) ?? [];
-    arr.push(e);
-    byReason.set(e.reason, arr);
-  }
+  // Slice 3b — one block per excluded section in research.yaml order, with
+  // embedded recovery_summary right under the "Why excluded" line so the
+  // operator sees "what's blocked + what to do next" in the same place.
+  // Older format (group by reason) is retired: the recovery block is
+  // per-section guidance, so each section needs its own heading.
   const lines: string[] = [];
-  for (const [reason, list] of byReason.entries()) {
-    lines.push(`### ${exclusionReasonLabel(reason)}`);
+  for (const e of excluded) {
+    lines.push(`### ${e.section_id}`);
     lines.push('');
-    for (const e of list) {
-      lines.push(`- **${e.section_id}** — ${e.section_purpose}`);
-      lines.push(`  - Reason: \`${e.reason}\``);
-      lines.push(`  - Detail: ${e.detail}`);
+    lines.push(`_${e.section_purpose}_`);
+    lines.push('');
+    lines.push(
+      `**Why excluded:** \`${e.reason}\` (${exclusionReasonLabel(e.reason)}) — ${e.detail}`,
+    );
+    lines.push('');
+    if (e.recovery_summary) {
+      lines.push(...renderRecoverySummaryMarkdown(e.recovery_summary));
     }
-    lines.push('');
   }
   return lines;
 }

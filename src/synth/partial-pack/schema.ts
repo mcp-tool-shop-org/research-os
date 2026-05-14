@@ -11,6 +11,7 @@ import {
   PARTIAL_PACK_ROLES,
   PARTIAL_PACK_STATUS,
 } from './types.js';
+import { RecoverySummarySchema } from './recovery-embed.js';
 
 export const PartialPackExclusionReasonSchema = z.enum(PARTIAL_PACK_EXCLUSION_REASONS);
 export const PartialPackRoleSchema = z.enum(PARTIAL_PACK_ROLES);
@@ -50,12 +51,16 @@ export const PartialPackIncludedSectionSchema = z
   })
   .strict();
 
+// Slice 3b — recovery_summary is an additive optional field embedded under
+// every excluded section in fresh partial-pack artifacts. Older artifacts
+// without it still parse cleanly (backward-compat).
 export const PartialPackExcludedSectionSchema = z
   .object({
     section_id: z.string().min(1),
     section_purpose: z.string(),
     reason: PartialPackExclusionReasonSchema,
     detail: z.string(),
+    recovery_summary: RecoverySummarySchema.optional(),
   })
   .strict();
 

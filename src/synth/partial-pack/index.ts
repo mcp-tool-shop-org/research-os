@@ -25,6 +25,24 @@ export {
   SectionSynthesisProsePartSchema,
 } from './schema.js';
 export {
+  projectRecoverySummary,
+  recoveryUnavailableSummary,
+  renderRecoverySummaryMarkdown,
+  RecoverySummarySchema,
+  RecoveryDoNotSummarySchema,
+  RecoveryUnavailableReasonSchema,
+  RECOVERY_SUMMARY_ADVISOR_PATHS,
+  RECOVERY_UNAVAILABLE_REASONS,
+  RECOVERY_SUMMARY_SOURCE,
+  RECOVERY_SUMMARY_MARKDOWN_SOURCE,
+} from './recovery-embed.js';
+export type {
+  RecoverySummary,
+  RecoverySummaryAdvisorPath,
+  RecoveryUnavailableReason,
+  RecoveryDoNotSummary,
+} from './recovery-embed.js';
+export {
   PARTIAL_PACK_STATUS,
   PARTIAL_PACK_ROLES,
   PARTIAL_PACK_EXCLUSION_REASONS,

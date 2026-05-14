@@ -14,6 +14,7 @@
 //     Slice 1's section prose is the only generative substrate.
 
 import type { ProseCallToolClient } from '../prose/types.js';
+import type { RecoverySummary } from './recovery-embed.js';
 
 // Controlled exclusion reason enum — every excluded section MUST carry one of
 // these reasons. New reasons are an additive vocabulary change; do not remove.
@@ -74,11 +75,19 @@ export interface PartialPackIncludedSection {
 
 // Description of an excluded section. `reason` is constrained; `detail` names
 // the specific failure mode (gate check name, proseError code, etc.).
+//
+// Slice 3b — `recovery_summary` is an additive optional field that embeds a
+// compact projection of the canonical lawful recovery advice for this
+// section. When present in a fresh partial-pack-synthesis artifact, every
+// excluded section's recovery_summary is populated (either real guidance
+// from the 3 advisor paths, or an explicit `recovery_unavailable` block).
+// Optional in the schema for backward-compat with pre-Slice-3b artifacts.
 export interface PartialPackExcludedSection {
   section_id: string;
   section_purpose: string;
   reason: PartialPackExclusionReason;
   detail: string;
+  recovery_summary?: RecoverySummary;
 }
 
 // Source paragraph extracted from a section's section-synthesis.json. The

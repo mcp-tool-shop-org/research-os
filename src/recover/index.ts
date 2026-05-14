@@ -1,4 +1,12 @@
-export { recoverPack } from './run.js';
+export {
+  recoverPack,
+  buildRecoveryArtifact,
+  writeRecoveryArtifact,
+  type BuildRecoveryArtifactInput,
+  type BuildRecoveryArtifactOutput,
+  type WriteRecoveryArtifactInput,
+  type WriteRecoveryArtifactOutput,
+} from './run.js';
 export { diagnoseSection, isHealthy } from './diagnose.js';
 export {
   buildActionGraph,

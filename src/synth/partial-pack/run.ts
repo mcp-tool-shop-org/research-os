@@ -1,19 +1,31 @@
-// v0.9 Slice 2c — partial-pack synthesis orchestrator.
+// v0.9 Slice 3b — partial-pack synthesis orchestrator with embedded recovery.
 //
 // Pipeline:
 //   1. Read research.yaml + cowork-handoff.json.
 //   2. Classify every section as included or excluded (pure function).
-//   3a. If zero included: write artifact with no_included_sections proseError.
-//   3b. If ≥2 included: call bundle planner to preselect the answer
+//   3. Resolve MCP client (now mandatory — recovery engine always runs).
+//   4. Run lawful recovery for the WHOLE pack (Slice 3a engine via the
+//      Slice 3b refactored buildRecoveryArtifact()). Write the canonical
+//      recovery/blocked-section-recovery.{md,json} artifact. Build a map
+//      from section_id to the canonical SectionRecoveryResult so each
+//      excluded section gets a recovery_summary projected from the same
+//      in-memory object.
+//   5. Apply recovery_summary to each excluded section. If a section is
+//      missing from the canonical recovery output (engine error, mismatch),
+//      surface an explicit `recovery_unavailable` block — silent omission
+//      is forbidden by the no-silent-skip guardrail.
+//   6a. If zero included: write artifact with no_included_sections proseError,
+//       still carrying recovery_summary on every excluded section.
+//   6b. If ≥2 included: call bundle planner to preselect the answer
 //       paragraph's required cross-section support bundle.
 //       - On insufficient_cross_section_candidates: write failure marker.
-//   3c. If exactly 1 included: skip bundle planner (Slice 2 behavior).
-//   4. Run partial-pack drafter with the required bundle (or null for
+//   6c. If exactly 1 included: skip bundle planner (Slice 2 behavior).
+//   7. Run partial-pack drafter with the required bundle (or null for
 //      single-section).
-//   5. Validate the answer paragraph against the required bundle. On
+//   8. Validate the answer paragraph against the required bundle. On
 //      failure, retry the drafter ONCE with a strengthened addendum.
 //      On second failure, write cross_section_answer_support_missing.
-//   6. Write partial-pack-synthesis.{md,json} to synthesis/ at pack root.
+//   9. Write partial-pack-synthesis.{md,json} to synthesis/ at pack root.
 //
 // Hard invariants (enforced here):
 //   - status is always PARTIAL_PACK_STATUS.
@@ -25,6 +37,13 @@
 //   - When ≥2 sections are included, the answer paragraph's support_bundle
 //     MUST satisfy validateAnswerBundle or the drafter is retried; persistent
 //     failure emits a structured proseError.
+//   - Slice 3b: every excluded section in fresh output has a recovery_summary
+//     populated. Either real guidance (advisor_path in {ai_with_verifier_pass,
+//     ai_with_retry_pass, deterministic_fallback}) OR an explicit
+//     recovery_unavailable block. NEVER silently omitted.
+//   - Slice 3b: the standalone recovery/blocked-section-recovery.{md,json}
+//     artifact is written from the SAME in-memory recovery object as the
+//     partial-pack embed — single source of truth.
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -39,6 +58,11 @@ import {
 } from '../../cowork/schema.js';
 import { RESEARCH_OS_VERSION } from '../../index.js';
 import { MCPClientHandle } from '../../mcp/client.js';
+import {
+  buildRecoveryArtifact,
+  writeRecoveryArtifact,
+} from '../../recover/run.js';
+import type { SectionRecoveryResult } from '../../recover/types.js';
 
 import { classifySections } from './classifier.js';
 import { runPartialPackDrafter } from './drafter.js';
@@ -50,9 +74,15 @@ import {
   type AnswerBundleValidationResult,
 } from './bundle-planner.js';
 import {
+  projectRecoverySummary,
+  recoveryUnavailableSummary,
+  type RecoverySummary,
+} from './recovery-embed.js';
+import {
   PARTIAL_PACK_STATUS,
   type PartialPackArtifact,
   type PartialPackCrossSectionAnswerSupportMissingError,
+  type PartialPackExcludedSection,
   type PartialPackInsufficientCrossSectionCandidatesError,
   type PartialPackNoIncludedSectionsError,
   type PartialPackOptions,
@@ -172,6 +202,47 @@ async function runOnceWithValidation(args: {
   return { ok: true, paragraphs, validation };
 }
 
+/**
+ * Slice 3b — apply recovery_summary to every excluded section.
+ *
+ * The orchestrator passes a map from section_id to the canonical
+ * SectionRecoveryResult produced by buildRecoveryArtifact(). For each
+ * excluded section:
+ *   - If the section appears in the map, project the canonical result to
+ *     a compact recovery_summary.
+ *   - Else, surface an explicit recovery_unavailable block with reason
+ *     `engine_error` and a diagnostic detail. This honors the no-silent-skip
+ *     guardrail: every excluded section in fresh output has a populated
+ *     recovery_summary, even when the canonical engine failed for it.
+ */
+function applyRecoverySummaries(args: {
+  excluded: PartialPackExcludedSection[];
+  recoveryBySectionId: Map<string, SectionRecoveryResult>;
+  recoveryBuildFailureDetail: string | null;
+}): PartialPackExcludedSection[] {
+  const { excluded, recoveryBySectionId, recoveryBuildFailureDetail } = args;
+
+  return excluded.map((e) => {
+    const recoveryResult = recoveryBySectionId.get(e.section_id);
+    let recovery_summary: RecoverySummary;
+    if (recoveryResult) {
+      recovery_summary = projectRecoverySummary(recoveryResult);
+    } else {
+      // No canonical recovery result for this excluded section. Could mean:
+      // - buildRecoveryArtifact threw entirely → use the failure detail
+      // - the canonical artifact didn't include this section_id (mismatch)
+      const detail = recoveryBuildFailureDetail
+        ? `Recovery engine failed for the entire pack: ${recoveryBuildFailureDetail}`
+        : `Canonical recovery artifact did not include section "${e.section_id}".`;
+      recovery_summary = recoveryUnavailableSummary({
+        reason: 'engine_error',
+        detail,
+      });
+    }
+    return { ...e, recovery_summary };
+  });
+}
+
 export async function partialPackSynthesis(
   options: PartialPackOptions = {},
 ): Promise<PartialPackSummary> {
@@ -189,16 +260,42 @@ export async function partialPackSynthesis(
   const mdPath = join(synthDir, PARTIAL_PACK_MD);
 
   // ── Step 1: Classify ──────────────────────────────────────────────────────
-  const { included, excluded, drafterInputs } = await classifySections({
+  const classified = await classifySections({
     packPath,
     research,
     handoff,
   });
+  const included = classified.included;
+  const drafterInputs = classified.drafterInputs;
 
   const sourceSynthPaths = included.map((s) => s.section_synthesis_path);
 
-  // Helper to write the artifact + return the summary.
-  const writeArtifact = async (args: {
+  // ── Step 2: Resolve MCP client (now mandatory — recovery always runs) ─────
+  // TS-narrowing trick: hold spawned handle on an object property rather than
+  // a plain `let` so the inner assignment doesn't narrow to `never` across the
+  // closure boundary.
+  const mcpState: { handle: MCPClientHandle | null; client: ProseCallToolClient | null } = {
+    handle: null,
+    client: options.mcpClient ?? null,
+  };
+  const ensureClient = async (): Promise<ProseCallToolClient> => {
+    if (mcpState.client !== null) return mcpState.client;
+    if (options.spawnMcpClient) {
+      mcpState.handle = new MCPClientHandle();
+      const sdkClient = await mcpState.handle.connect();
+      mcpState.client = sdkClient as unknown as ProseCallToolClient;
+      return mcpState.client;
+    }
+    throw new Error(
+      'Partial-pack synthesis requires an MCP client. Pass `mcpClient` (tests) or `spawnMcpClient: true` (CLI).',
+    );
+  };
+
+  // Helper to write the artifact + return the summary. Wrapped here so the
+  // excluded list (with recovery_summary applied) and other shared state are
+  // accessible without rethreading every helper.
+  const writeArtifactWith = async (args: {
+    excludedWithRecovery: PartialPackExcludedSection[];
     paragraphs: PartialPackParagraph[];
     requiredAnswerBundle: RequiredAnswerBundle | null;
     proseError?: PartialPackArtifact['proseError'];
@@ -213,7 +310,7 @@ export async function partialPackSynthesis(
       not_freezable_as_pack: true,
       not_publishable_as_pack: true,
       included_sections: included,
-      excluded_sections: excluded,
+      excluded_sections: args.excludedWithRecovery,
       source_section_syntheses: sourceSynthPaths,
       required_answer_bundle: args.requiredAnswerBundle,
       prose: args.paragraphs.length > 0 ? { paragraphs: args.paragraphs } : null,
@@ -231,7 +328,7 @@ export async function partialPackSynthesis(
       notFreezableAsPack: true,
       notPublishableAsPack: true,
       includedCount: included.length,
-      excludedCount: excluded.length,
+      excludedCount: args.excludedWithRecovery.length,
       paragraphCount: args.paragraphs.length,
       jsonPath,
       markdownPath: mdPath,
@@ -240,63 +337,88 @@ export async function partialPackSynthesis(
     };
   };
 
-  // ── Step 2: Zero-included-sections → honest failure marker ────────────────
-  if (included.length === 0) {
-    const noIncluded: PartialPackNoIncludedSectionsError = {
-      code: 'no_included_sections',
-      message:
-        'No section has valid section-level prose. Partial-pack synthesis cannot generate without at least one included section.',
-      excluded_sections: excluded,
-    };
-    return writeArtifact({
-      paragraphs: [],
-      requiredAnswerBundle: null,
-      proseError: noIncluded,
-      proseErrorMsg: noIncluded.message,
-    });
-  }
+  try {
+    // ── Step 3: Resolve client + run recovery + write canonical ─────────────
+    const client = await ensureClient();
 
-  // ── Step 3: Multi-section bundle planning (Slice 2c) ──────────────────────
-  // For 1-included input, bundle planner is bypassed (Slice 2 behavior).
-  let requiredBundle: RequiredAnswerBundle | null = null;
-  if (included.length >= 2) {
-    const planResult = planAnswerBundle(drafterInputs);
-    if (!planResult.ok) {
-      // No viable cross-section candidates — write failure marker. Bundle is
-      // null because there was no bundle to construct.
-      const err: PartialPackInsufficientCrossSectionCandidatesError = planResult.error;
-      return writeArtifact({
+    // Build the canonical recovery artifact. If the engine throws entirely,
+    // we don't fail the partial-pack run — we mark every excluded section's
+    // recovery_summary as `recovery_unavailable` (engine_error) so the
+    // operator still gets an honest partial-pack artifact + an explicit
+    // admission that recovery wasn't computed.
+    const recoveryBySectionId = new Map<string, SectionRecoveryResult>();
+    let recoveryBuildFailureDetail: string | null = null;
+    try {
+      const { artifact: recoveryArtifact } = await buildRecoveryArtifact({
+        packPath,
+        research,
+        handoff,
+        client,
+        model: options.proseModel,
+        generatedAt,
+      });
+      // Persist the canonical recovery artifact — same in-memory object as
+      // the embed (single source of truth).
+      await writeRecoveryArtifact({ packPath, artifact: recoveryArtifact });
+      for (const r of recoveryArtifact.sections) {
+        recoveryBySectionId.set(r.section_id, r);
+      }
+    } catch (err) {
+      recoveryBuildFailureDetail = err instanceof Error ? err.message : String(err);
+    }
+
+    // ── Step 4: Apply recovery_summary to excluded sections ─────────────────
+    const excludedWithRecovery = applyRecoverySummaries({
+      excluded: classified.excluded,
+      recoveryBySectionId,
+      recoveryBuildFailureDetail,
+    });
+
+    // ── Step 5: Zero-included-sections → honest failure marker ──────────────
+    if (included.length === 0) {
+      const noIncluded: PartialPackNoIncludedSectionsError = {
+        code: 'no_included_sections',
+        message:
+          'No section has valid section-level prose. Partial-pack synthesis cannot generate without at least one included section.',
+        excluded_sections: excludedWithRecovery,
+      };
+      return await writeArtifactWith({
+        excludedWithRecovery,
         paragraphs: [],
         requiredAnswerBundle: null,
-        proseError: err,
-        proseErrorMsg: err.message,
+        proseError: noIncluded,
+        proseErrorMsg: noIncluded.message,
       });
     }
-    requiredBundle = planResult.bundle;
-  }
 
-  // ── Step 4: Resolve MCP client ────────────────────────────────────────────
-  let resolvedClient: ProseCallToolClient | null = options.mcpClient ?? null;
-  let mcpHandle: MCPClientHandle | null = null;
+    // ── Step 6: Multi-section bundle planning (Slice 2c) ────────────────────
+    // For 1-included input, bundle planner is bypassed (Slice 2 behavior).
+    let requiredBundle: RequiredAnswerBundle | null = null;
+    if (included.length >= 2) {
+      const planResult = planAnswerBundle(drafterInputs);
+      if (!planResult.ok) {
+        // No viable cross-section candidates — write failure marker.
+        const err: PartialPackInsufficientCrossSectionCandidatesError = planResult.error;
+        return await writeArtifactWith({
+          excludedWithRecovery,
+          paragraphs: [],
+          requiredAnswerBundle: null,
+          proseError: err,
+          proseErrorMsg: err.message,
+        });
+      }
+      requiredBundle = planResult.bundle;
+    }
 
-  if (resolvedClient === null && options.spawnMcpClient) {
-    mcpHandle = new MCPClientHandle();
-    const sdkClient = await mcpHandle.connect();
-    resolvedClient = sdkClient as unknown as ProseCallToolClient;
-  }
-  if (resolvedClient === null) {
-    throw new Error(
-      'Partial-pack synthesis requires an MCP client. Pass `mcpClient` (tests) or `spawnMcpClient: true` (CLI).',
-    );
-  }
+    // ── Step 7: Draft + validate + retry once ───────────────────────────────
+    let paragraphs: PartialPackParagraph[] = [];
+    let proseErrorMsg: string | null = null;
+    let proseErrorStructured: PartialPackArtifact['proseError'] | undefined;
+    const excludedForPrompt = excludedWithRecovery.map((e) => ({
+      section_id: e.section_id,
+      reason: e.reason,
+    }));
 
-  // ── Step 5: Draft + validate + retry once ─────────────────────────────────
-  let paragraphs: PartialPackParagraph[] = [];
-  let proseErrorMsg: string | null = null;
-  let proseErrorStructured: PartialPackArtifact['proseError'] | undefined;
-  const excludedForPrompt = excluded.map((e) => ({ section_id: e.section_id, reason: e.reason }));
-
-  try {
     // First attempt.
     const attempt1 = await runOnceWithValidation({
       packTopic: handoff.pack_topic,
@@ -305,7 +427,7 @@ export async function partialPackSynthesis(
       excludedForPrompt,
       requiredBundle,
       rejectionAddendum: null,
-      client: resolvedClient,
+      client,
       model: options.proseModel,
       includedCount: included.length,
     });
@@ -325,7 +447,7 @@ export async function partialPackSynthesis(
         excludedForPrompt,
         requiredBundle,
         rejectionAddendum: firstFailureReason,
-        client: resolvedClient,
+        client,
         model: options.proseModel,
         includedCount: included.length,
       });
@@ -358,20 +480,21 @@ export async function partialPackSynthesis(
         // that violated the contract.
       }
     }
+
+    return await writeArtifactWith({
+      excludedWithRecovery,
+      paragraphs,
+      requiredAnswerBundle: requiredBundle,
+      proseError: proseErrorStructured,
+      proseErrorMsg,
+    });
   } finally {
-    if (mcpHandle) {
+    if (mcpState.handle) {
       try {
-        await mcpHandle.close();
+        await mcpState.handle.close();
       } catch {
         /* swallow — cleanup only */
       }
     }
   }
-
-  return writeArtifact({
-    paragraphs,
-    requiredAnswerBundle: requiredBundle,
-    proseError: proseErrorStructured,
-    proseErrorMsg,
-  });
 }

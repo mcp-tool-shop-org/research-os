@@ -44,9 +44,23 @@ function makeAlwaysDisobeyingClient(): { client: ProseCallToolClient; callCount:
   let calls = 0;
   const client: ProseCallToolClient = {
     async callTool(params) {
-      calls += 1;
       const args = params.arguments as Record<string, unknown>;
       const text = typeof args.text === 'string' ? args.text : '';
+      // Slice 3b — recovery advisor also goes through this client when
+      // partial-pack synthesis embeds recovery. The test asserts on
+      // drafter-call count only, so skip the counter for advisor calls
+      // and return an error envelope so recovery falls back deterministically.
+      if (text.includes('===== SECTION DIAGNOSIS')) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ result: { ok: false, error: 'advisor not exercised in this test' } }),
+            },
+          ],
+        };
+      }
+      calls += 1;
       // Find Section A's IDs from the rendered prompt.
       const allIds = Array.from(
         new Set((text.match(/\[(\d{2}-[a-z0-9-]+:p\d+)\]/g) ?? []).map((m) => m.slice(1, -1))),
@@ -80,9 +94,23 @@ function makeRetryRecoverClient(): { client: ProseCallToolClient; callCount: () 
   let calls = 0;
   const client: ProseCallToolClient = {
     async callTool(params) {
-      calls += 1;
       const args = params.arguments as Record<string, unknown>;
       const text = typeof args.text === 'string' ? args.text : '';
+      // Slice 3b — recovery advisor also goes through this client when
+      // partial-pack synthesis embeds recovery. The test asserts on
+      // drafter-call count only, so skip the counter for advisor calls
+      // and return an error envelope so recovery falls back deterministically.
+      if (text.includes('===== SECTION DIAGNOSIS')) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ result: { ok: false, error: 'advisor not exercised in this test' } }),
+            },
+          ],
+        };
+      }
+      calls += 1;
       const allIds = Array.from(
         new Set((text.match(/\[(\d{2}-[a-z0-9-]+:p\d+)\]/g) ?? []).map((m) => m.slice(1, -1))),
       );
