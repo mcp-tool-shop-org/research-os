@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.10.0"><img src="https://img.shields.io/badge/version-0.10.0-blue" alt="version 0.10.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,40 +182,54 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
 
-## v0.9.0 新增功能：产品构件归档
+## 新版本 v0.10.0 — 修复独立操作者问题的发布
 
-research-os 现在可以生成可读的章节和部分构件，同时保留可追溯性，并遵循构件规范。
+v0.10.0 修复了在 2026-05-15 出现的 v0.1 独立操作者问题（`operator_aloneness_dst_v0.1`，失败）。 四个修复模块同时发布：恢复路由对齐、范围修复的命令行界面、配对源卡审计强化，以及可靠的状态收集。 v0.1 的测试失败是因为外部操作者遇到了三个独立的问题：`recover` 推荐了错误的恢复路径，没有命令行界面可以修复 `scope=null` 的情况，并且源卡审计通过了从 1035 字节的 APA Incapsula 机器人检测片段中提取的虚假 COVID-19 证书。 v0.10.0 解决了这些问题。
 
 ### 您可以运行的内容
 
 ```sh
-research-os synth section <section-id>       # readable section prose + paragraph-level provenance
-research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
-research-os recover pack                      # lawful recovery guidance for blocked sections
+research-os claim repair-scope <section-id> [--auto | --interactive]
+                                              # fix claims that arrived with scope=null
+research-os recover pack                       # advisor now reads gate.blocking_reasons[] first
+research-os source-card audit                  # severities now include bot-check + word-count quarantine
 ```
 
-### 构件链
+### 修复方案
 
 ```
-claims → section prose → partial-pack synthesis → recovery guidance
+gate blocked  →  recover diagnose (now gate-routed)  →  recover advise (repair_claim_scope action)
+              ↓
+              claim repair-scope (new CLI; auto or interactive)
+              ↓
+              re-run review + gate; claims promote without hand-editing claims.jsonl
 ```
 
-每一层都将前一层作为证据。章节内容处理流水线运行一个确定性规划器，用于处理已接受的声明；一个撰稿人，用于根据预先分配的集群撰写内容；以及一个段落级验证器，在输出之前进行验证。部分构件合成读取章节内容（而不是原始声明），并以结构化的方式披露被排除的章节及其原因。恢复指南读取为每个被排除的章节计算的确定性行动图；AI 在此合规的行动空间内撰写内容；一个验证器在输出之前进行验证。与独立的 `recover pack` 命令相同的恢复对象，会被投影到 `partial-pack-synthesis.{md,json}` 文件中，每个被排除的章节下，这样操作人员可以在同一位置看到“哪些内容被阻止 + 下一步该做什么”。
+在提取声明之前，源卡审计现在会隔离机器人检测/验证码片段（`bot_check_or_captcha_detected`，严重失败），以及虚假的、数据提取量低/提取量高的源（`extraction_suspect_word_count_mismatch`，警告并隔离）。 操作人员可以通过现有的 v0.4 源卡覆盖记录上的新字段 `clear_severities[]` 来覆盖这些设置。
+
+现在，每次数据获取都会显示一个包含 5 个值的 `gather_outcome` 枚举值（`ok | fetch_failed | extraction_skipped | extraction_failed | bot_check_detected`）。 之前 v0.1 中出现的错误信息 `"Failed (ok HTTP 200)"` 已被移除；现在 PDF 文件会显示为 `extraction_skipped`，而不是 `Failed`。
 
 ### 规范边界
 
-可读的构件并不能使不完整的构件可以被冻结或发布。`pack freeze` 和 `pack publish` 命令仍然会拒绝包含未运行、被阻止或需要修复的章节的构件。产品会生成诚实的、部分输出，而不是假装构件是完整的。
+修复方案是增量式的。 核心规则仍然有效：`accepted_claim_floor` 仍然是不可放弃的；恢复建议器仍然拒绝为不可放弃的失败推荐 `apply_waiver`。 已经关闭的 `FailureShape` 枚举值没有改变；R-002 只是在现有的九个形状的基础上增加了门状态路由。 `RECOVERY_ACTIONS` 从 7 个已关闭的值增加到 8 个（增加了 `repair_claim_scope`）。 严重程度隔离永远不会在未经明确操作人员覆盖的情况下自动升级到审计门（新的 `clear_severities[]` 字段是操作人员的决策记录，只能追加）。
 
-### v0.9.0 不声称的功能
+所有四个冻结版本的回归测试与 v0.3.3 的基线版本完全一致，这是连续的第六次发布。
 
-- v1 版本的可用性。
-- 优于基于云的研究工具。
-- 完整的、经过校准的受信任审查模型。
-- 能够仅通过运行新的构件来生成有用的构件。
+### v0.10.0 不包含的内容
 
-这个归档功能使构件层真正可用。关于是否可以仅由操作人员完成构件生成的问题，仍然是开放的，将在发布后单独进行测试。
+- v1 的可用性。
+- v0.2 独立操作者问题的最终结果。 v0.2 在单独的会话中使用 npm `@mcptoolshop/research-os@0.10.0` 进行测试。
+- 可接受性原则的研究。 计划在 v0.2 通过后进行。
+- 对基于云的研究工具的改进。
+- 完整的、可信的评审员校准模型。
 
-请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+v0.10.0 是 v0.2 独立操作者问题测试的先决条件，而不是最终结果。
+
+请参阅 [`docs/release-notes/v0.10.0.md`](docs/release-notes/v0.10.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+## 之前版本：v0.9.0 — 产品成果
+
+v0.9.0 将 v0.8 的证据链转化为对操作人员有用的成果：分节级别的文本合成（`synth section`）、部分版本的合成（`synth pack --partial`），以及合规的恢复建议器（`recover pack`）。 请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md)。
 
 ## 之前版本：v0.8.0 — 架构恢复
 
@@ -223,7 +237,9 @@ v0.8.0 将 research-os 重新连接到其声明的本地 LLM 基础 (`ollama-int
 
 ## 状态
 
-**v0.9.0 — 产品构件层** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.9.0`，发布日期：2026年5月14日。v0.9.0 将 v0.8 中的证据链转化为对操作人员有用的构件。分节级别的文本合成功能 (`research-os synth section <id>`) 生成可读的 Markdown 格式文档，并提供段落级别的支持信息，指向已接受的论点。部分构件合成功能 (`research-os synth pack --partial`) 消耗分节文本（而非原始论点），并明确列出被排除的分节，并提供结构化的原因；一个确定性的构件规划器会在包含 2 个或更多分节时，预先选择所需的交叉支持信息。故障恢复建议器 (`research-os recover pack`) 为受阻的分节提供操作人员指导，采用四层架构——确定性诊断 + 合法操作图 + AI 建议 + 验证器，并提供三种建议路径 (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`)，以及针对九种故障模式和七种恢复操作的封闭枚举。恢复建议信息嵌入在每个被排除的分节下的 `partial-pack-synthesis.{md,json}` 文件中，通过从规范的恢复对象进行紧凑的投影，实现独立和嵌入式表面之间的单一数据源；`recovery_unavailable` 状态明确地暴露引擎故障情况（不进行静默跳过）。冻结和发布的语义保持不变：可读的部分构件不会使不完整的构件可以被冻结或发布。`accepted_claim_floor` 仍然是不可放弃的；恢复建议器拒绝推荐 `apply_waiver` 用于不可放弃的故障。**需要 `ollama-intern-mcp@^2.4.0`** (与 v0.8.0 相同)。1266/1266 个 vitest 测试通过 (从 1013 增加到 1266，增加了 253 个测试)。**所有四个冻结的构件都与 v0.3.3 的基线进行字节级别的完全一致性验证** (连续第六次发布)。**这不是 v1 版本。** v0.9.0 使构件层成为现实；v1 版本的可用性、全新的独立操作性构件、可信的评审模型以及基于云的基线验证声明，明确地未包含在本次发布中。请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+**v0.10.0 — 修复独立操作者问题的版本** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.10.0`，发布日期为 2026年5月15日。v0.10.0 版本通过一个四部分修复方案，解决了 v0.1 版本中独立操作者可能出现的故障情况 (`operator_aloneness_dst_v0.1`)，该故障于 2026年5月15日被修复。**R-001** (`research-os claim repair-scope <section> [--auto | --interactive]`): 引入新的命令行工具，用于修复 `scope` 字段为空的声明；新增只追加的日志文件 `evidence/claim-scope-repairs.jsonl`；在 `RECOVERY_ACTIONS` 中新增 `repair_claim_scope` 操作（枚举类型增加，从 7 变为 8）。系统会将此操作作为 `accepted_claim_floor` 中的优先级最高的选项，当 `needs_repair_claims` 中存在 3 个或更多需要修复的声明时。**R-002** (恢复路由): 诊断层现在将 `gate.json:blocking_reasons[]` 视为权威的路由信息，并在必要时回退到传统的 `failures[].check` 查找方式。与下游信号（如 `source_card_classification_gap`）相比，门禁阻止信号具有更高的优先级。**R-003 + R-005** (增强源卡审计，配对): 引入新的严重程度级别：`bot_check_or_captcha_detected` (严重故障 — 复合信号：标记 + 轮廓) 和 `extraction_suspect_word_count_mismatch` (警告并隔离 — 内容 ≤ 200 字，且提取的字数 ≥ 800 字，且比例 ≥ 4)。可以通过在 v0.4 版本的覆盖日志模式中新增 `clear_severities[]` 字段来覆盖这些设置。`research.yaml` 文件中可以选择性地添加 `audit.severity_thresholds` 块，以进行更精细的配置。**R-004** (可靠的 `gather_outcome`): `FetchReceipt` 中新增了 5 种状态的枚举类型：`ok | fetch_failed | extraction_skipped | extraction_failed | bot_check_detected`；v0.1 版本中出现的错误信息 `"Failed (ok HTTP 200)"` 已被移除。`FetchReceipt` 中可以选择性地添加 `fetch_duration_ms` 字段，用于 R-003 中 CDN 快速挑战信号的记录。`BOT_CHECK_MARKERS` 从 `src/sources/severities.ts` 文件中导出，以便在采集层和审计层中实现标记的统一管理。**需要 `ollama-intern-mcp@^2.4.0`** (版本与 v0.8.0 相同)。1344/1344 个 vitest 测试通过（从 1266 增加到 1344，增加了 78 个测试）。**所有四个冻结版本的软件包都与 v0.3.3 版本的基线完全一致**（连续第七个版本）。**这不是 v1 版本。也不是 v0.2 版本的独立操作者问题评估版本** — v0.2 版本将在单独的会话中针对此 npm 版本进行测试。关于可接受性的工作需要等到 v0.2 版本通过后才能进行。请参阅 [`docs/release-notes/v0.10.0.md`](docs/release-notes/v0.10.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
+
+**v0.9.0 — 产品构件层** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.9.0`，发布日期：2026年5月13日。v0.9.0 将 v0.8 中的证据链转化为对操作人员有用的构件。分节级别的文本合成功能 (`research-os synth section <id>`) 生成可读的 Markdown 格式文档，并提供段落级别的支持信息，指向已接受的论点。部分构件合成功能 (`research-os synth pack --partial`) 消耗分节文本（而非原始论点），并明确列出被排除的分节，并提供结构化的原因；一个确定性的构件规划器会在包含 2 个或更多分节时，预先选择所需的交叉支持信息。故障恢复建议器 (`research-os recover pack`) 为受阻的分节提供操作人员指导，采用四层架构——确定性诊断 + 合法操作图 + AI 建议 + 验证器，并提供三种建议路径 (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`)，以及针对九种故障模式和七种恢复操作的封闭枚举。恢复建议信息嵌入在每个被排除的分节下的 `partial-pack-synthesis.{md,json}` 文件中，通过从规范的恢复对象进行紧凑的投影，实现独立和嵌入式表面之间的单一数据源；`recovery_unavailable` 状态明确地暴露引擎故障情况（不进行静默跳过）。冻结和发布的语义保持不变：可读的部分构件不会使不完整的构件可以被冻结或发布。`accepted_claim_floor` 仍然是不可放弃的；恢复建议器拒绝推荐 `apply_waiver` 用于不可放弃的故障。**需要 `ollama-intern-mcp@^2.4.0`** (与 v0.8.0 相同)。1266/1266 个 vitest 测试通过 (从 1013 增加到 1266，增加了 253 个测试)。**所有四个冻结的构件都与 v0.3.3 的基线进行字节级别的完全一致性验证** (连续第六次发布)。**这不是 v1 版本。** v0.9.0 使构件层成为现实；v1 版本的可用性、全新的独立操作性构件、可信的评审模型以及基于云的基线验证声明，明确地未包含在本次发布中。请参阅 [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
 **v0.8.0 — 架构恢复 + 框架边界内的相关性** — 已发布到 npm，版本号为 `@mcptoolshop/research-os@0.8.0`，发布日期：2026年5月12日。v0.8.0 是一个架构恢复版本：research-os 现在使用 `ollama-intern-mcp@^2.4.0` 作为本地证据处理器的基础，用于提取论点（此前 README 中声明了该依赖，但代码中存在绕过它的内部直接 Ollama 接口，自 v0.1 版本以来一直存在，v0.8.0 解决了这个问题）。新增功能：MCP 客户端基础 (`OLLAMA_INTERN_MCP_BIN` 环境变量 + PATH 自动发现 + StdioClientTransport 生命周期）；通过 `ollama_extract` 和 4 标签模式（`supports_section` / `off_topic` / `background_only` / `source_chrome`）对每个论点进行分段证据评估；新的 `ReviewDecision` 状态 `frame_excluded`（如果论点被排除，则审查会跳过 LLM，并生成合成的 ClaimReview）；`ClaimSchema` 增加了 `frame_excluded` + `frame_exclusion_reason`（包含 4 个枚举值，包括 `critic_unavailable`，用于系统状态故障）+ `frame_exclusion_rationale`；通过 `synth section <id>` 实现基于分段的证据合成，适用于需要修复的包中的符合条件的段落（证据引用索引：论点 ID → 断言 → 证据摘录 → 来源 URL，而非叙述性文本）；审查机制通过 `getEffectivePublisher` / `getEffectiveSourceType` 尊重来源卡覆盖设置（吸收了 v0.7.1 的目标）；`DEFAULT_WINDOW_CHARS` 默认值从 5000 更改为 3000（针对 `dev-rtx5080` 配置文件下的 hermes3:8b 模型，上下文大小为 8K）；对评估器调用采用软失败策略（5 种失败模式：传输 / 解析 / 无效标签 / 空理由 / 超时，默认情况下设置为 `frame_excluded: true`，理由为 `critic_unavailable`，不予通过）；推广语义：`frame_excluded` 论点不会阻止分段的推广；协同工作流程将 `frame_excluded` 状态作为独立的桶，与已接受/需要修复/已拒绝的状态分开。**需要 `ollama-intern-mcp@^2.4.0`**。1013/1013 个 vitest 测试通过（从 901 增加到 1013，增加了 112 个测试）。**所有四个冻结的包都与 v0.3.3 的基线版本完全一致。** **这不是 v1 版本** — v1 版本的准备工作仍在进行中，请参阅 [`docs/roadmap.md`](docs/roadmap.md)。请参阅 [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md) 和 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -253,24 +269,25 @@ v0.8.0 将 research-os 重新连接到其声明的本地 LLM 基础 (`ollama-int
 
 **v1 Experiment 1 (ComfyUI 工作流程的稳定性)** — 已于 2026-05-09 结束。 终端 A 的所有 8 个部分已完成，软件包已冻结，归档已上线。 参见 [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) 和 [`docs/roadmap.md`](docs/roadmap.md)。
 
-### research-os 并非（并且 v0.7.0 版本也不声称是）什么
+### research-os 不是什么（以及 v0.10.0 版本不声称是什么）
 
-- 尚未经过外部用户的广泛测试，仅限于内部测试阶段。六个内部测试项目已结束，其中一个为自引用项目，五个涉及外部领域（ComfyUI、XRPL、Godot、评审员校准、确定性评审），但大规模的外部用户使用仍有待进一步研究。在全新环境中，单独运行一个模块（例如，一个未准备好的证据问题，没有预先构建的上游流程）尚未在 v0.9.0 版本中得到重新验证。
-- 并非完整的合成器。v0.9.0 版本可以生成可读的文本，分别针对章节级别（`synth section`）和部分模块级别（`synth pack --partial`），每个级别都明确声明了模块的可用状态。完整的模块合成仍然需要一个 `synthesis_ready` 级别的模块，以及通过 `synth workspace` 使用人类（或协作者）进行基于已接受的声明 ID 的编写。
-- 不代表对任何评审模型的认可。v0.9.0 版本默认不包含 `trusted_baseline` 类型的评审员配置文件；校准记录是证据，而非认可。现有的 v0.6.0 版本的校准记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下进行重新校准。请参阅 [评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
-- 冻结的模块可能包含历史遗留信息。在 v0.4 之前的冻结模块包含 `research_os_version: '0.1.0'`，这是由于 v0.4 之前的硬编码的常量；该问题已在 v0.4.0 版本中修复，但较早的冻结模块在 Law 15 的约束下是不可变的（参见 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
-- 未在 npm 上进行来源验证。Sigstore 来源验证将推迟到未来的版本；请通过 package-shasum 和 GitHub 发布提交来验证 v0.9.0 版本的 npm 包。
-- 并非云端解决方案的优势。v0.7.x 版本的 `local-first-vs-cloud-research/` 目录中的产品验证结果表明，云端解决方案在可读性和操作负担方面具有优势；v0.9.0 版本并未声称这些优势已被克服。
+- 尚未经过严格的独立操作验证，在全新安装包上未进行验证。v0.10.0 版本解决了 v0.1 阶段的故障情况；v0.2 版本针对此 npm 发布版本进行独立操作验证，并在单独的会话中进行，可能会发现更多需要修复的问题。v0.10.0 是 v0.2 的前提条件，而不是验证结果。
+- 尚未经过外部用户的广泛测试，仅限于内部测试阶段。六个内部测试实验已完成，包括一个自验证实验和五个外部领域实验（ComfyUI、XRPL、Godot、评审员校准、确定性评审员），但外部操作员的大规模使用仍有待进一步研究。
+- 并非完整的打包合成工具。v0.10.0 版本继承了 v0.9 版本的“章节范围”（`synth section`）和“部分打包范围”（`synth pack --partial`）功能，每个功能都明确声明了打包的可用性。完整的打包合成仍然需要使用 `synthesis_ready` 打包，并通过 `synth workspace` 使用人类（或协作人员）对已接受的声明 ID 进行编写。
+- 不代表对任何评审模型的支持。v0.10.0 版本默认不包含 `trusted_baseline` 评审员配置文件；校准记录是证据，而不是支持。现有的 v0.6.0 校准记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下进行重新校准。请参阅 [评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+- 包含历史遗留信息，未在冻结的打包文件中完全清除。在 v0.4 之前的冻结打包文件中，由于 v0.4 之前的硬编码的 scaffold 常量，存在 `research_os_version: '0.1.0'`。该问题已在 v0.4.0 版本中修复，但较早的冻结打包文件在第 15 条规则下是不可变的（参见 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
+- 未在 npm 上进行来源验证。Sigstore 来源验证将推迟到未来的版本；请通过 package-shasum 和 GitHub 发布提交来验证 v0.10.0 npm 包。
+- 未实现云端性能优势。v0.7.x 版本的 `local-first-vs-cloud-research/` 产品验证结果表明，云端在可读性和操作员负担方面具有优势；v0.10.0 版本并未声称已经克服了这些问题。
 
 ### 已知的局限性
 
-v1.0 版本包含三个用户可见的已知限制。每个限制都记录在[手册中的已知限制页面](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)以及[CHANGELOG.md](CHANGELOG.md) 中。没有一个限制会阻止发布；所有限制都有明确的恢复或缓解方案。
+v0.10.0 版本包含三个可见的操作员已知限制，这些限制是从之前的版本中继承而来的。每个限制都记录在 [手册中已知的限制页面](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) 和 [CHANGELOG.md](CHANGELOG.md) 中。没有一个会阻止发布；所有限制都有已定义的恢复或缓解方案。
 
-- **B-E-001 — v1.0 之前的冻结包版本信息是历史遗留信息。** 在 v0.3.3 到 v0.6.0 之间发布的冻结包，在 `pack.manifest.json` 和 `pack/research.yaml` 文件中包含 `research_os_version: "0.1.0"`，这是由于一个在 v0.4 之前的硬编码构建模板常量。该问题已在 v1.0 版本中修复（构建模板现在导入实时 `RESEARCH_OS_VERSION`）；现有的冻结包在第 15 条规定的条件下是不可变的。受影响的包中的 JSON 文件已经包含其对应的版本信息。
-- **B-E-004 — npm 来源验证将在 v1.x 版本中实现。** v1.0 版本的 npm tarball 仅通过 package-shasum 进行验证。将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）存在冲突；该迁移计划在 v1.x 版本中进行。请通过 package-shasum 和 GitHub 发布提交来验证 v1.0 版本的 npm 包。
-- **B-A-003 — 索引器模式版本迁移已记录，但未强制执行。** v1.0 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。当 `SCHEMA_VERSION` 发生记录中的更改时，请删除 `.research-os/index.sqlite` 文件，然后重新运行 `research-os index build --all` 命令。这不会影响包本身——索引器是证据 + 声明的加速层（第 8 条）；重建操作是幂等的。
+- **B-E-001 — v0.4 之前的冻结打包版本的标记是一个历史遗留信息。** 在 v0.3.3 到 v0.6.0 之间发布的冻结打包文件，在 `pack.manifest.json` 和 `pack/research.yaml` 中包含 `research_os_version: "0.1.0"`，这是由于 v0.4 之前的硬编码的 scaffold 常量。该问题已在 v0.4.0 版本中修复（scaffold 现在导入 live `RESEARCH_OS_VERSION`）；较早的冻结打包文件在第 15 条规则下是不可变的。受影响的打包文件中的 JSON 文件已经包含其对应的版本信息。
+- **B-E-004 — npm 来源验证将推迟到未来的版本。** v0.10.0 npm tarball 仅通过 package-shasum 进行验证。将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）冲突；该迁移计划在未来的版本中进行。请通过 package-shasum 和 GitHub 发布提交来验证 v0.10.0 npm 包。
+- **B-A-003 — 索引器模式版本迁移已记录，但未强制执行。** v0.10.0 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。当 `SCHEMA_VERSION` 发生变化时，请删除 `.research-os/index.sqlite` 并重新运行 `research-os index build --all`。打包文件本身不受影响——索引器是证据 + 声明的加速层（第 8 条规则）；重建是幂等的。
 
-**v0.9.0 版本不包含 `trusted_baseline` 类型的评审员配置文件。** 这是一种有意的信任策略，而非缺陷：存储库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。信任是通过反复的、有预设错误的测试来获得的，而不是默认信任。这些记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下进行重新校准。
+**在 v0.10.0 版本中，不允许创建任何“可信基准”的审核者配置文件。** 这是一种有意的信任策略，而不是一个缺陷：存储库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。 信任是通过反复的、有预设错误的测试来获得的，而不是默认信任。 这些记录是在 v0.8.0 版本的 MCP 架构之前创建的，并且尚未在 MCP 路径下重新进行基准测试。
 
 ## 通往 v1.0 的路线图
 

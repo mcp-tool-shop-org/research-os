@@ -162,7 +162,7 @@ export class MCPClientHandle {
     const client =
       this.options.clientFactory?.() ??
       new Client(
-        { name: 'research-os', version: '0.9.0' },
+        { name: 'research-os', version: '0.10.0' },
         { capabilities: {} },
       );
 

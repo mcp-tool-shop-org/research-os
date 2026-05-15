@@ -59,13 +59,42 @@ the failing URL, (2) flushes the accumulated source-id batch immediately so
 prior successes become durable, and (3) continues with the next URL. The
 batch flush no longer drops in-flight source-ids on mid-loop failure.
 
-**Recover.** Inspect `evidence/fetch-log.jsonl` to find which URLs failed:
+**Recover.** Inspect `evidence/fetch-log.jsonl` to find which URLs failed.
+v0.10.0+ stamps a 5-value rollup status on every receipt (`gather_outcome`):
 
 ```bash
-# Find URLs with non-ok outcomes
-grep -E '"fetch_outcome":"(network_error|http_error|extraction_failed)"' \
+# Find URLs with non-ok rollup outcomes (v0.10.0+)
+grep -E '"gather_outcome":"(fetch_failed|extraction_skipped|extraction_failed|bot_check_detected)"' \
+  <pack>/evidence/fetch-log.jsonl
+
+# Older packs (pre-v0.10): the more granular fetch_outcome / extraction state
+grep -E '"fetch_outcome":"(network_error|http_error|too_large)"' \
   <pack>/evidence/fetch-log.jsonl
 ```
+
+The 5-value `gather_outcome` enum: `ok` (fetched + text extracted),
+`fetch_failed` (HTTP error, timeout, network failure, SSRF refusal),
+`extraction_skipped` (fetched but extractor not applicable — PDF, binary),
+`extraction_failed` (fetched but extractor errored mid-extraction),
+`bot_check_detected` (fetched but R-003 marker+body-words signal fired).
+Precedence (highest to lowest):
+`fetch_failed > bot_check_detected > extraction_failed > extraction_skipped > ok`.
+
+A `bot_check_detected` rollup at gather is informational; the source-card
+audit's R-003 severity is authoritative for quarantine (see the
+[source-card audit handbook page](/research-os/handbook/source-card-audit/)).
+An `extraction_skipped` rollup is not a failure — PDF and binary content
+types reach this state without an error. The progress line surfaces the
+content type so the operator can distinguish at a glance:
+
+```
+· extraction_skipped (content_type=application/pdf; extractor not applicable) — receipt recorded for <url>
+! fetch_failed (http_error HTTP 404) — receipt recorded for <url>
+! bot_check_detected (marker:incapsula, body_words=5) — receipt recorded for <url>
+```
+
+Bullet prefix (`·`) is informational; exclamation prefix (`!`) is the operator
+may want to address.
 
 Then re-run gather with the failed URLs only — the same URL produces the
 same source-id deterministically, so the existing source-card directory is

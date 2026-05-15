@@ -88,6 +88,26 @@ research-os claim audit-density 01-landscape   # read-only density diagnostic
 
 ---
 
+### `research-os claim repair-scope <section>` (v0.10.0+)
+
+Repair claims whose `scope` field arrived `null` from extraction. Append-only ledger at `evidence/claim-scope-repairs.jsonl`; canonical `claims.jsonl` rows carry the latest `applied_scope`.
+
+```bash
+research-os claim repair-scope 01-landscape                 # interactive (default)
+research-os claim repair-scope 01-landscape --auto          # templated heuristic, no prompt
+research-os claim repair-scope 01-landscape --interactive   # explicit interactive
+```
+
+Interactive mode (default) prompts on each proposal with `accept` / `edit` / `skip` / `quit`. `--auto` applies a templated heuristic — `"per <publisher> <source_type>, on <section_purpose>"` — without prompting. Graceful degradation when publisher or source_type is unknown.
+
+Running repair-scope twice on the same claim preserves both records (Law 15 append-only). Skip-with-reason writes a ledger record with `applied_scope=null, operator_confirmed=false`.
+
+Mode flags are mutually exclusive; the engine requires a `prompter` for interactive mode (protects against silent fall-through where auto-mode runs because the prompter wasn't wired).
+
+The recover advisor surfaces `repair_claim_scope` as the rank-1 action when the gate blocks on `accepted_claim_floor` and at least 3 claims are in `needs_repair_claims`; below that threshold the legacy `add_on_topic_sources` ranking is preserved (repair alone cannot clear the floor).
+
+---
+
 ### `research-os contradict map <section>`
 
 Detect tensions between candidate claims.

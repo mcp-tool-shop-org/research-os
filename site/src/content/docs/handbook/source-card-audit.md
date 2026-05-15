@@ -152,3 +152,56 @@ research-os source-card audit --pack /path/to/pack
 ```
 
 The ledger at `evidence/source-card-overrides.jsonl` is preserved through freeze and exported in the `pack publish` archive — operator corrections survive the pack lifecycle.
+
+---
+
+## Severities (v0.10.0+)
+
+In addition to the 7 finding kinds (which classify what's wrong with a source card's metadata), v0.10.0 introduces **severities** — upstream defenses that classify whether a source card's fetched content is trustworthy at all. Severities run as a pure function (`detectSeverities`) at audit time and at claim-extract time, so both surfaces see the same effective state.
+
+| Severity | Action | Trigger |
+|----------|--------|---------|
+| `bot_check_or_captcha_detected` | HARD FAIL — quarantine from claim extraction | Compound: marker (`captcha` / `incapsula` / `cloudflare challenge` / `please verify you are human` / `robot check` / `_Incapsula_Resource` / `access denied`) paired with body-shape evidence (≤100 prose words by default). Independent signals: <2KB body with >50% `<script>` density; substantial scripts with ≤50 prose words after stripping; HTTP 200 + response time ≤100ms + body <2KB. |
+| `extraction_suspect_word_count_mismatch` | WARN AND QUARANTINE | Fetched body word count ≤200 AND extracted card text ≥800 words AND ratio ≥4. |
+
+Quarantine excludes the source from claim extraction. Source cards are still written normally so the operator can inspect the fetched body and the extracted card side-by-side.
+
+### Tuning thresholds per pack
+
+Optional `audit.severity_thresholds` block in `research.yaml`. Each field is optional; absent fields fall back to `DEFAULT_SEVERITY_THRESHOLDS`.
+
+```yaml
+audit:
+  severity_thresholds:
+    bot_check:
+      max_body_words_with_marker: 100
+      min_script_density_ratio: 0.5
+      max_body_bytes_with_script_density: 2048
+      max_fetch_duration_ms_with_small_body: 100
+    extraction_word_count_ratio:
+      min_extracted_words: 800
+      max_body_words: 200
+      min_ratio: 4
+```
+
+Defaults are starting points, not load-bearing. Raise `max_body_words_with_marker` if legitimate brief content trips R-003; raise `min_script_density_ratio` if heavy-JS-but-legitimate pages trip; lower `min_ratio` if confabulation happens at 2-3× ratios.
+
+### Operator override via `clear_severities[]`
+
+The v0.4 source-card-overrides ledger schema gains a third optional field. At least one of `new_source_type`, `new_publisher`, OR `clear_severities` must be present.
+
+```json
+{
+  "source_id": "src_aabbccddeeff",
+  "reason": "Source is a legitimate CAPTCHA-research paper; markers appear in body prose, not in challenge content.",
+  "clear_severities": ["bot_check_or_captcha_detected"]
+}
+```
+
+Cleared severities are removed from the effective findings — claim extraction proceeds; audit kind drops back to existing precedence (e.g., `override_applied`). The override ledger remains append-only; clearing is a recorded operator decision, not a deletion.
+
+A single entry may combine `clear_severities` with `new_source_type` or `new_publisher` corrections — the existing all-or-nothing batch + frozen-pack-refusal semantics apply unchanged.
+
+### Gather-layer informational detection (v0.10.0+ R-004 hybrid)
+
+Gather runs a lightweight marker+body-words check (R-003 Signal A only) using the same canonical `BOT_CHECK_MARKERS` const. When it fires, `fetch-log.jsonl` records `gather_outcome: "bot_check_detected"` and the operator sees `! bot_check_detected (marker:<x>, body_words=<n>)` on the progress line. Gather-layer detection is informational; the audit-layer R-003 is authoritative for the multi-signal quarantine path (per-pack thresholds, script-density, fast-response, full `reasons[]` in audit findings).

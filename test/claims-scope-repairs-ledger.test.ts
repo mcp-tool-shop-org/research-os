@@ -43,7 +43,7 @@ function fixtureRepair(overrides: Partial<Record<string, unknown>> = {}): Record
     operator_confirmed: false,
     reason: null,
     operator: 'cli',
-    research_os_version: '0.9.0',
+    research_os_version: '0.10.0',
     ...overrides,
   };
 }

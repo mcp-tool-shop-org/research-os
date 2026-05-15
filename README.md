@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/version-0.9.0-blue" alt="version 0.9.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.10.0"><img src="https://img.shields.io/badge/version-0.10.0-blue" alt="version 0.10.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -203,46 +203,62 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) and the
 [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## New in v0.9.0 — Product Artifact Arc
+## New in v0.10.0 — Operator-Aloneness Repair Release
 
-research-os now produces readable section and partial-pack artifacts while preserving traceability and pack-law honesty.
+v0.10.0 closes the v0.1 operator-aloneness gate failure conditions surfaced on 2026-05-15 (`operator_aloneness_dst_v0.1`, FAIL). Four repair slices land together: recovery routing alignment, scope-repair CLI, paired source-card audit hardening, and honest gather status. The v0.1 gate FAILED because an external operator hit three independent walls — `recover` recommended the wrong unblock path, no CLI existed to repair `scope=null` claims, and source-card audit passed a fabricated COVID-19 card extracted from a 1035-byte APA Incapsula bot-check fragment. v0.10.0 closes those walls.
 
 ### What you can run
 
 ```sh
-research-os synth section <section-id>       # readable section prose + paragraph-level provenance
-research-os synth pack --partial              # cross-section partial-pack synthesis from section prose
-research-os recover pack                      # lawful recovery guidance for blocked sections
+research-os claim repair-scope <section-id> [--auto | --interactive]
+                                              # fix claims that arrived with scope=null
+research-os recover pack                       # advisor now reads gate.blocking_reasons[] first
+research-os source-card audit                  # severities now include bot-check + word-count quarantine
 ```
 
-### The artifact chain
+### The repair arc
 
 ```
-claims → section prose → partial-pack synthesis → recovery guidance
+gate blocked  →  recover diagnose (now gate-routed)  →  recover advise (repair_claim_scope action)
+              ↓
+              claim repair-scope (new CLI; auto or interactive)
+              ↓
+              re-run review + gate; claims promote without hand-editing claims.jsonl
 ```
 
-Each layer consumes the previous as evidence. The section-prose pipeline runs a deterministic planner over accepted claims, a drafter that writes prose against pre-assigned clusters, and a paragraph-level verifier that admits before output. Partial-pack synthesis reads section prose (never raw claims) and discloses excluded sections with structured reasons. Recovery guidance reads from the deterministic action graph computed for each excluded section; the AI writes prose within that lawful action space; a verifier admits before output. The same recovery object that powers the standalone `recover pack` command is projected into `partial-pack-synthesis.{md,json}` under each excluded section, so the operator sees "what's blocked + what to do next" in the same place.
+Upstream of claim extraction, the source-card audit now quarantines bot-check / CAPTCHA fragments (`bot_check_or_captcha_detected`, HARD FAIL) and confabulated low-fetch / high-extract sources (`extraction_suspect_word_count_mismatch`, WARN AND QUARANTINE). Operators override via the new `clear_severities[]` field on the existing v0.4 source-card override ledger.
+
+Gather progress now surfaces a 5-value `gather_outcome` enum (`ok | fetch_failed | extraction_skipped | extraction_failed | bot_check_detected`) on every fetch receipt. The v0.1 confused phrase `"Failed (ok HTTP 200)"` is gone; PDFs now surface as `extraction_skipped`, not `Failed`.
 
 ### Law boundary
 
-Readable artifacts do not make an incomplete pack freezable or publishable. `pack freeze` and `pack publish` continue to refuse packs with unrun, blocked, or repair-required sections. The product produces honest partial output instead of pretending the pack is complete.
+The repair arc is additive. Pack-law forbiddings are preserved: `accepted_claim_floor` remains unwaiveable; the recovery advisor still refuses to recommend `apply_waiver` for unwaiveable failures. The closed `FailureShape` enum is unchanged; R-002 only adds gate-state routing to the existing nine shapes. `RECOVERY_ACTIONS` grows from 7 to 8 closed values (`repair_claim_scope` joins). Severity quarantine never auto-promotes past the audit gate without explicit operator override (the new `clear_severities[]` field is a recorded operator decision, append-only).
 
-### What v0.9.0 does NOT claim
+Frozen-pack regression byte-identical against v0.3.3 baselines for all four frozen packs — seventh consecutive release where this holds.
+
+### What v0.10.0 does NOT claim
 
 - v1 readiness.
+- v0.2 operator-aloneness gate verdict. v0.2 runs against npm `@mcptoolshop/research-os@0.10.0` in a separate session.
+- Admissibility doctrine work. Gated on v0.2 PASS.
 - A win over cloud-based research tools.
 - A complete trusted reviewer calibration model.
-- That an operator can run a fresh pack to a useful artifact alone.
 
-The arc made the artifact layer real. The operator-aloneness question remains open and will be tested separately after this release ships.
+v0.10.0 is the prerequisite for v0.2 of the operator-aloneness gate, not the proof.
 
-See [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) and [CHANGELOG.md](CHANGELOG.md).
+See [`docs/release-notes/v0.10.0.md`](docs/release-notes/v0.10.0.md) and [CHANGELOG.md](CHANGELOG.md).
+
+## Previously: v0.9.0 — Product Artifact Arc
+
+v0.9.0 turned the v0.8 evidence spine into operator-useful artifacts: section-level prose synthesis (`synth section`), partial-pack synthesis (`synth pack --partial`), and the lawful recovery advisor (`recover pack`). See [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md).
 
 ## Previously: v0.8.0 — Architecture Recovery
 
 v0.8.0 reconnected research-os to its declared local-LLM substrate (`ollama-intern-mcp@^2.4.0`) for claim extraction, added frame-bound section-relevance enforcement, and added section-scoped evidence-citation synthesis for gate-eligible sections in repair-required packs. See [`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md).
 
 ## Status
+
+**v0.10.0 — Operator-Aloneness Repair Release** — published to npm as `@mcptoolshop/research-os@0.10.0`, 2026-05-15. v0.10.0 closes the v0.1 operator-aloneness gate failure conditions (`operator_aloneness_dst_v0.1`, FAIL on 2026-05-15) through a 4-slice repair arc. **R-001** (`research-os claim repair-scope <section> [--auto | --interactive]`): new CLI to fix claims whose `scope` field arrived `null` from extraction; append-only `evidence/claim-scope-repairs.jsonl` ledger; new `repair_claim_scope` action in `RECOVERY_ACTIONS` (closed enum grows 7 → 8); advisor surfaces it as rank-1 on `accepted_claim_floor` when ≥3 claims are in `needs_repair_claims`. **R-002** (recovery routing): the diagnose layer now reads `gate.json:blocking_reasons[]` as the authoritative routing surface before falling back to the legacy `failures[].check` lookup — gate-blocking signals win over downstream signals like `source_card_classification_gap`. **R-003 + R-005** (source-card audit hardening, paired): new severities `bot_check_or_captcha_detected` (HARD FAIL — compound signal: markers + body-shape) and `extraction_suspect_word_count_mismatch` (WARN AND QUARANTINE — body ≤200 words AND extracted ≥800 words AND ratio ≥4). Operator override via new `clear_severities[]` field on the v0.4 override-ledger schema. Optional `audit.severity_thresholds` block in `research.yaml` for per-pack tuning. **R-004** (honest `gather_outcome`): 5-value enum on `FetchReceipt` (`ok | fetch_failed | extraction_skipped | extraction_failed | bot_check_detected`); the v0.1 confused phrase `"Failed (ok HTTP 200)"` is gone. Optional `fetch_duration_ms` on FetchReceipt for the R-003 CDN fast-challenge signal. `BOT_CHECK_MARKERS` exported from `src/sources/severities.ts` for gather-layer + audit-layer single-source-of-truth marker reuse. **Requires `ollama-intern-mcp@^2.4.0`** (unchanged from v0.8.0). 1344/1344 vitest passing (1266 → 1344, +78 tests across the arc). **All four frozen packs verify-pack byte-identically against v0.3.3 baselines** (seventh consecutive release). **Not a v1 release. Not a v0.2 operator-aloneness gate verdict** — v0.2 runs against this npm version in a separate session. Admissibility doctrine work is gated on v0.2 PASS. See [`docs/release-notes/v0.10.0.md`](docs/release-notes/v0.10.0.md) and [CHANGELOG.md](CHANGELOG.md).
 
 **v0.9.0 — Product Artifact Arc** — published to npm as `@mcptoolshop/research-os@0.9.0`, 2026-05-14. v0.9.0 turns the v0.8 evidence spine into operator-useful artifacts. Section-level prose synthesis (`research-os synth section <id>`) produces readable Markdown with paragraph-level support bundles pointing to accepted claims. Partial-pack synthesis (`research-os synth pack --partial`) consumes section prose (never raw claims) and discloses excluded sections with structured reasons; a deterministic bundle planner preselects required cross-section support when ≥2 sections are included. Lawful recovery advisor (`research-os recover pack`) produces operator guidance for blocked sections using a four-layer architecture — deterministic diagnosis + lawful action graph + AI advice + verifier — with three advisor paths (`ai_with_verifier_pass` / `ai_with_retry_pass` / `deterministic_fallback`) and closed enums for nine failure shapes and seven recovery actions. Recovery guidance is embedded in `partial-pack-synthesis.{md,json}` under each excluded section via a compact projection from the canonical recovery object — single source of truth between standalone and embedded surfaces; a discriminated-union `recovery_unavailable` state surfaces engine-failure cases explicitly (no silent skips). Freeze and publish semantics are unchanged: readable partial artifacts do not make an incomplete pack freezable or publishable. `accepted_claim_floor` remains unwaiveable; the recovery advisor refuses to recommend `apply_waiver` for unwaiveable failures. **Requires `ollama-intern-mcp@^2.4.0`** (unchanged from v0.8.0). 1266/1266 vitest passing (1013 → 1266, +253 tests across the arc). **All four frozen packs verify-pack byte-identically against v0.3.3 baselines** (sixth consecutive release). **Not a v1 release.** v0.9.0 makes the artifact layer real; v1 readiness, fresh-pack operator-aloneness, a trusted reviewer model, and a cloud-baseline win claim are explicitly not shipped. See [`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md) and [CHANGELOG.md](CHANGELOG.md).
 
@@ -274,24 +290,25 @@ v0.8.0 reconnected research-os to its declared local-LLM substrate (`ollama-inte
 
 **v1 Experiment 1 (ComfyUI workflow durability)** — CLOSED 2026-05-09. All 8 sections at Terminal A, pack frozen, archive live. See [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### What research-os is not (and v0.9.0 does not claim to be)
+### What research-os is not (and v0.10.0 does not claim to be)
 
-- Not battle-tested by external users beyond the dogfood arcs. Six dogfood experiments closed — one self-referential, five external-domain (ComfyUI, XRPL, Godot, reviewer-calibration, deterministic-reviewer) — but external operator usage at scale remains future work. Operator-aloneness on a fresh pack (an unprepared evidence question, no pre-baked upstream stages) has not been re-proven against v0.9.0 yet.
-- Not a full-pack synthesis writer. v0.9.0 produces readable prose at section scope (`synth section`) and partial-pack scope (`synth pack --partial`), each with explicit pack-readiness disclosure. Full-pack synthesis still requires a `synthesis_ready` pack and human (or Cowork) authoring against accepted claim IDs via `synth workspace`.
-- Not an endorsement of any reviewer model. v0.9.0 does not ship a `trusted_baseline` reviewer profile by default; calibration receipts are evidence, not endorsement. The existing v0.6.0 calibration receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path. See the [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+- Not operator-aloneness-proven on fresh packs. v0.10.0 closes the v0.1 gate failure conditions; v0.2 of the operator-aloneness gate fires against this npm release in a separate session and may surface further repairs. v0.10.0 is the prerequisite for v0.2, not the proof.
+- Not battle-tested by external users beyond the dogfood arcs. Six dogfood experiments closed — one self-referential, five external-domain (ComfyUI, XRPL, Godot, reviewer-calibration, deterministic-reviewer) — but external operator usage at scale remains future work.
+- Not a full-pack synthesis writer. v0.10.0 inherits v0.9's section-scope (`synth section`) and partial-pack-scope (`synth pack --partial`) prose surfaces, each with explicit pack-readiness disclosure. Full-pack synthesis still requires a `synthesis_ready` pack and human (or Cowork) authoring against accepted claim IDs via `synth workspace`.
+- Not an endorsement of any reviewer model. v0.10.0 does not ship a `trusted_baseline` reviewer profile by default; calibration receipts are evidence, not endorsement. The existing v0.6.0 calibration receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path. See the [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 - Not free of historical artifacts in frozen packs. Pre-v0.4 frozen packs carry `research_os_version: '0.1.0'` due to a pre-v0.4 hardcoded scaffold constant; the fix landed in v0.4.0 but earlier frozen packs are immutable under Law 15 (see [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
-- Not provenance-attested on npm. Sigstore provenance attestation is deferred to a future release; verify v0.9.0 npm packages via package-shasum and the GitHub release commit.
-- Not a cloud-baseline win. The product proof at `local-first-vs-cloud-research/` from v0.7.x identified cloud's advantages on readability and operator burden; v0.9.0 does not claim those have been overcome.
+- Not provenance-attested on npm. Sigstore provenance attestation is deferred to a future release; verify v0.10.0 npm packages via package-shasum and the GitHub release commit.
+- Not a cloud-baseline win. The product proof at `local-first-vs-cloud-research/` from v0.7.x identified cloud's advantages on readability and operator burden; v0.10.0 does not claim those have been overcome.
 
 ### Known limitations
 
-v0.9.0 ships with three operator-visible known limitations carried over from prior releases. Each is documented in the [handbook known-limitations page](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) and in [CHANGELOG.md](CHANGELOG.md). None block release; all have a defined recovery or mitigation path.
+v0.10.0 ships with three operator-visible known limitations carried over from prior releases. Each is documented in the [handbook known-limitations page](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) and in [CHANGELOG.md](CHANGELOG.md). None block release; all have a defined recovery or mitigation path.
 
 - **B-E-001 — pre-v0.4 frozen-pack version stamp is a historical artifact.** Frozen packs published under v0.3.3 through v0.6.0 carry `research_os_version: "0.1.0"` in `pack.manifest.json` and `pack/research.yaml` due to a pre-v0.4 hardcoded scaffold constant. The fix landed in v0.4.0 (scaffold now imports the live `RESEARCH_OS_VERSION`); earlier frozen packs are immutable under Law 15. Audit JSONs inside affected packs already carry their contemporary versions.
-- **B-E-004 — npm provenance attestation is deferred to a future release.** The v0.9.0 npm tarball verifies via package-shasum only. Migrating the publish flow to a CI workflow with sigstore OIDC conflicts with the translation-before-publish discipline (TranslateGemma 12B runs locally); the migration is planned for a future release. Verify v0.9.0 npm packages via package-shasum and the GitHub release commit.
-- **B-A-003 — indexer schema-version migration is documented, not enforced.** v0.9.0 ships a write-side `SCHEMA_VERSION` integer but no read-side migration runner. On a documented `SCHEMA_VERSION` bump, delete `.research-os/index.sqlite` and rerun `research-os index build --all`. The pack itself is unaffected — the indexer is an acceleration layer over evidence + claims (Law 8); rebuilding is idempotent.
+- **B-E-004 — npm provenance attestation is deferred to a future release.** The v0.10.0 npm tarball verifies via package-shasum only. Migrating the publish flow to a CI workflow with sigstore OIDC conflicts with the translation-before-publish discipline (TranslateGemma 12B runs locally); the migration is planned for a future release. Verify v0.10.0 npm packages via package-shasum and the GitHub release commit.
+- **B-A-003 — indexer schema-version migration is documented, not enforced.** v0.10.0 ships a write-side `SCHEMA_VERSION` integer but no read-side migration runner. On a documented `SCHEMA_VERSION` bump, delete `.research-os/index.sqlite` and rerun `research-os index build --all`. The pack itself is unaffected — the indexer is an acceleration layer over evidence + claims (Law 8); rebuilding is idempotent.
 
-**No `trusted_baseline` reviewer profile is admitted at v0.9.0.** This is an intentional trust posture, not a gap: calibration receipts in the repo (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) record the evidence. Trust is earned through repeated seeded-failure recall, not assumed. These receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path.
+**No `trusted_baseline` reviewer profile is admitted at v0.10.0.** This is an intentional trust posture, not a gap: calibration receipts in the repo (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) record the evidence. Trust is earned through repeated seeded-failure recall, not assumed. These receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path.
 
 ## Roadmap to v1.0
 
