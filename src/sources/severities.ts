@@ -142,8 +142,15 @@ export function resolveSeverityThresholds(
   };
 }
 
-/** Marker substrings (lowercased, normalized). Each entry is one signal. */
-const BOT_CHECK_MARKERS: readonly { key: string; needle: string }[] = [
+/**
+ * Marker substrings (lowercased, normalized). Each entry is one signal.
+ *
+ * v0.10 Slice 4 — exported so gather-layer light detection (Signal A only)
+ * can mirror R-003's marker vocabulary without re-implementing the list.
+ * The audit-layer R-003 detection in detectSeverities() remains the
+ * authoritative multi-signal path; gather-layer is informational.
+ */
+export const BOT_CHECK_MARKERS: readonly { key: string; needle: string }[] = [
   { key: 'captcha', needle: 'captcha' },
   { key: 'incapsula', needle: 'incapsula' },
   { key: 'cloudflare_challenge', needle: 'cloudflare challenge' },

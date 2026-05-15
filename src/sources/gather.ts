@@ -18,11 +18,86 @@ import {
   writeSourceCard,
 } from './cards.js';
 import { readOverrides } from './source-card-overrides.js';
-import type { FetchReceipt } from './schema.js';
+import { BOT_CHECK_MARKERS, DEFAULT_SEVERITY_THRESHOLDS } from './severities.js';
+import type { FetchReceipt, GatherOutcomeSchema } from './schema.js';
+import type { z } from 'zod';
 import type { GatherOptions, GatherSummary, Extractor } from './types.js';
+
+type GatherOutcome = z.infer<typeof GatherOutcomeSchema>;
 
 function urlHash12(url: string): string {
   return createHash('sha256').update(url).digest('hex').slice(0, 12);
+}
+
+/**
+ * v0.10 Slice 4 — gather-layer light bot-check detection.
+ *
+ * Mirrors R-003 Signal A (marker substring + body word count below
+ * `maxBodyWordsWithMarker`). This is the "duplicate light detection at fetch
+ * time" branch of the integration decision: the operator sees
+ * `bot_check_detected` immediately in the gather progress + fetch-log.jsonl
+ * gather_outcome, before extraction has a chance to confabulate a rich card
+ * from the fragment. Audit-layer R-003 in source-card-audit stays unchanged
+ * and authoritative for full multi-signal detection + per-pack thresholds.
+ *
+ * The threshold defaults to DEFAULT_SEVERITY_THRESHOLDS.botCheck — the same
+ * value R-003 uses unless overridden. Drift risk is bounded: both layers fire
+ * on the canonical Incapsula case; if a pack raises its audit threshold and
+ * R-003 stops firing, the gather-layer detection still surfaces an
+ * informational flag that the operator can ignore via the existing
+ * source-card override ledger (clear_severities[]).
+ */
+function rawBodyProseWordCount(rawText: string): number {
+  const noScripts = rawText
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ');
+  const normalized = noScripts.replace(/\s+/g, ' ').trim();
+  if (normalized.length === 0) return 0;
+  return normalized.split(' ').length;
+}
+
+interface BotCheckGatherSignal {
+  detected: boolean;
+  reasons: string[];
+}
+
+function detectBotCheckAtGather(rawText: string | null): BotCheckGatherSignal {
+  if (rawText === null || rawText.length === 0) {
+    return { detected: false, reasons: [] };
+  }
+  const lower = rawText.toLowerCase();
+  const markerHits: string[] = [];
+  for (const m of BOT_CHECK_MARKERS) {
+    if (lower.includes(m.needle)) markerHits.push(`marker:${m.key}`);
+  }
+  if (markerHits.length === 0) return { detected: false, reasons: [] };
+  const proseWords = rawBodyProseWordCount(rawText);
+  const ceiling = DEFAULT_SEVERITY_THRESHOLDS.botCheck.maxBodyWordsWithMarker;
+  if (proseWords > ceiling) return { detected: false, reasons: [] };
+  return {
+    detected: true,
+    reasons: [...markerHits, `body_words=${proseWords}`],
+  };
+}
+
+/**
+ * v0.10 Slice 4 — derive the operator-facing rollup status from the receipt
+ * + rawText + bot-check signal. Precedence:
+ *   fetch_failed > bot_check_detected > extraction_failed > extraction_skipped > ok
+ */
+function deriveGatherOutcome(
+  receipt: FetchReceipt,
+  rawText: string | null,
+  botCheck: BotCheckGatherSignal,
+): GatherOutcome {
+  if (receipt.fetch_outcome !== 'ok') return 'fetch_failed';
+  if (botCheck.detected) return 'bot_check_detected';
+  if (receipt.extraction_outcome === 'failed') return 'extraction_failed';
+  if (rawText === null || receipt.extraction_outcome === 'skipped') {
+    return 'extraction_skipped';
+  }
+  return 'ok';
 }
 
 function buildSyntheticFailureReceipt(
@@ -52,6 +127,7 @@ function buildSyntheticFailureReceipt(
     extraction_outcome: 'skipped',
     extraction_extractor: null,
     extraction_error: null,
+    gather_outcome: 'fetch_failed',
   };
 }
 
@@ -135,6 +211,13 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
 
       let receiptToWrite = receipt;
 
+      // v0.10 Slice 4 — light bot-check detection at gather time. Operates on
+      // the raw fetched body BEFORE extraction so the operator-facing
+      // gather_outcome surfaces bot-check signatures at the earliest point.
+      // Detection is informational; the extraction pipeline still runs and
+      // R-003 at the audit layer remains the authoritative quarantine.
+      const botCheck = detectBotCheckAtGather(rawText);
+
       if (receipt.fetch_outcome === 'ok' && rawText !== null) {
         delta.fetchedOk = 1;
         const result = await extractor.extract({
@@ -165,21 +248,56 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
             extraction_extractor: extractor.name,
             extraction_error: result.error,
           };
-          // C2-005 failure line for the extraction-failed branch (fetch ok,
-          // extractor said no). receipt is still appended below, so we say
-          // "receipt recorded" not "no record".
-          emitProgress(`  ! Failed (extraction: ${result.error}) — receipt recorded for ${url}`);
         }
       } else {
         delta.fetchedFailed = 1;
-        // C2-005 failure line for the fetch-not-ok branch (HTTP 404/503,
-        // network_error, etc — fetchOnce returned a receipt rather than
-        // throwing). status may be null for network errors; surface
-        // fetch_outcome plus status when present so the operator sees the
-        // distinction (status_text is on the receipt as well but
-        // fetch_outcome is the canonical category).
-        const code = receipt.status !== null ? ` HTTP ${receipt.status}` : '';
-        emitProgress(`  ! Failed (${receipt.fetch_outcome}${code}) — receipt recorded for ${url}`);
+      }
+
+      // v0.10 Slice 4 — compute the operator-facing rollup status AFTER
+      // receiptToWrite is finalized; attach it to the persisted receipt and
+      // emit a single honest progress line keyed off the status. Replaces
+      // the conflated `"Failed (ok HTTP 200)"` phrasing observed in
+      // operator-aloneness DST gate v0.1 (2026-05-15).
+      const gatherOutcome = deriveGatherOutcome(receiptToWrite, rawText, botCheck);
+      receiptToWrite = { ...receiptToWrite, gather_outcome: gatherOutcome };
+
+      switch (gatherOutcome) {
+        case 'ok':
+          // Successful end-to-end. The "Gathering N/M" line already announced
+          // the URL; no second line needed.
+          break;
+        case 'fetch_failed': {
+          const code = receiptToWrite.status !== null ? ` HTTP ${receiptToWrite.status}` : '';
+          emitProgress(
+            `  ! fetch_failed (${receiptToWrite.fetch_outcome}${code}) — receipt recorded for ${url}`,
+          );
+          break;
+        }
+        case 'extraction_skipped': {
+          // Fetch succeeded (HTTP 200) but the extraction layer is not
+          // applicable for this content type (PDF, image, other binary).
+          // Honest phrasing — this is NOT a failure, it's an unhandled
+          // content path. The receipt is recorded for audit.
+          const ct = receiptToWrite.content_type ?? 'unknown';
+          emitProgress(
+            `  · extraction_skipped (content_type=${ct}; extractor not applicable) — receipt recorded for ${url}`,
+          );
+          break;
+        }
+        case 'extraction_failed': {
+          const err = receiptToWrite.extraction_error ?? 'unknown extraction error';
+          emitProgress(
+            `  ! extraction_failed (${err}) — receipt recorded for ${url}`,
+          );
+          break;
+        }
+        case 'bot_check_detected': {
+          const detail = botCheck.reasons.join(', ');
+          emitProgress(
+            `  ! bot_check_detected (${detail}) — receipt recorded for ${url}`,
+          );
+          break;
+        }
       }
 
       await appendFetchLog(packPath, receiptToWrite);
@@ -194,10 +312,12 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
       // C2-005 / C2-006: name the failing URL on stderr inline so the operator
       // sees WHICH URL just failed without grep'ing fetch-log.jsonl after the
       // run. Best-effort error class extraction (constructor name) so the
-      // line tells the operator what kind of failure it was.
+      // line tells the operator what kind of failure it was. v0.10 Slice 4 —
+      // surface the rollup status name (`fetch_failed`) so the progress line
+      // vocabulary matches gather_outcome on the persisted receipt.
       const errClass = err instanceof Error ? err.constructor.name : 'Error';
       const errMsg = err instanceof Error ? err.message : String(err);
-      emitProgress(`  ! Failed (${errClass}: ${errMsg}) — receipt recorded for ${url}`);
+      emitProgress(`  ! fetch_failed (${errClass}: ${errMsg}) — receipt recorded for ${url}`);
       // Roll back: deltas were never committed. The card may have been
       // pushed to summary.sourceIds before a downstream throw — pop it back
       // off to keep the array consistent with cardsWritten.

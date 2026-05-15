@@ -13,6 +13,31 @@ export const RelevanceSchema = z.enum(['high', 'medium', 'low', 'unknown']);
 
 export const ExtractorNameSchema = z.enum(['heuristic', 'ollama-intern']);
 
+/**
+ * v0.10 Slice 4 (R-004) — operator-facing rollup status for the gather pipeline.
+ *
+ * Replaces the conflated `"Failed (ok HTTP 200)"` progress phrasing observed
+ * in operator-aloneness DST gate v0.1 (2026-05-15). The 5 values distinguish
+ * outcomes that the legacy `fetch_outcome × extraction_outcome` cross product
+ * could only express ambiguously:
+ *
+ *   - ok                 : fetched + text extracted successfully
+ *   - fetch_failed       : HTTP error, timeout, network failure, SSRF refusal
+ *   - extraction_skipped : fetched, extraction layer not applicable (PDF, binary)
+ *   - extraction_failed  : fetched, extractor errored mid-extraction
+ *   - bot_check_detected : fetched, R-003 marker+body-words signal fired at gather
+ *
+ * Precedence (highest to lowest):
+ *   fetch_failed > bot_check_detected > extraction_failed > extraction_skipped > ok
+ */
+export const GatherOutcomeSchema = z.enum([
+  'ok',
+  'fetch_failed',
+  'extraction_skipped',
+  'extraction_failed',
+  'bot_check_detected',
+]);
+
 export const FetchReceiptSchema = z.object({
   receipt_id: z.string().regex(/^rcpt_[a-z0-9]+_\d+$/),
   source_id: z.string().regex(/^src_[a-f0-9]{12}$/),
@@ -39,6 +64,12 @@ export const FetchReceiptSchema = z.object({
    * to identify CDN fast-challenge bot-check responses.
    */
   fetch_duration_ms: z.number().int().nonnegative().nullable().optional(),
+  /**
+   * v0.10 Slice 4 — operator-facing 5-value rollup status. Optional for
+   * back-compat with pre-v0.10 receipts; gather() always populates it on
+   * new fetches. See GatherOutcomeSchema for the value semantics.
+   */
+  gather_outcome: GatherOutcomeSchema.optional(),
 });
 
 export const SourceCardSchema = z.object({

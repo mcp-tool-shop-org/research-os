@@ -150,9 +150,15 @@ describe('gather() progress emission (C2-005 / C2-006)', () => {
     expect(cap.lines.some((l) => l.startsWith('Gathering 2/2 ') && l.includes('/missing'))).toBe(true);
 
     // 404 surfaces inline on stderr with the URL named (C2-005 failure branch).
+    // v0.10 Slice 4 (R-004) — the operator-facing status name is `fetch_failed`,
+    // not the conflated `Failed` token from v0.9. See gather_outcome on the
+    // persisted receipt.
     expect(
       cap.lines.some(
-        (l) => l.includes('! Failed') && l.includes('/missing') && l.includes('receipt recorded'),
+        (l) =>
+          l.includes('! fetch_failed') &&
+          l.includes('/missing') &&
+          l.includes('receipt recorded'),
       ),
     ).toBe(true);
 
