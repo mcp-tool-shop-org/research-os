@@ -18,11 +18,23 @@
 //   2. reviewer_needs_human_review (review records flag operator escalation)
 //   3. prose_error_no_answer_cluster (gate passed; synthesis failed with this code)
 //   4. prose_error_cross_section_missing (gate passed; partial-pack synthesis failed)
-//   5. accepted_claim_floor (gate-blocked on this specific check)
-//   6. min_independent_publishers (gate-blocked on diversity)
-//   7. primary_sources_required (gate-blocked on primary count)
-//   8. source_card_classification_gap (source cards have missing/unknown classifications)
-//   9. high_frame_excluded_rate (claims extracted but mostly frame-excluded)
+//   5. gate.blocking_reasons[0]-derived shape — R-002 routing (the gate-blocking
+//      signal wins over downstream signals; see comment below)
+//   6. accepted_claim_floor (legacy failures[].check classification — fallback)
+//   7. min_independent_publishers (legacy failures[].check classification)
+//   8. primary_sources_required (legacy failures[].check classification)
+//   9. source_card_classification_gap (non-gate downstream signal)
+//  10. high_frame_excluded_rate (non-gate downstream signal)
+//
+// R-002 (operator-aloneness DST gate v0.1, 2026-05-15): downstream signals
+// like source_card_classification_gap could "win" the classification even
+// when the gate was actually blocked on a different reason (e.g., accepted-
+// claim-floor). That mis-routed the recovery advisor's recommendation to an
+// action that did not address the blocking reason. The fix is to read the
+// gate.json's `blocking_reasons[]` (or handoff section's `blocking_reasons[]`)
+// FIRST and map the family/check prefix to a failure_shape. Only when no
+// blocking reason maps to a known shape do we fall back to the legacy
+// failures[].check lookup, then the non-gate downstream signals.
 //
 // The priority order is what makes the classification deterministic in the
 // presence of multiple co-occurring failures (e.g., a section both has zero
@@ -132,6 +144,61 @@ function gateFailureChecks(gate: Record<string, unknown> | null): Set<string> {
     }
   }
   return checks;
+}
+
+function gateBlockingReasons(gate: Record<string, unknown> | null): string[] {
+  if (!gate) return [];
+  const raw = (gate as Record<string, unknown>).blocking_reasons;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((r): r is string => typeof r === 'string');
+}
+
+/**
+ * Map a single blocking_reason string to a failure_shape.
+ *
+ * Reasons are produced by `gates/run.ts:deriveVerdict()` in the shape
+ * `"${family}.${check}: ${detail}"` (see `gates/run.ts:225`). The cowork
+ * handoff carries the same strings on each section's `blocking_reasons[]`.
+ *
+ * This map is intentionally narrow: we only return a shape when the family
+ * (and, where the family is multi-check, the check) corresponds to one of
+ * the gate-blocking failure shapes in the closed enum. A bare `family`
+ * (without a check) or a family-only prefix is accepted too — operators
+ * have been observed writing them that way in synthetic / hand-rolled
+ * fixtures, and the routing intent is the same.
+ *
+ * Returns null when the reason doesn't match a known mapping; in that case
+ * the diagnose layer falls through to the legacy failures[].check lookup.
+ */
+function failureShapeFromBlockingReason(reason: string): FailureShape | null {
+  // Strip the `: detail` tail (if present) to get the `family.check` head.
+  const head = reason.split(':')[0]?.trim() ?? '';
+  if (head.length === 0) return null;
+  const dotIdx = head.indexOf('.');
+  const family = dotIdx === -1 ? head : head.slice(0, dotIdx);
+  const check = dotIdx === -1 ? '' : head.slice(dotIdx + 1);
+
+  switch (family) {
+    case 'accepted_claim_floor':
+      // family-only OR any sub-check on the accepted_claim_floor family.
+      // Covers historical `min_accepted_claims` and current
+      // `min_accepted_claims_and_sources`.
+      return 'accepted_claim_floor';
+    case 'source_floor':
+      if (check.startsWith('independent_publishers')) return 'min_independent_publishers';
+      if (check.startsWith('primary_sources_required')) return 'primary_sources_required';
+      return null;
+    default:
+      return null;
+  }
+}
+
+function blockingReasonShape(reasons: string[]): FailureShape | null {
+  for (const reason of reasons) {
+    const shape = failureShapeFromBlockingReason(reason);
+    if (shape !== null) return shape;
+  }
+  return null;
 }
 
 function classificationGap(cards: SourceCard[]): boolean {
@@ -309,7 +376,54 @@ export async function diagnoseSection(
     );
   }
 
-  // 5. ACCEPTED_CLAIM_FLOOR.
+  // 5. BLOCKING_REASONS routing (R-002). When the gate is blocked, the
+  //    blocking_reasons[] list is the authoritative source for what is
+  //    actually blocking synthesis. Map the first reason whose family
+  //    corresponds to a known gate-blocking failure_shape — that shape wins
+  //    over downstream signals (source_card_classification_gap,
+  //    high_frame_excluded_rate). Both the gate.json's blocking_reasons[]
+  //    and the cowork handoff section's blocking_reasons[] are consulted;
+  //    they're set in lockstep by the gate run + cowork handoff, but legacy
+  //    fixtures (and some test fixtures) populate only one or the other,
+  //    so we accept either as authoritative.
+  const blockingReasonStrings = [
+    ...gateBlockingReasons(gate),
+    ...(handoffSection?.blocking_reasons ?? []),
+  ];
+  const blockingShape = blockingReasonShape(blockingReasonStrings);
+  if (blockingShape === 'accepted_claim_floor') {
+    return makeDiagnosis(
+      'accepted_claim_floor',
+      true,
+      false, // accepted_claim_floor is UNWAIVEABLE — pack law
+      'gate',
+      `Gate is blocked on accepted_claim_floor: ${evidenceState.accepted_claims} accepted claim(s); minimum is 3 from 2 sources. Waivers cannot create evidence.`,
+    );
+  }
+  if (blockingShape === 'min_independent_publishers') {
+    return makeDiagnosis(
+      'min_independent_publishers',
+      true,
+      true, // waiveable with compensating control (source_floor waiver)
+      'gate',
+      `Gate is blocked on independent_publishers: ${evidenceState.distinct_publishers} distinct publisher(s) across ${evidenceState.sources} source(s).`,
+    );
+  }
+  if (blockingShape === 'primary_sources_required') {
+    return makeDiagnosis(
+      'primary_sources_required',
+      true,
+      true, // waiveable with compensating control
+      'gate',
+      `Gate is blocked on primary_sources_required: ${evidenceState.distinct_primary_publishers} distinct primary publisher(s).`,
+    );
+  }
+
+  // 6. LEGACY failures[].check classification. Surviving fallback for gate
+  //    fixtures whose blocking_reasons[] is empty (e.g., the original Slice 3
+  //    test fixtures, which emit failures[] with the older synthetic check
+  //    names). We preserve this path so existing fixtures keep classifying
+  //    correctly without re-authoring them.
   const failedChecks = gateFailureChecks(gate);
   if (failedChecks.has('min_accepted_claims')) {
     return makeDiagnosis(
@@ -321,7 +435,6 @@ export async function diagnoseSection(
     );
   }
 
-  // 6. MIN_INDEPENDENT_PUBLISHERS.
   if (failedChecks.has('independent_publishers')) {
     return makeDiagnosis(
       'min_independent_publishers',
@@ -332,7 +445,6 @@ export async function diagnoseSection(
     );
   }
 
-  // 7. PRIMARY_SOURCES_REQUIRED.
   if (failedChecks.has('primary_sources_required')) {
     return makeDiagnosis(
       'primary_sources_required',
@@ -343,10 +455,11 @@ export async function diagnoseSection(
     );
   }
 
-  // 8. SOURCE_CARD_CLASSIFICATION_GAP: any card has missing/unknown publisher
+  // 9. SOURCE_CARD_CLASSIFICATION_GAP: any card has missing/unknown publisher
   //    or unknown source_type. This often co-occurs with min_independent_publishers
-  //    but we only flag it when the gate didn't already classify a different
-  //    failure shape (priority handled above).
+  //    or accepted_claim_floor but we only flag it when the gate didn't already
+  //    classify a different failure shape (priority handled above — blocking
+  //    reasons routing in step 5 explicitly beats this downstream signal).
   if (classificationGap(cards)) {
     return makeDiagnosis(
       'source_card_classification_gap',
@@ -357,7 +470,7 @@ export async function diagnoseSection(
     );
   }
 
-  // 9. HIGH_FRAME_EXCLUDED_RATE.
+  // 10. HIGH_FRAME_EXCLUDED_RATE.
   if (
     evidenceState.extracted_claims > 0 &&
     evidenceState.frame_excluded_claims / evidenceState.extracted_claims >=
