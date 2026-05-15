@@ -138,10 +138,10 @@ describe('validateSourceCardOverride — no-op override rejection', () => {
       operator: 'op',
       created_at: '2026-05-10T10:00:00.000Z',
       pack_version: '0.4.0',
-      // neither new_source_type nor new_publisher present
+      // neither new_source_type, new_publisher, nor clear_severities present
     };
     expect(() => validateSourceCardOverride(bad)).toThrow(
-      /at least one of new_source_type or new_publisher/i,
+      /at least one of new_source_type, new_publisher, or clear_severities/i,
     );
   });
 
@@ -384,7 +384,10 @@ describe('readOverrides — malformed JSONL behavior', () => {
     );
 
     await expect(readOverrides(tmpDir)).rejects.toThrow(/line 2/i);
-    await expect(readOverrides(tmpDir)).rejects.toThrow(/new_source_type or new_publisher/i);
+    // v0.10 Slice 3 — refine message expanded to mention clear_severities.
+    await expect(readOverrides(tmpDir)).rejects.toThrow(
+      /new_source_type, new_publisher, or clear_severities/i,
+    );
   });
 });
 

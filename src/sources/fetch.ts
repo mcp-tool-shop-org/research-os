@@ -210,6 +210,13 @@ export async function fetchOnce(
     controller.abort();
   }, timeoutMs);
 
+  // v0.10 Slice 3 — capture wall-clock fetch duration for R-003's
+  // fast-response signal. Duration spans the fetchImpl call only;
+  // body streaming is excluded so the value reflects the CDN/server
+  // response time, not the size of the payload. Only the success path
+  // populates the field on the receipt; failures leave it absent.
+  const fetchStart = Date.now();
+  let fetchDurationMs: number;
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -217,6 +224,7 @@ export async function fetchOnce(
       headers: { 'User-Agent': `research-os/${RESEARCH_OS_VERSION}` },
       signal: controller.signal,
     });
+    fetchDurationMs = Date.now() - fetchStart;
   } catch (err) {
     clearTimeout(timeoutHandle);
     const baseMsg = err instanceof Error ? err.message : String(err);
@@ -397,6 +405,7 @@ export async function fetchOnce(
     raw_text_path: rawTextRelPath,
     fetch_outcome: 'ok',
     fetch_error: null,
+    fetch_duration_ms: fetchDurationMs,
   };
 
   return { receipt, rawText, rawTextAbsPath };

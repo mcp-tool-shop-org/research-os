@@ -234,12 +234,15 @@ describe('runSourceCardAudit — JSON report shape', () => {
     expect(typeof report.audited_at).toBe('string');
     expect(typeof report.research_os_version).toBe('string');
 
-    // Totals keys — exhaustive
+    // Totals keys — exhaustive. v0.10 Slice 3 adds bot-check and
+    // extraction-suspect severity counters.
     expect(Object.keys(report.totals).sort()).toEqual(
       [
+        'bot_check_or_captcha_detected',
         'cards_scanned',
         'cards_with_overrides',
         'classifier_flagged_other',
+        'extraction_suspect_word_count_mismatch',
         'github_ui_html',
         'no_action',
         'publisher_missing',

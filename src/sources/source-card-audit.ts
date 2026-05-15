@@ -1,9 +1,17 @@
 /**
- * Source-card audit — v0.4 Component D.
+ * Source-card audit — v0.4 Component D, v0.10 Slice 3 extension.
  *
  * runSourceCardAudit: reads all source cards + override ledger, re-runs the
- * classifier per card, computes effective view, assigns one of 7 advisor-locked
- * finding kinds, writes audits/source-card-audit.{json,md}, and returns the report.
+ * classifier per card, computes effective view, assigns one of N
+ * advisor-locked finding kinds, writes audits/source-card-audit.{json,md},
+ * and returns the report.
+ *
+ * v0.10 Slice 3 (R-003 + R-005): adds severity-detection pass. The audit
+ * reads fetch-log.jsonl for each card's latest receipt + the body raw text
+ * (when text-like), runs detectSeverities, and elevates the finding `kind`
+ * above the existing classifier-precedence chain when severities fire.
+ * Operator overrides via clear_severities[] clear the severity from the
+ * effective finding without modifying source-card files.
  *
  * applySourceCardOverrides: validates a proposed-override JSON array in full,
  * then appends all entries to the ledger. Refuses frozen packs. Refuses partial
@@ -14,21 +22,36 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as yamlParse } from 'yaml';
 
 import { ResearchOSError } from '../errors.js';
-import { SourceCardSchema, type SourceCard } from './schema.js';
-import { readOverrides, appendOverride } from './source-card-overrides.js';
+import { ResearchYamlSchema } from '../intake/schema.js';
+import { FetchReceiptSchema, SourceCardSchema, type FetchReceipt, type SourceCard } from './schema.js';
+import { appendOverride, readOverrides } from './source-card-overrides.js';
 import {
   validateSourceCardOverride,
   type SourceCardOverride,
 } from './source-card-overrides-schema.js';
-import { getEffectiveSourceType, getEffectivePublisher, type SourceType } from './effective-card.js';
+import {
+  getEffectiveSourceType,
+  getEffectivePublisher,
+  getEffectiveSeverities,
+  type SourceType,
+} from './effective-card.js';
 import { classifySourceType } from './source-type-classifier.js';
+import {
+  detectSeverities,
+  resolveSeverityThresholds,
+  type SeverityFinding,
+  type SeverityThresholds,
+} from './severities.js';
 import { RESEARCH_OS_VERSION } from '../index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type FindingKind =
+  | 'bot_check_or_captcha_detected'
+  | 'extraction_suspect_word_count_mismatch'
   | 'github_ui_html'
   | 'classifier_flagged'
   | 'source_type_mismatch'
@@ -49,6 +72,8 @@ export interface FindingRow {
   classifier_rule_hint: string;
   classifier_precedence_level: number;
   override_in_effect: boolean;
+  /** v0.10 Slice 3 — effective (post-override) severities for this card. */
+  severities?: SeverityFinding[];
 }
 
 export interface AuditTotals {
@@ -58,6 +83,10 @@ export interface AuditTotals {
   publisher_missing: number;
   github_ui_html: number;
   classifier_flagged_other: number;
+  /** v0.10 Slice 3 — count of cards whose effective kind is bot_check_or_captcha_detected. */
+  bot_check_or_captcha_detected: number;
+  /** v0.10 Slice 3 — count of cards whose effective kind is extraction_suspect_word_count_mismatch. */
+  extraction_suspect_word_count_mismatch: number;
   no_action: number;
 }
 
@@ -92,10 +121,66 @@ function hasPublisherOverride(card: SourceCard, overrides: SourceCardOverride[])
   return overrides.some((o) => o.source_id === card.source_id && o.new_publisher !== undefined);
 }
 
+function hasSeverityClearOverride(card: SourceCard, overrides: SourceCardOverride[]): boolean {
+  return overrides.some(
+    (o) =>
+      o.source_id === card.source_id &&
+      Array.isArray(o.clear_severities) &&
+      o.clear_severities.length > 0,
+  );
+}
+
 /**
- * Assign exactly one finding kind per the advisor-locked precedence order:
- * github_ui_html → classifier_flagged → source_type_mismatch → publisher_mismatch
- * → publisher_missing → override_applied → no_action.
+ * Load fetch-log.jsonl receipts indexed by source_id (latest fetched_at wins).
+ * v0.10 Slice 3 needs this to wire raw-text body to detectSeverities.
+ */
+async function loadLatestReceipts(packPath: string): Promise<Map<string, FetchReceipt>> {
+  const path = join(packPath, 'evidence', 'fetch-log.jsonl');
+  const map = new Map<string, FetchReceipt>();
+  if (!existsSync(path)) return map;
+  const text = await readFile(path, 'utf8');
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const r = FetchReceiptSchema.parse(JSON.parse(line));
+      const prev = map.get(r.source_id);
+      if (!prev || r.fetched_at > prev.fetched_at) map.set(r.source_id, r);
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  return map;
+}
+
+async function loadRawText(packPath: string, receipt: FetchReceipt | null): Promise<string | null> {
+  if (!receipt || !receipt.raw_text_path) return null;
+  const abs = join(packPath, receipt.raw_text_path);
+  if (!existsSync(abs)) return null;
+  try {
+    return await readFile(abs, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+async function loadSeverityThresholds(packPath: string): Promise<SeverityThresholds> {
+  const yamlPath = join(packPath, 'research.yaml');
+  if (!existsSync(yamlPath)) return resolveSeverityThresholds(null);
+  try {
+    const parsed = ResearchYamlSchema.parse(yamlParse(await readFile(yamlPath, 'utf8')));
+    return resolveSeverityThresholds(parsed.audit?.severity_thresholds);
+  } catch {
+    return resolveSeverityThresholds(null);
+  }
+}
+
+/**
+ * Assign exactly one finding kind per the advisor-locked precedence order.
+ *
+ * v0.10 Slice 3 precedence (highest first):
+ *   bot_check_or_captcha_detected → extraction_suspect_word_count_mismatch
+ *   → github_ui_html → classifier_flagged → source_type_mismatch
+ *   → publisher_mismatch → publisher_missing → override_applied → no_action
  *
  * source_type_mismatch guards against rule_hint === 'no-rule-match' to avoid
  * false positives on extractor-typed cards (e.g. arxiv.org typed 'primary' by
@@ -104,10 +189,20 @@ function hasPublisherOverride(card: SourceCard, overrides: SourceCardOverride[])
 function determineFinding(
   card: SourceCard,
   overrides: SourceCardOverride[],
+  effectiveSeverities: SeverityFinding[],
 ): FindingKind {
+  // v0.10 Slice 3 — severity findings take precedence (HARD FAIL first).
+  if (effectiveSeverities.some((f) => f.severity === 'bot_check_or_captcha_detected')) {
+    return 'bot_check_or_captcha_detected';
+  }
+  if (effectiveSeverities.some((f) => f.severity === 'extraction_suspect_word_count_mismatch')) {
+    return 'extraction_suspect_word_count_mismatch';
+  }
+
   const classification = classifySourceType({ url: card.url });
   const stOverride = hasSourceTypeOverride(card, overrides);
   const pubOverride = hasPublisherOverride(card, overrides);
+  const sevOverride = hasSeverityClearOverride(card, overrides);
 
   if (classification.rule_hint === 'flagged:github-ui-html') return 'github_ui_html';
 
@@ -125,7 +220,7 @@ function determineFinding(
 
   if (card.publisher === null && !pubOverride) return 'publisher_missing';
 
-  if (stOverride || pubOverride) return 'override_applied';
+  if (stOverride || pubOverride || sevOverride) return 'override_applied';
 
   return 'no_action';
 }
@@ -147,6 +242,8 @@ function buildMarkdown(report: AuditReport): string {
     `|--------|-------|`,
     `| Cards scanned | ${t.cards_scanned} |`,
     `| Cards with overrides | ${t.cards_with_overrides} |`,
+    `| Bot-check / CAPTCHA detected | ${t.bot_check_or_captcha_detected} |`,
+    `| Extraction word-count mismatch | ${t.extraction_suspect_word_count_mismatch} |`,
     `| Source-type mismatches | ${t.source_type_mismatches} |`,
     `| Publisher missing | ${t.publisher_missing} |`,
     `| GitHub UI HTML candidates | ${t.github_ui_html} |`,
@@ -159,13 +256,16 @@ function buildMarkdown(report: AuditReport): string {
       ``,
       `## Findings`,
       ``,
-      `| source_id | URL | Kind | Raw type | Classifier type | Effective type | Override? |`,
-      `|-----------|-----|------|----------|-----------------|----------------|-----------|`,
+      `| source_id | URL | Kind | Raw type | Classifier type | Effective type | Override? | Severity reasons |`,
+      `|-----------|-----|------|----------|-----------------|----------------|-----------|------------------|`,
     );
     for (const f of report.findings) {
       const urlShort = f.url.length > 60 ? f.url.slice(0, 57) + '...' : f.url;
+      const sevSummary = (f.severities ?? [])
+        .map((s) => `${s.severity}: ${s.reasons.join(', ')}`)
+        .join(' | ');
       lines.push(
-        `| ${f.source_id} | ${urlShort} | ${f.kind} | ${f.raw_source_type} | ${f.classifier_source_type} | ${f.effective_source_type} | ${f.override_in_effect ? 'yes' : 'no'} |`,
+        `| ${f.source_id} | ${urlShort} | ${f.kind} | ${f.raw_source_type} | ${f.classifier_source_type} | ${f.effective_source_type} | ${f.override_in_effect ? 'yes' : 'no'} | ${sevSummary || '—'} |`,
       );
     }
   }
@@ -178,8 +278,9 @@ function buildMarkdown(report: AuditReport): string {
 /**
  * Run a read-only source-card audit on a pack.
  *
- * Reads all source cards from evidence/source-cards/, loads the override ledger,
- * re-runs the classifier per card, assigns a finding kind, and writes
+ * Reads all source cards from evidence/source-cards/, loads the override
+ * ledger, re-runs the classifier per card, runs severity detection
+ * (v0.10 Slice 3), assigns a finding kind, and writes
  * audits/source-card-audit.{json,md}.
  *
  * Safe on frozen packs — does not touch evidence/ or the override ledger.
@@ -206,6 +307,8 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
   }
 
   const overrides = await readOverrides(packPath);
+  const receipts = await loadLatestReceipts(packPath);
+  const thresholds = await loadSeverityThresholds(packPath);
 
   const totals: AuditTotals = {
     cards_scanned: cards.length,
@@ -214,6 +317,8 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
     publisher_missing: 0,
     github_ui_html: 0,
     classifier_flagged_other: 0,
+    bot_check_or_captcha_detected: 0,
+    extraction_suspect_word_count_mismatch: 0,
     no_action: 0,
   };
 
@@ -225,17 +330,47 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
     const effectivePublisher = getEffectivePublisher(card, overrides);
     const stOverride = hasSourceTypeOverride(card, overrides);
     const pubOverride = hasPublisherOverride(card, overrides);
-    const overrideInEffect = stOverride || pubOverride;
+    const sevOverride = hasSeverityClearOverride(card, overrides);
+    const overrideInEffect = stOverride || pubOverride || sevOverride;
 
     if (overrideInEffect) totals.cards_with_overrides++;
 
-    const kind = determineFinding(card, overrides);
+    // v0.10 Slice 3 — detect severities (raw) then apply override layer.
+    const receipt = receipts.get(card.source_id) ?? null;
+    const rawText = await loadRawText(packPath, receipt);
+    const rawSeverities = detectSeverities({
+      card,
+      rawText,
+      byteCount: receipt?.byte_count ?? null,
+      contentType: receipt?.content_type ?? null,
+      fetchDurationMs: receipt?.fetch_duration_ms ?? null,
+      thresholds,
+    });
+    const effectiveSeverities = getEffectiveSeverities(card, rawSeverities, overrides);
+
+    const kind = determineFinding(card, overrides, effectiveSeverities);
+
+    // v0.10 Slice 3 — severity totals count each severity independently,
+    // not the dominant `kind`. A card whose effective severities include
+    // both bot_check_or_captcha_detected AND extraction_suspect_word_count_mismatch
+    // contributes 1 to each total (and surfaces in findings[].severities).
+    for (const s of effectiveSeverities) {
+      if (s.severity === 'bot_check_or_captcha_detected') {
+        totals.bot_check_or_captcha_detected++;
+      } else if (s.severity === 'extraction_suspect_word_count_mismatch') {
+        totals.extraction_suspect_word_count_mismatch++;
+      }
+    }
 
     switch (kind) {
       case 'source_type_mismatch': totals.source_type_mismatches++; break;
       case 'publisher_missing':    totals.publisher_missing++;       break;
       case 'github_ui_html':       totals.github_ui_html++;          break;
       case 'classifier_flagged':   totals.classifier_flagged_other++; break;
+      case 'bot_check_or_captcha_detected':
+      case 'extraction_suspect_word_count_mismatch':
+        // Severity totals already incremented above per-severity.
+        break;
       case 'override_applied':     // informational — falls into no_action bucket
       case 'no_action':            totals.no_action++;               break;
       case 'publisher_mismatch':   break; // forward-compatible, no counter
@@ -253,6 +388,7 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
       classifier_rule_hint: classification.rule_hint,
       classifier_precedence_level: classification.precedence_level,
       override_in_effect: overrideInEffect,
+      severities: effectiveSeverities,
     });
   }
 

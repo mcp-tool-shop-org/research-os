@@ -22,6 +22,9 @@ import {
   type FetchReceipt,
   type SourceCard,
 } from '../sources/schema.js';
+import { readOverrides } from '../sources/source-card-overrides.js';
+import { getEffectiveSeverities } from '../sources/effective-card.js';
+import { detectSeverities, resolveSeverityThresholds } from '../sources/severities.js';
 import { defaultClaimExtractors, pickClaimExtractor } from './extractors/index.js';
 import { ClaimSchema, type Claim } from './schema.js';
 import type {
@@ -82,6 +85,21 @@ async function readSectionPurpose(
     if (!section) return undefined;
     const purpose = section.purpose.trim();
     return purpose.length > 0 ? purpose : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// v0.10 Slice 3 — read the optional `audit.severity_thresholds` block from
+// research.yaml so claim extraction's severity-detection pass uses the same
+// thresholds as `source-card audit`. Absence / malformed YAML returns
+// undefined, falling back to DEFAULT_SEVERITY_THRESHOLDS.
+async function readAuditSeverityThresholdsConfig(packPath: string) {
+  const yamlPath = join(packPath, 'research.yaml');
+  if (!existsSync(yamlPath)) return undefined;
+  try {
+    const parsed = ResearchYamlSchema.parse(parseYaml(await readFile(yamlPath, 'utf8')));
+    return parsed.audit?.severity_thresholds;
   } catch {
     return undefined;
   }
@@ -294,6 +312,13 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
   // contract on the MCP server side.
   const framePurpose = await readSectionPurpose(packPath, options.sectionId);
 
+  // v0.10 Slice 3 — load override ledger + per-pack severity thresholds
+  // once per extract() call. Both are pack-stable.
+  const overrides = await readOverrides(packPath);
+  const severityThresholds = resolveSeverityThresholds(
+    await readAuditSeverityThresholdsConfig(packPath),
+  );
+
   // The effective model override propagates from the CLI / env up through
   // ExtractClaimsOptions. Empty strings collapse to undefined so the MCP
   // server uses its tier default.
@@ -361,6 +386,26 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       if (existsSync(raw)) {
         rawText = await readFile(raw, 'utf8');
       }
+    }
+
+    // v0.10 Slice 3 (R-003 + R-005) — quarantine sources with effective
+    // severities. detectSeverities is pure; getEffectiveSeverities applies
+    // the operator's clear_severities[] overrides. Both R-003
+    // (bot_check_or_captcha_detected, HARD FAIL) and R-005
+    // (extraction_suspect_word_count_mismatch, WARN AND QUARANTINE) block
+    // claim extraction by default. Operator override lifts the quarantine.
+    const rawSeverities = detectSeverities({
+      card,
+      rawText,
+      byteCount: receipt?.byte_count ?? null,
+      contentType: receipt?.content_type ?? null,
+      fetchDurationMs: receipt?.fetch_duration_ms ?? null,
+      thresholds: severityThresholds,
+    });
+    const effectiveSeverities = getEffectiveSeverities(card, rawSeverities, overrides);
+    if (effectiveSeverities.length > 0) {
+      summary.sourcesSkipped += 1;
+      continue;
     }
 
     const ledger = await loadOrBuildLedger({

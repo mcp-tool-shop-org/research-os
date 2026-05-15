@@ -32,6 +32,13 @@ export const FetchReceiptSchema = z.object({
   extraction_outcome: z.enum(['ok', 'failed', 'skipped']),
   extraction_extractor: ExtractorNameSchema.nullable(),
   extraction_error: z.string().nullable(),
+  /**
+   * v0.10 Slice 3 — millisecond wall-clock duration of the fetchImpl call.
+   * Optional for back-compat with pre-v0.10 receipts; fetchOnce always
+   * populates it on new fetches. Used by source-card severity detection
+   * to identify CDN fast-challenge bot-check responses.
+   */
+  fetch_duration_ms: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const SourceCardSchema = z.object({

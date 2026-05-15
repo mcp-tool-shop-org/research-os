@@ -57,6 +57,42 @@ export const GateConfigSchema = z.object({
   section_budget: SectionBudgetGateSchema.default({}),
 });
 
+// v0.10 Slice 3 (R-003 + R-005) — per-pack overrides for source-card
+// severity-detection thresholds. Optional; absence yields DEFAULT_SEVERITY_THRESHOLDS.
+// Every threshold is itself optional so a pack can tune one knob without
+// re-declaring the rest.
+export const BotCheckThresholdsConfigSchema = z
+  .object({
+    max_body_words_with_marker: z.number().int().positive().optional(),
+    max_bytes_for_script_density: z.number().int().positive().optional(),
+    min_script_density_ratio: z.number().min(0).max(1).optional(),
+    max_prose_words_no_marker: z.number().int().nonnegative().optional(),
+    max_bytes_for_fast_response: z.number().int().positive().optional(),
+    max_response_time_ms: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export const ExtractionRatioThresholdsConfigSchema = z
+  .object({
+    max_source_words: z.number().int().positive().optional(),
+    min_extracted_words: z.number().int().positive().optional(),
+    min_ratio: z.number().positive().optional(),
+  })
+  .strict();
+
+export const SeverityThresholdsConfigSchema = z
+  .object({
+    bot_check: BotCheckThresholdsConfigSchema.optional(),
+    extraction_word_count_ratio: ExtractionRatioThresholdsConfigSchema.optional(),
+  })
+  .strict();
+
+export const AuditConfigSchema = z
+  .object({
+    severity_thresholds: SeverityThresholdsConfigSchema.optional(),
+  })
+  .strict();
+
 // Section-scoped source-floor waiver. Each entry stands alone with its own
 // reason + compensating_controls audit trail. Earned by Experiment 3 XRPL
 // Pack Session 2 — canonical-protocol sections (XRPL Foundation docs, XLS
@@ -143,6 +179,10 @@ export const ResearchYamlSchema = z.object({
   primary_source_waiver: PrimarySourceWaiverSchema.default({}),
   sections: z.array(SectionSchema).default([]),
   gates: GateConfigSchema.default({}),
+  // v0.10 Slice 3 — optional per-pack audit configuration. Source-card
+  // severity-detection thresholds for R-003 (bot-check) + R-005 (extraction
+  // ratio) live here. Defaults come from DEFAULT_SEVERITY_THRESHOLDS.
+  audit: AuditConfigSchema.optional(),
   // Reviewer-profile presets baked into the pack so future review runs
   // (across any section in this pack) inherit the calibrated configuration
   // without rediscovering rig-specific timeouts and context issues. Override
@@ -155,6 +195,8 @@ export const ResearchYamlSchema = z.object({
 
 export type Section = z.infer<typeof SectionSchema>;
 export type GateConfig = z.infer<typeof GateConfigSchema>;
+export type AuditConfig = z.infer<typeof AuditConfigSchema>;
+export type SeverityThresholdsConfig = z.infer<typeof SeverityThresholdsConfigSchema>;
 export type PrimarySourceWaiver = z.infer<typeof PrimarySourceWaiverSchema>;
 export type SectionScopedWaiver = z.infer<typeof SectionScopedWaiverSchema>;
 export type ReviewProfilePreset = z.infer<typeof ReviewProfilePresetSchema>;

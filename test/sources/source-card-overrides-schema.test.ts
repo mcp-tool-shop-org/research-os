@@ -58,8 +58,10 @@ describe('A-003 — source-card override refine accepts presence (not non-null)'
   });
 
   it('rejects when neither key is present in the object', () => {
+    // v0.10 Slice 3 — refine message expanded to mention clear_severities
+    // alongside new_source_type / new_publisher.
     expect(() => validateSourceCardOverride({ ...base })).toThrow(
-      /at least one of new_source_type or new_publisher/i,
+      /at least one of new_source_type, new_publisher, or clear_severities/i,
     );
   });
 });

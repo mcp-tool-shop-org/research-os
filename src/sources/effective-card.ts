@@ -12,6 +12,7 @@
  */
 import type { SourceCard } from './schema.js';
 import type { SourceCardOverride } from './source-card-overrides-schema.js';
+import type { SourceSeverity, SeverityFinding } from './severities.js';
 
 export type SourceType = SourceCard['source_type'];
 
@@ -52,4 +53,46 @@ export function getEffectivePublisher(
 
   if (matched.length === 0) return card.publisher;
   return (matched[0].new_publisher ?? null);
+}
+
+/**
+ * v0.10 Slice 3 (R-003 + R-005) — collect the set of severities cleared by
+ * operator overrides for a given source_id.
+ *
+ * Monotonic union semantics: any override mentioning a severity in
+ * clear_severities[] clears it for that source_id. A later override that
+ * does NOT mention a severity does NOT un-clear it (clearing is durable).
+ * This mirrors the audit-trail discipline of the v0.4 override-ledger —
+ * an operator decision to authenticate a card stands until explicitly
+ * reversed by a different mechanism (out of scope for this slice).
+ */
+export function getClearedSeverities(
+  card: Pick<SourceCard, 'source_id'>,
+  overrides: SourceCardOverride[],
+): Set<SourceSeverity> {
+  const cleared = new Set<SourceSeverity>();
+  for (const o of overrides) {
+    if (o.source_id !== card.source_id) continue;
+    if (!Array.isArray(o.clear_severities)) continue;
+    for (const s of o.clear_severities) cleared.add(s);
+  }
+  return cleared;
+}
+
+/**
+ * v0.10 Slice 3 — apply the override layer to a raw severity-detection
+ * result. Returns only the severities NOT cleared by any operator override.
+ *
+ * Use this in the audit + claim-extract paths so the effective severity
+ * set reflects operator decisions. detectSeverities() stays pure / no
+ * I/O; this is the gate where operator overrides get applied.
+ */
+export function getEffectiveSeverities(
+  card: Pick<SourceCard, 'source_id'>,
+  rawFindings: SeverityFinding[],
+  overrides: SourceCardOverride[],
+): SeverityFinding[] {
+  const cleared = getClearedSeverities(card, overrides);
+  if (cleared.size === 0) return rawFindings;
+  return rawFindings.filter((f) => !cleared.has(f.severity));
 }
