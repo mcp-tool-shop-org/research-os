@@ -27,11 +27,18 @@ export const FAILURE_SHAPES = [
 
 export type FailureShape = (typeof FAILURE_SHAPES)[number];
 
-// ── Recovery action vocabulary (closed enum, 7 values) ──────────────────────
+// ── Recovery action vocabulary (closed enum, 8 values) ──────────────────────
 // Ranked by reversibility. Reversible actions surface first by default.
+// v0.10 Slice 2 (R-001) added `repair_claim_scope` for the case where the
+// extractor produced claims with scope=null and the gate is blocked on
+// accepted_claim_floor with claims sitting in needs_scope_repair /
+// parked_weak_scope. The repair surface is a CLI (`research-os claim
+// repair-scope <section>`) backed by an append-only ledger so claim
+// mutation is auditable and reversible.
 export const RECOVERY_ACTIONS = [
   'add_on_topic_sources',         // reversibility: high
   'apply_source_card_override',   // reversibility: high
+  'repair_claim_scope',           // reversibility: high (append-only ledger)
   'rerun_stage',                  // reversibility: high (idempotent re-execution)
   'apply_waiver',                 // reversibility: medium
   'narrow_section_purpose',       // reversibility: medium

@@ -76,6 +76,12 @@ const PACK_LAW_FORBIDDINGS: Array<{
 const ACTION_REVERSIBILITY: Record<RecoveryActionId, Reversibility> = {
   add_on_topic_sources: 'high',
   apply_source_card_override: 'high',
+  // v0.10 Slice 2 (R-001): repair_claim_scope writes to an append-only
+  // ledger AND mutates claims.jsonl with the resolved scope, mirroring the
+  // v0.4 source-card-override pattern. Reversibility is high because the
+  // ledger preserves prior state and re-running repair-scope appends a new
+  // record rather than overwriting.
+  repair_claim_scope: 'high',
   rerun_stage: 'high',
   apply_waiver: 'medium',
   narrow_section_purpose: 'medium',
@@ -89,6 +95,8 @@ function commandHint(action: RecoveryActionId, sectionId: string, stage?: string
       return `research-os gather ${sectionId} --url <URL>`;
     case 'apply_source_card_override':
       return `research-os source-card audit --pack .  (see proposed-publisher-overrides.json)`;
+    case 'repair_claim_scope':
+      return `research-os claim repair-scope ${sectionId}`;
     case 'rerun_stage':
       return stage ? `research-os ${stage} ${sectionId}` : `research-os gate ${sectionId}`;
     case 'apply_waiver':
@@ -102,6 +110,16 @@ function commandHint(action: RecoveryActionId, sectionId: string, stage?: string
   }
 }
 
+// v0.10 Slice 2 (R-001): the threshold at which `repair_claim_scope`
+// becomes the top recommendation for `accepted_claim_floor`. The default
+// gate floor is `min_accepted_claims_and_sources: 3`; if fewer than 3
+// claims are in needs-scope-repair, even a perfect repair pass cannot
+// push the section past the floor and the smaller reversible move is to
+// add sources. The threshold is intentionally narrow — operators with
+// 0–2 repairable claims fall through to the legacy `add_on_topic_sources`
+// recommendation.
+const REPAIR_CLAIM_SCOPE_MIN_NEEDS_REPAIR = 3;
+
 // ── Action graph constructor ────────────────────────────────────────────────
 //
 // For each diagnosis we build a small, ranked allowed_actions list (1–3 items)
@@ -111,13 +129,37 @@ function commandHint(action: RecoveryActionId, sectionId: string, stage?: string
 //   - forbidden_actions: by action_id alphabetically (stable for diff'ing)
 
 export function buildActionGraph(diagnosis: SectionDiagnosis): LawfulActionGraph {
-  const { section_id, failure_shape, stage } = diagnosis;
+  const { section_id, failure_shape, stage, evidence_state } = diagnosis;
 
   // Mapping table (data, not LLM judgment). Each entry returns the allowed
   // actions for THIS failure shape in priority order.
   const allowed: Array<{ action_id: RecoveryActionId; why: string; rerunStage?: string }> = (() => {
     switch (failure_shape) {
-      case 'accepted_claim_floor':
+      case 'accepted_claim_floor': {
+        // R-001 (v0.10 Slice 2): if claims are already extracted but parked
+        // for needing scope repair, repair-scope is the smallest reversible
+        // move — it operates on extant evidence rather than asking the
+        // operator to find more. Only when there are enough such claims to
+        // plausibly satisfy the floor (>= 3) do we surface this above
+        // add_on_topic_sources; below that threshold the gate floor cannot
+        // be cleared by scope-repair alone, so we keep the legacy ranking.
+        const needsRepair = evidence_state.needs_repair_claims;
+        if (needsRepair >= REPAIR_CLAIM_SCOPE_MIN_NEEDS_REPAIR) {
+          return [
+            {
+              action_id: 'repair_claim_scope',
+              why: `Section has ${needsRepair} claim(s) parked in needs_scope_repair / weak_scope. Auto-repair (or interactive review) populates scope on those claims so the next review pass can promote them to accepted, often the smallest reversible move toward clearing the accepted_claim_floor.`,
+            },
+            {
+              action_id: 'add_on_topic_sources',
+              why: 'Add additional on-topic primary or official sources so the extractor produces candidate claims that survive review.',
+            },
+            {
+              action_id: 'narrow_section_purpose',
+              why: 'If extracted claims are on-topic for the sources but off-topic for the purpose, tightening the purpose can convert the same evidence into accepted claims.',
+            },
+          ];
+        }
         return [
           {
             action_id: 'add_on_topic_sources',
@@ -128,6 +170,7 @@ export function buildActionGraph(diagnosis: SectionDiagnosis): LawfulActionGraph
             why: 'If extracted claims are on-topic for the sources but off-topic for the purpose, tightening the purpose can convert the same evidence into accepted claims.',
           },
         ];
+      }
 
       case 'min_independent_publishers':
         return [

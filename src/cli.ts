@@ -10,7 +10,13 @@ import {
   reject as discoverReject,
   exportUrls as discoverExport,
 } from './discover/index.js';
-import { auditDensity, extract as claimExtract } from './claims/index.js';
+import {
+  auditDensity,
+  extract as claimExtract,
+  runScopeRepair,
+  type ScopeRepairPrompter,
+  type ScopeRepairPrompterResponse,
+} from './claims/index.js';
 import { triage as runTriage } from './triage/index.js';
 import { map as contradictMap, resolve as contradictResolve } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
@@ -560,6 +566,104 @@ claimCmd
       }
       process.stdout.write(`  json:                   ${result.jsonPath}\n`);
       process.stdout.write(`  markdown:               ${result.markdownPath}\n`);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+// ── R-001 (v0.10 Slice 2): scope-repair CLI ────────────────────────────────
+// Repairs claims with scope=null by either auto-populating a templated
+// scope from source-card publisher + section purpose (--auto) or by
+// prompting the operator for each proposed scope (--interactive, default).
+// Every repair appends to evidence/claim-scope-repairs.jsonl; the affected
+// claim row in claims.jsonl gains the applied scope.
+//
+// The default mode is interactive (least surprising for a new operator
+// learning the surface). --auto runs without prompts for the operator
+// who has already inspected the section and wants to unblock the gate.
+
+function buildReadlineScopeRepairPrompter(): ScopeRepairPrompter {
+  return {
+    async promptScopeProposal(ctx) {
+      const { createInterface } = await import('node:readline/promises');
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        process.stdout.write('\n');
+        process.stdout.write(`Claim: ${ctx.claim_id}\n`);
+        process.stdout.write(`  Section: ${ctx.section_id} (${ctx.section_purpose})\n`);
+        process.stdout.write(`  Source : ${ctx.source_card_summary}\n`);
+        process.stdout.write(`  Asserts: ${ctx.asserts}\n`);
+        process.stdout.write(`  Proposed scope: ${ctx.proposed_scope}\n`);
+        const answer = (await rl.question('  [a]ccept  [e]dit  [s]kip  [q]uit  > ')).trim().toLowerCase();
+        let response: ScopeRepairPrompterResponse;
+        if (answer === '' || answer === 'a' || answer === 'accept' || answer === 'y' || answer === 'yes') {
+          response = { action: 'accept' };
+        } else if (answer === 'e' || answer === 'edit') {
+          const edited = (await rl.question('  new scope: ')).trim();
+          if (edited.length === 0) {
+            response = { action: 'skip', reason: 'edit returned empty scope' };
+          } else {
+            response = { action: 'edit', new_scope: edited };
+          }
+        } else if (answer === 's' || answer === 'skip') {
+          const reason = (await rl.question('  reason (optional): ')).trim();
+          response = { action: 'skip', reason: reason.length > 0 ? reason : undefined };
+        } else if (answer === 'q' || answer === 'quit') {
+          response = { action: 'quit' };
+        } else {
+          process.stdout.write(`  unrecognized response "${answer}"; defaulting to skip.\n`);
+          response = { action: 'skip', reason: `unrecognized response "${answer}"` };
+        }
+        return response;
+      } finally {
+        rl.close();
+      }
+    },
+  };
+}
+
+claimCmd
+  .command('repair-scope')
+  .description(
+    'Repair claims missing scope (needs_scope_repair / parked_weak_scope). ' +
+      'Default is interactive: review each proposal; --auto applies a heuristic ' +
+      'scope to every candidate non-interactively. Always appends to the ' +
+      'append-only evidence/claim-scope-repairs.jsonl ledger.',
+  )
+  .argument('<section>', 'Section id, e.g. "03-dst-injury"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--auto', 'Auto-populate scope without prompting (uses publisher + section purpose)', false)
+  .option('--interactive', 'Prompt for each claim (default behavior)', false)
+  .option('--operator <id>', 'Operator identity recorded in the ledger', 'cli')
+  .action(async (section: string, opts) => {
+    try {
+      if (opts.auto && opts.interactive) {
+        throw new InvalidArgumentError('--auto and --interactive are mutually exclusive');
+      }
+      const mode: 'auto' | 'interactive' = opts.auto ? 'auto' : 'interactive';
+      const result = await runScopeRepair({
+        sectionId: section,
+        packPath: opts.pack,
+        mode,
+        operator: opts.operator,
+        prompter: mode === 'interactive' ? buildReadlineScopeRepairPrompter() : undefined,
+      });
+      process.stdout.write(`claim repair-scope complete\n`);
+      process.stdout.write(`  section:            ${result.sectionId}\n`);
+      process.stdout.write(`  mode:               ${mode}\n`);
+      process.stdout.write(`  claims considered:  ${result.claimsConsidered}\n`);
+      process.stdout.write(`  claims repaired:    ${result.claimsRepaired}\n`);
+      process.stdout.write(`  claims skipped:     ${result.claimsSkipped}\n`);
+      if (result.quitEarly) {
+        process.stdout.write(`  (operator quit before all claims were reviewed)\n`);
+      }
+      process.stdout.write(`  ledger:             ${result.ledgerPath}\n`);
+      process.stdout.write(`  claims.jsonl:       ${result.claimsJsonlPath}\n`);
+      if (result.claimsRepaired > 0) {
+        process.stdout.write(
+          `\nNext: re-run \`research-os claim triage ${result.sectionId}\` then \`research-os review ${result.sectionId}\` to advance the repaired claims through the pipeline.\n`,
+        );
+      }
     } catch (err) {
       reportError(err);
     }
