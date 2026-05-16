@@ -25,6 +25,13 @@ import {
 import { readOverrides } from '../sources/source-card-overrides.js';
 import { getEffectiveSeverities } from '../sources/effective-card.js';
 import { detectSeverities, resolveSeverityThresholds } from '../sources/severities.js';
+import {
+  appendExtractCompletionRecord,
+  formatProgressLine,
+  getCompletedSourceIdsForSection,
+  getNextExtractionAttempt,
+  readExtractCompletionLedger,
+} from './extract-completion-ledger.js';
 import { defaultClaimExtractors, pickClaimExtractor } from './extractors/index.js';
 import { appendRescueLedgerRecord } from './rescue-ledger.js';
 import { ClaimSchema, type Claim } from './schema.js';
@@ -320,6 +327,20 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
   const sourceIds = await readSectionSourceIds(packPath, options.sectionId);
   if (sourceIds.length === 0) throw new NoSourcesGatheredError(options.sectionId);
 
+  // v0.12 Slice 4 (R-015) — read the per-source completion ledger once.
+  // --resume filters the section's source list to those whose successful
+  // extraction is NOT already recorded. --progress (without --resume)
+  // emits per-source stderr lines but processes every source. The ledger
+  // is written on success regardless of either flag (always-on artifact;
+  // flags only change CONSUMPTION).
+  const completionRecords = await readExtractCompletionLedger(packPath);
+  const completedSourceIds = options.resume
+    ? getCompletedSourceIdsForSection(completionRecords, options.sectionId)
+    : new Set<string>();
+  const progressEmit = options.progress
+    ? options.progressStream ?? ((line: string) => process.stderr.write(line + '\n'))
+    : null;
+
   const adapters = options.extractors ?? defaultClaimExtractors();
   const extractor = await pickClaimExtractor(adapters);
 
@@ -367,6 +388,7 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     sourcesProcessed: 0,
     sourcesSkipped: 0,
     sourcesFailed: 0,
+    sourcesSkippedByResume: 0,
     excerptLedgersBuilt: 0,
     claimsAdded: 0,
     claimsDeduped: 0,
@@ -391,162 +413,270 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     },
   };
 
+  // v0.12 Slice 4 (R-015) — partition source IDs into (resume-skipped,
+  // toProcess) BEFORE the loop so the [extract N/M] counter reflects the
+  // post-filter position. Skip emission happens here (once per skipped
+  // source) — the inner loop processes only the toProcess list.
+  const toProcess: string[] = [];
   for (const sourceId of sourceIds) {
+    if (completedSourceIds.has(sourceId)) {
+      summary.sourcesSkippedByResume += 1;
+      if (progressEmit) {
+        // Find the most recent completion entry for this (section, source)
+        // so the [skip] line carries a real "already extracted at" timestamp.
+        const latest = completionRecords
+          .filter((r) => r.section_id === options.sectionId && r.source_id === sourceId)
+          .sort((a, b) => (a.completed_at > b.completed_at ? -1 : 1))[0];
+        const detail = latest ? `already extracted at ${latest.completed_at}` : 'already extracted';
+        progressEmit(formatProgressLine('skip', 0, 0, sourceId, detail));
+      }
+      continue;
+    }
+    toProcess.push(sourceId);
+  }
+  const totalToProcess = toProcess.length;
+
+  for (let processIdx = 0; processIdx < toProcess.length; processIdx += 1) {
+    const sourceId = toProcess[processIdx]!;
+    const progressN = processIdx + 1;
+    const startNs = Date.now();
+    if (progressEmit) {
+      progressEmit(formatProgressLine('start', progressN, totalToProcess, sourceId));
+    }
+
+    // Per-source outcome bookkeeping for the terminal progress line + the
+    // completion ledger. Only success appends to the ledger; the other
+    // three terminal states (gate-skip, extractor-fail, no-record) leave
+    // the ledger untouched so the source is re-attempted on --resume.
+    let perSourceClaimsAdded = 0;
+    let outcome: 'processed' | 'skipped' | 'failed' = 'processed';
+    let failureDetail: string | null = null;
+    let skipReason: string | null = null;
+
     const card = await readSourceCard(packPath, sourceId);
     if (!card) {
+      outcome = 'skipped';
+      skipReason = 'no source card';
       summary.sourcesSkipped += 1;
-      continue;
     }
-    const receipt = await findLatestReceipt(packPath, sourceId);
+
+    let receipt: FetchReceipt | null = null;
     let rawText: string | null = null;
-    if (receipt?.raw_text_path) {
-      const raw = join(packPath, receipt.raw_text_path);
-      if (existsSync(raw)) {
-        rawText = await readFile(raw, 'utf8');
-      }
-    }
-
-    // v0.10 Slice 3 (R-003 + R-005) — quarantine sources with effective
-    // severities. detectSeverities is pure; getEffectiveSeverities applies
-    // the operator's clear_severities[] overrides. Both R-003
-    // (bot_check_or_captcha_detected, HARD FAIL) and R-005
-    // (extraction_suspect_word_count_mismatch, WARN AND QUARANTINE) block
-    // claim extraction by default. Operator override lifts the quarantine.
-    const rawSeverities = detectSeverities({
-      card,
-      rawText,
-      byteCount: receipt?.byte_count ?? null,
-      contentType: receipt?.content_type ?? null,
-      fetchDurationMs: receipt?.fetch_duration_ms ?? null,
-      thresholds: severityThresholds,
-    });
-    const effectiveSeverities = getEffectiveSeverities(card, rawSeverities, overrides);
-    if (effectiveSeverities.length > 0) {
-      summary.sourcesSkipped += 1;
-      continue;
-    }
-
-    const ledger = await loadOrBuildLedger({
-      packPath,
-      sourceCard: card,
-      sourceHash: receipt?.sha256 ?? null,
-      rawText,
-    });
-    if (ledger.built) summary.excerptLedgersBuilt += 1;
-
-    if (ledger.excerpts.length === 0) {
-      // No spans available — extractor cannot produce span-first claims.
-      summary.sourcesSkipped += 1;
-      continue;
-    }
-
-    const result = await extractor.extract({
-      sourceCard: card,
-      sourceHash: receipt?.sha256 ?? null,
-      excerpts: ledger.excerpts,
-      framePurpose,
-      effectiveModel,
-      // v0.11 Slice 3 (R-011) — pass the fetched body text so the MCP
-      // extractor can compute the source-content topical signature once
-      // per source. Heuristic extractor ignores this field; the MCP
-      // extractor short-circuits the LLM critic call on signature
-      // mismatch. Optional null when no raw text is available.
-      sourceRawText: rawText,
-    });
-
-    if (!result.ok) {
-      summary.sourcesFailed += 1;
-      summary.failures.push({ source_id: sourceId, reason: result.error });
-      continue;
-    }
-
-    summary.sourcesProcessed += 1;
-    summary.extractionMethod = result.method;
-    if (result.modelFallbacks && result.modelFallbacks.length > 0) {
-      summary.modelFallbacks.push(...result.modelFallbacks);
-    }
-    if (typeof result.framesExcluded === 'number' && result.framesExcluded > 0) {
-      summary.framesExcluded += result.framesExcluded;
-    }
-    // Phase 1b-b: fold per-source critic tally into the pack-wide summary.
-    if (result.criticTally) {
-      summary.criticTally.supports_section += result.criticTally.supports_section;
-      summary.criticTally.off_topic += result.criticTally.off_topic;
-      summary.criticTally.background_only += result.criticTally.background_only;
-      summary.criticTally.source_chrome += result.criticTally.source_chrome;
-      summary.criticTally.critic_call_failed += result.criticTally.critic_call_failed;
-    }
-
-    const excerptIndex = buildExcerptIndex(ledger.excerpts);
-
-    let writtenIndex = 0;
-    for (let i = 0; i < result.claims.length; i += 1) {
-      const draft = result.claims[i]!;
-      const resolved = resolveExcerpts(draft.evidence_excerpt_ids, excerptIndex);
-      if (!resolved.ok) {
-        summary.claimsRejectedUngrounded += 1;
-        if (resolved.failureMode === 'excerpt_id_missing') {
-          summary.claimsRejectedExcerptIdMissing += 1;
-        } else if (resolved.failureMode === 'excerpt_id_malformed') {
-          summary.claimsRejectedExcerptIdMalformed += 1;
+    if (outcome === 'processed' && card) {
+      receipt = await findLatestReceipt(packPath, sourceId);
+      if (receipt?.raw_text_path) {
+        const raw = join(packPath, receipt.raw_text_path);
+        if (existsSync(raw)) {
+          rawText = await readFile(raw, 'utf8');
         }
-        continue;
       }
-      const claim = buildClaim({
-        draft,
-        evidenceText: resolved.evidenceText,
-        resolvedExcerptIds: resolved.resolvedIds,
-        index: writtenIndex,
-        sectionId: options.sectionId,
-        sourceId,
-        sourceHash: receipt?.sha256 ?? null,
-        extractor: extractor.name,
-        extractionMethod: result.method,
+
+      // v0.10 Slice 3 (R-003 + R-005) — quarantine sources with effective
+      // severities. detectSeverities is pure; getEffectiveSeverities applies
+      // the operator's clear_severities[] overrides. Both R-003
+      // (bot_check_or_captcha_detected, HARD FAIL) and R-005
+      // (extraction_suspect_word_count_mismatch, WARN AND QUARANTINE) block
+      // claim extraction by default. Operator override lifts the quarantine.
+      const rawSeverities = detectSeverities({
+        card,
+        rawText,
+        byteCount: receipt?.byte_count ?? null,
+        contentType: receipt?.content_type ?? null,
+        fetchDurationMs: receipt?.fetch_duration_ms ?? null,
+        thresholds: severityThresholds,
       });
-      writtenIndex += 1;
-      if (existingIds.has(claim.claim_id)) {
-        summary.claimsDeduped += 1;
-        continue;
+      const effectiveSeverities = getEffectiveSeverities(card, rawSeverities, overrides);
+      if (effectiveSeverities.length > 0) {
+        outcome = 'skipped';
+        skipReason = `severity: ${effectiveSeverities.map((s) => s.severity).join(',')}`;
+        summary.sourcesSkipped += 1;
       }
-      await appendFile(claimsPath, JSON.stringify(claim) + '\n', 'utf8');
-      existingIds.add(claim.claim_id);
-      summary.claimsAdded += 1;
-      summary.claimIds.push(claim.claim_id);
-      // Persisted-on-disk admitted count: matches grep of frame_excluded:false
-      // in claims.jsonl after the run. The critic tally counts decisions on
-      // drafts; this counts admitted claims that survived persistence + dedup.
-      if (claim.frame_excluded === false) {
-        summary.claimsAdmittedPersisted += 1;
-      }
-      // v0.12 Slice 1 (R-012) — write the LLM rescue ledger entry for
-      // every rescued_by_llm claim. The draft carries the transient
-      // rescue_scope / rescue_reason; combined with the persisted claim's
-      // rescue_status / rescue_eligibility_check / rescue_boundary, this
-      // forms the full RescueLedgerRecord. "No silent rescue" invariant:
-      // every claim that goes frame_excluded:true → false via R-012 gets
-      // a witnessed ledger entry written here. Operator rescues write
-      // their own ledger entries from the operator CLI surface.
-      if (
-        claim.rescue_status === 'rescued_by_llm' &&
-        claim.rescue_eligibility_check &&
-        claim.rescue_boundary &&
-        draft.rescue_scope &&
-        draft.rescue_reason
-      ) {
-        await appendRescueLedgerRecord(packPath, {
-          claim_id: claim.claim_id,
-          section_id: claim.section_id,
-          original_exclusion_reason: 'source_content_mismatch',
-          eligibility_check: claim.rescue_eligibility_check,
-          rescue_status: 'rescued_by_llm',
-          rescue_scope: draft.rescue_scope,
-          rescue_reason: draft.rescue_reason,
-          rescue_boundary: claim.rescue_boundary,
-          rescued_by: 'llm',
-          rescued_at: claim.created_at,
-          operator: null,
-          research_os_version: RESEARCH_OS_VERSION,
+    }
+
+    if (outcome === 'processed' && card) {
+      const ledger = await loadOrBuildLedger({
+        packPath,
+        sourceCard: card,
+        sourceHash: receipt?.sha256 ?? null,
+        rawText,
+      });
+      if (ledger.built) summary.excerptLedgersBuilt += 1;
+
+      if (ledger.excerpts.length === 0) {
+        // No spans available — extractor cannot produce span-first claims.
+        outcome = 'skipped';
+        skipReason = 'no excerpts';
+        summary.sourcesSkipped += 1;
+      } else {
+        const result = await extractor.extract({
+          sourceCard: card,
+          sourceHash: receipt?.sha256 ?? null,
+          excerpts: ledger.excerpts,
+          framePurpose,
+          effectiveModel,
+          // v0.11 Slice 3 (R-011) — pass the fetched body text so the MCP
+          // extractor can compute the source-content topical signature once
+          // per source. Heuristic extractor ignores this field; the MCP
+          // extractor short-circuits the LLM critic call on signature
+          // mismatch. Optional null when no raw text is available.
+          sourceRawText: rawText,
         });
+
+        if (!result.ok) {
+          outcome = 'failed';
+          failureDetail = result.error;
+          summary.sourcesFailed += 1;
+          summary.failures.push({ source_id: sourceId, reason: result.error });
+        } else {
+          summary.sourcesProcessed += 1;
+          summary.extractionMethod = result.method;
+          if (result.modelFallbacks && result.modelFallbacks.length > 0) {
+            summary.modelFallbacks.push(...result.modelFallbacks);
+          }
+          if (typeof result.framesExcluded === 'number' && result.framesExcluded > 0) {
+            summary.framesExcluded += result.framesExcluded;
+          }
+          // Phase 1b-b: fold per-source critic tally into the pack-wide summary.
+          if (result.criticTally) {
+            summary.criticTally.supports_section += result.criticTally.supports_section;
+            summary.criticTally.off_topic += result.criticTally.off_topic;
+            summary.criticTally.background_only += result.criticTally.background_only;
+            summary.criticTally.source_chrome += result.criticTally.source_chrome;
+            summary.criticTally.critic_call_failed += result.criticTally.critic_call_failed;
+          }
+
+          const excerptIndex = buildExcerptIndex(ledger.excerpts);
+
+          let writtenIndex = 0;
+          for (let i = 0; i < result.claims.length; i += 1) {
+            const draft = result.claims[i]!;
+            const resolved = resolveExcerpts(draft.evidence_excerpt_ids, excerptIndex);
+            if (!resolved.ok) {
+              summary.claimsRejectedUngrounded += 1;
+              if (resolved.failureMode === 'excerpt_id_missing') {
+                summary.claimsRejectedExcerptIdMissing += 1;
+              } else if (resolved.failureMode === 'excerpt_id_malformed') {
+                summary.claimsRejectedExcerptIdMalformed += 1;
+              }
+              continue;
+            }
+            const claim = buildClaim({
+              draft,
+              evidenceText: resolved.evidenceText,
+              resolvedExcerptIds: resolved.resolvedIds,
+              index: writtenIndex,
+              sectionId: options.sectionId,
+              sourceId,
+              sourceHash: receipt?.sha256 ?? null,
+              extractor: extractor.name,
+              extractionMethod: result.method,
+            });
+            writtenIndex += 1;
+            if (existingIds.has(claim.claim_id)) {
+              summary.claimsDeduped += 1;
+              continue;
+            }
+            await appendFile(claimsPath, JSON.stringify(claim) + '\n', 'utf8');
+            existingIds.add(claim.claim_id);
+            summary.claimsAdded += 1;
+            perSourceClaimsAdded += 1;
+            summary.claimIds.push(claim.claim_id);
+            // Persisted-on-disk admitted count: matches grep of frame_excluded:false
+            // in claims.jsonl after the run. The critic tally counts decisions on
+            // drafts; this counts admitted claims that survived persistence + dedup.
+            if (claim.frame_excluded === false) {
+              summary.claimsAdmittedPersisted += 1;
+            }
+            // v0.12 Slice 1 (R-012) — write the LLM rescue ledger entry for
+            // every rescued_by_llm claim. The draft carries the transient
+            // rescue_scope / rescue_reason; combined with the persisted claim's
+            // rescue_status / rescue_eligibility_check / rescue_boundary, this
+            // forms the full RescueLedgerRecord. "No silent rescue" invariant:
+            // every claim that goes frame_excluded:true → false via R-012 gets
+            // a witnessed ledger entry written here. Operator rescues write
+            // their own ledger entries from the operator CLI surface.
+            if (
+              claim.rescue_status === 'rescued_by_llm' &&
+              claim.rescue_eligibility_check &&
+              claim.rescue_boundary &&
+              draft.rescue_scope &&
+              draft.rescue_reason
+            ) {
+              await appendRescueLedgerRecord(packPath, {
+                claim_id: claim.claim_id,
+                section_id: claim.section_id,
+                original_exclusion_reason: 'source_content_mismatch',
+                eligibility_check: claim.rescue_eligibility_check,
+                rescue_status: 'rescued_by_llm',
+                rescue_scope: draft.rescue_scope,
+                rescue_reason: draft.rescue_reason,
+                rescue_boundary: claim.rescue_boundary,
+                rescued_by: 'llm',
+                rescued_at: claim.created_at,
+                operator: null,
+                research_os_version: RESEARCH_OS_VERSION,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startNs;
+
+    // v0.12 Slice 4 (R-015) — write a completion ledger entry on successful
+    // extraction (regardless of --resume / --progress flags). Failed
+    // extractions and gate-skipped sources do NOT write — they re-evaluate
+    // on the next run. The ledger is the always-on substrate that --resume
+    // consumes; the flags only change observation/visibility.
+    if (outcome === 'processed') {
+      const attempt = getNextExtractionAttempt(
+        completionRecords,
+        options.sectionId,
+        sourceId,
+      );
+      await appendExtractCompletionRecord(packPath, {
+        source_id: sourceId,
+        section_id: options.sectionId,
+        completed_at: new Date().toISOString(),
+        claim_count: perSourceClaimsAdded,
+        extraction_attempt: attempt,
+        research_os_version: RESEARCH_OS_VERSION,
+        duration_ms: durationMs,
+      });
+    }
+
+    if (progressEmit) {
+      if (outcome === 'processed') {
+        progressEmit(
+          formatProgressLine(
+            'done',
+            progressN,
+            totalToProcess,
+            sourceId,
+            `${perSourceClaimsAdded} claims in ${durationMs}ms`,
+          ),
+        );
+      } else if (outcome === 'skipped') {
+        progressEmit(
+          formatProgressLine(
+            'done',
+            progressN,
+            totalToProcess,
+            sourceId,
+            `skipped (${skipReason ?? 'unknown'}) in ${durationMs}ms`,
+          ),
+        );
+      } else {
+        progressEmit(
+          formatProgressLine(
+            'fail',
+            progressN,
+            totalToProcess,
+            sourceId,
+            `${failureDetail ?? 'unknown error'} in ${durationMs}ms`,
+          ),
+        );
       }
     }
   }

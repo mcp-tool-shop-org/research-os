@@ -170,6 +170,19 @@ export interface ExtractClaimsOptions {
   // OLLAMA_INTERN_MODEL env var ?? undefined. The extractor receives this
   // verbatim on every ClaimExtractionInput it processes.
   effectiveModel?: string;
+  // v0.12 Slice 4 (R-015) — when true, skip sources whose successful
+  // extraction is already recorded in evidence/extract-completion.jsonl
+  // for this section. Default false preserves byte-identical behavior.
+  resume?: boolean;
+  // v0.12 Slice 4 (R-015) — when true, emit per-source [extract N/M]
+  // progress lines to stderr (or to the supplied progressStream). stdout
+  // canonical output is unchanged. Default false.
+  progress?: boolean;
+  // Test seam: injection point for progress emission. Defaults to
+  // process.stderr.write when progress=true. Tests pass a capture
+  // function; the orchestrator never imports process.stderr directly
+  // through this path.
+  progressStream?: (line: string) => void;
 }
 
 export interface ExtractClaimsFailure {
@@ -187,6 +200,12 @@ export interface ExtractClaimsSummary {
   sourcesProcessed: number;
   sourcesSkipped: number;
   sourcesFailed: number;
+  // v0.12 Slice 4 (R-015) — sources excluded from the extract loop because
+  // their successful extraction is already in evidence/extract-completion.jsonl
+  // for this section AND --resume was passed. Distinct from sourcesSkipped
+  // (in-loop gate skips: no card, no excerpts, severity quarantine). Zero
+  // by default; only positive on --resume runs against a pre-existing ledger.
+  sourcesSkippedByResume: number;
   excerptLedgersBuilt: number;
   claimsAdded: number;
   claimsDeduped: number;

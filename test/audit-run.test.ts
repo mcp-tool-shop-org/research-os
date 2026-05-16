@@ -147,10 +147,10 @@ afterEach(async () => {
 });
 
 describe('audit (end-to-end)', () => {
-  it('writes the full audit set (16 files) under audits/', async () => {
+  it('writes the full audit set (18 files) under audits/', async () => {
     await makeFixture({});
     const result = await audit({ packPath });
-    expect(result.filesWritten).toHaveLength(16);
+    expect(result.filesWritten).toHaveLength(18);
     for (const expected of [
       'audits/pack-audit.json',
       'audits/pack-audit.md',
@@ -168,6 +168,11 @@ describe('audit (end-to-end)', () => {
       'audits/source-diversity-gaps.md',
       'audits/synthesis-readiness.json',
       'audits/synthesis-readiness.md',
+      // v0.12 Slice 4 (R-017) — pack-scope-aware policy-source warning.
+      // Always written so operators get an explicit "no warning fired"
+      // signal rather than absence.
+      'audits/missing-policy-sources.json',
+      'audits/missing-policy-sources.md',
     ]) {
       expect(existsSync(join(packPath, expected)), `missing ${expected}`).toBe(true);
     }

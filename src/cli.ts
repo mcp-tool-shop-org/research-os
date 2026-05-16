@@ -458,6 +458,14 @@ claimCmd
     '--model <name>',
     'Per-call MCP model override (e.g. hermes3:8b). Precedence: --model ?? OLLAMA_INTERN_MODEL env var. The MCP server falls back to its tier default on timeout.',
   )
+  .option(
+    '--resume',
+    'Skip sources whose successful extraction is already recorded in evidence/extract-completion.jsonl for this section (R-015). Failed and not-yet-attempted sources are re-attempted on this run.',
+  )
+  .option(
+    '--progress',
+    'Emit per-source [extract N/M] progress lines to stderr (R-015). stdout (canonical extract output) is unchanged.',
+  )
   .action(async (section: string, opts) => {
     try {
       const effectiveModel =
@@ -466,6 +474,8 @@ claimCmd
         sectionId: section,
         packPath: opts.pack,
         effectiveModel,
+        resume: Boolean(opts.resume),
+        progress: Boolean(opts.progress),
       });
       process.stdout.write(`claim extraction complete\n`);
       process.stdout.write(`  section:                            ${result.sectionId}\n`);
@@ -473,6 +483,9 @@ claimCmd
       process.stdout.write(`  method:                             ${result.extractionMethod}\n`);
       process.stdout.write(`  sources processed:                  ${result.sourcesProcessed}\n`);
       process.stdout.write(`  sources skipped:                    ${result.sourcesSkipped}\n`);
+      if (result.sourcesSkippedByResume > 0) {
+        process.stdout.write(`  sources skipped (resume ledger):    ${result.sourcesSkippedByResume}\n`);
+      }
       process.stdout.write(`  sources failed:                     ${result.sourcesFailed}\n`);
       process.stdout.write(`  excerpt ledgers built:              ${result.excerptLedgersBuilt}\n`);
       process.stdout.write(`  claims added:                       ${result.claimsAdded}\n`);

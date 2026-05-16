@@ -33,7 +33,12 @@ import {
   type CoworkHandoffPayload,
 } from '../cowork/schema.js';
 
+import { readOverrides } from '../sources/source-card-overrides.js';
 import { aggregate, type AggregateInput } from './aggregate.js';
+import {
+  buildMissingPolicySourcesAudit,
+  renderMissingPolicySourcesMarkdown,
+} from './missing-policy-sources.js';
 import { PackAuditPayloadSchema } from './schema.js';
 import {
   renderOrphanClaimsMarkdown,
@@ -265,6 +270,26 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
 
   await writeFileAndTrack('audits/synthesis-readiness.json', JSON.stringify(payload.section_summaries, null, 2));
   await writeFileAndTrack('audits/synthesis-readiness.md', renderSynthesisReadinessMarkdown(payload));
+
+  // v0.12 Slice 4 (R-017) — pack-scope-aware policy-source warning.
+  // Informational only; does NOT affect verdict / blocking_reasons /
+  // synthesis_allowed. The audit JSON+MD are always written so operators
+  // get an explicit "no warning fired" signal rather than absence.
+  const overrides = await readOverrides(packPath);
+  const missingPolicySources = buildMissingPolicySourcesAudit({
+    research,
+    sources,
+    overrides,
+    generatedAt,
+  });
+  await writeFileAndTrack(
+    'audits/missing-policy-sources.json',
+    JSON.stringify(missingPolicySources, null, 2),
+  );
+  await writeFileAndTrack(
+    'audits/missing-policy-sources.md',
+    renderMissingPolicySourcesMarkdown(missingPolicySources),
+  );
 
   return {
     packPath,

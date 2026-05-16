@@ -1,0 +1,27 @@
+[
+  {
+    "_doc": "Example 1 — effective source_type override only (the common case). Use when the heuristic classifier mislabeled a source you've manually verified. Override does NOT clear any severities; if R-003/R-005/R-009 fire on this source, the quarantine stays in effect.",
+    "source_id": "src_5f619a4b784f",
+    "url": "https://www.aeaweb.org/articles?id=10.1257/app.20140100",
+    "new_source_type": "primary",
+    "new_publisher": "American Economic Association",
+    "reason": "AEA peer-reviewed Applied Economics article landing page; reclassify as primary because the extractor returned (untitled) and source_type defaulted to unknown.",
+    "operator": "ops-team",
+    "created_at": "2026-05-16T03:30:00Z",
+    "pack_version": "0.11.0"
+  },
+  {
+    "_doc": "Example 2 — clear_severities to lift a quarantine the operator has confirmed is a false-positive. The R-009 identity-mismatch fired because the extractor returned an empty title, but the fetched HTML <title> is clearly on-topic. clear_severities[] is monotonic-union per source_id (later overrides cannot un-clear). Combine with a new_source_type override when the same correction also reclassifies the source.",
+    "source_id": "src_317500ec4b44",
+    "url": "https://www.eurekalert.org/news-releases/526994",
+    "new_source_type": "secondary",
+    "new_publisher": "EurekAlert! (AAAS)",
+    "clear_severities": [
+      "source_identity_mismatch"
+    ],
+    "reason": "Fetched HTML title 'Spring forward to daylight saving time brings surge in fatal car crashes' is on-topic; extractor returned (untitled). Severity is extractor failure, not real identity mismatch.",
+    "operator": "ops-team",
+    "created_at": "2026-05-16T03:31:00Z",
+    "pack_version": "0.11.0"
+  }
+]
