@@ -1,24 +1,36 @@
 /**
  * v0.10 Slice 2 — R-001: scope-repair engine.
+ * v0.11 Slice 1 — R-007: alignment with triage's "substantive claim"
+ *   requirement. Triage demands BOTH `scope` AND `not` for substantive
+ *   claims (rule 1.2 parked_weak_scope, rule 1.3 needs_scope_repair). R-001
+ *   filled only scope, so a claim originally in parked_weak_scope (both
+ *   null, asserts>80) became needs_scope_repair (scope=set, not=null,
+ *   asserts>80) after the repair — the operator ran the instructed repair
+ *   and remained blocked. R-007 fills BOTH fields when `not` is null at
+ *   repair time. The reverse-asymmetric case (scope=set, not=null) remains
+ *   outside repair-scope's candidate set by design; a future sibling
+ *   action can address it if operator evidence demands.
  *
  * Operator-facing surface that fixes the operator-aloneness DST gate v0.1
- * blocker: 51 of 52 LLM-extracted claims arrived with scope=null. Triage
- * parked them. The operator had no admissible CLI to repair scope and had
- * to hand-edit claims.jsonl.
+ * blocker (and now v0.2's R-007 alignment gap): claims arrive with
+ * scope=null (and often also not=null). Triage parks them. R-001+R-007
+ * surfaces a CLI repair that aligns with triage's actual classification.
  *
  * Flow:
  *   1. Read claims.jsonl + source cards + research.yaml.
  *   2. Identify claims with scope === null (mode-irrespective).
  *   3. For each candidate, call proposeScopeForClaim() — pure heuristic.
- *   4. Auto mode: apply proposed_scope; append ledger record (mode=auto,
- *      operator_confirmed=false).
- *   5. Interactive mode: prompt operator. Accept → apply proposal.
- *      Edit → apply operator-supplied scope. Skip → no claim mutation,
- *      record skip in ledger (applied_scope=null, operator_confirmed=false,
- *      reason populated). Quit → halt iteration; commit what was done.
- *   6. Each non-skip path rewrites claims.jsonl with the resolved scope.
- *      Mutating the claim row matches the v0.4 source-card-override pattern
- *      (canonical file carries resolved value; ledger is the audit trail).
+ *   4. Auto mode: apply proposed_scope. ALSO apply proposed_not when
+ *      claim.not === null (R-007 alignment). Append ledger record
+ *      recording proposed/applied values for both fields.
+ *   5. Interactive mode: prompt operator. The prompter sees proposed_scope
+ *      and proposed_not + a flag indicating whether boundary-repair is
+ *      needed. Accept → apply both proposals (boundary applied only when
+ *      claim.not === null). Edit → operator supplies new_scope and
+ *      optionally new_not; fallback to proposed_not when omitted. Skip
+ *      → no claim mutation; ledger records the skip. Quit → halt.
+ *   6. Each non-skip path rewrites claims.jsonl with the resolved scope
+ *      and (when applicable) the resolved boundary.
  *
  * Frozen-pack guard: refuses to run when audits/freeze-receipt.json exists.
  * Mirrors source-card audit --apply behavior.
@@ -53,11 +65,26 @@ export interface ScopeRepairPrompterContext {
   section_purpose: string;
   source_card_summary: string;
   proposed_scope: string;
+  // R-007: the proposer always computes a boundary string; the prompter
+  // displays it. The engine applies the boundary only when claim.not is
+  // null at repair time (`needs_not_repair === true` below); otherwise the
+  // claim's existing `not` is preserved.
+  proposed_not: string;
+  // R-007: convenience flag derived from the claim's state at repair time.
+  // true when claim.not === null and the engine intends to apply the
+  // boundary proposal. UIs (CLI / future TUI) can use this to decide
+  // whether to show the boundary editor.
+  needs_not_repair: boolean;
 }
 
 export type ScopeRepairPrompterResponse =
   | { action: 'accept' }
-  | { action: 'edit'; new_scope: string }
+  // R-007: edit accepts a required new_scope and an optional new_not.
+  // When new_not is omitted but the engine intended to apply a boundary
+  // (needs_not_repair === true), the engine falls back to proposed_not.
+  // This preserves back-compat with v0.10 prompter scripts that only
+  // supplied new_scope while still honoring the R-007 alignment.
+  | { action: 'edit'; new_scope: string; new_not?: string }
   | { action: 'skip'; reason?: string }
   | { action: 'quit' };
 
@@ -204,11 +231,17 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
     });
 
     const repairedAt = new Date(baseMs + i).toISOString();
+    // R-007: boundary-repair fires only when the claim's `not` is null at
+    // repair time. Asymmetric (scope=null, not=set) claims keep their
+    // operator-authored boundary; the alignment is targeted, not
+    // overwriting.
+    const needsNotRepair = claim.not === null;
 
     let recordToWrite: ScopeRepair;
 
     if (options.mode === 'auto') {
-      const applied = proposal.proposed_scope;
+      const appliedScope = proposal.proposed_scope;
+      const appliedNot = needsNotRepair ? proposal.proposed_not : null;
       recordToWrite = ScopeRepairSchema.parse({
         claim_id: claim.claim_id,
         section_id: options.sectionId,
@@ -216,18 +249,23 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
         mode: 'auto',
         source_signals: proposal.source_signals,
         proposed_scope: proposal.proposed_scope,
-        applied_scope: applied,
+        applied_scope: appliedScope,
+        proposed_not: proposal.proposed_not,
+        applied_not: appliedNot,
         operator_confirmed: false,
         reason: null,
         operator: options.operator,
         research_os_version: RESEARCH_OS_VERSION,
       });
-      // Mutate the claim row.
       const idx = mutatedClaims.findIndex((c) => c.claim_id === claim.claim_id);
       if (idx >= 0) {
-        mutatedClaims[idx] = { ...mutatedClaims[idx]!, scope: applied };
+        mutatedClaims[idx] = {
+          ...mutatedClaims[idx]!,
+          scope: appliedScope,
+          not: needsNotRepair ? appliedNot : mutatedClaims[idx]!.not,
+        };
       }
-      appliedScopeByClaimId[claim.claim_id] = applied;
+      appliedScopeByClaimId[claim.claim_id] = appliedScope;
       claimsRepaired += 1;
     } else {
       const prompter = options.prompter!;
@@ -241,11 +279,14 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
         section_purpose: sectionPurpose,
         source_card_summary: formatSourceCardSummary(firstCard),
         proposed_scope: proposal.proposed_scope,
+        proposed_not: proposal.proposed_not,
+        needs_not_repair: needsNotRepair,
       });
 
       switch (response.action) {
         case 'accept': {
-          const applied = proposal.proposed_scope;
+          const appliedScope = proposal.proposed_scope;
+          const appliedNot = needsNotRepair ? proposal.proposed_not : null;
           recordToWrite = ScopeRepairSchema.parse({
             claim_id: claim.claim_id,
             section_id: options.sectionId,
@@ -253,15 +294,23 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
             mode: 'interactive',
             source_signals: proposal.source_signals,
             proposed_scope: proposal.proposed_scope,
-            applied_scope: applied,
+            applied_scope: appliedScope,
+            proposed_not: proposal.proposed_not,
+            applied_not: appliedNot,
             operator_confirmed: true,
             reason: null,
             operator: options.operator,
             research_os_version: RESEARCH_OS_VERSION,
           });
           const idx = mutatedClaims.findIndex((c) => c.claim_id === claim.claim_id);
-          if (idx >= 0) mutatedClaims[idx] = { ...mutatedClaims[idx]!, scope: applied };
-          appliedScopeByClaimId[claim.claim_id] = applied;
+          if (idx >= 0) {
+            mutatedClaims[idx] = {
+              ...mutatedClaims[idx]!,
+              scope: appliedScope,
+              not: needsNotRepair ? appliedNot : mutatedClaims[idx]!.not,
+            };
+          }
+          appliedScopeByClaimId[claim.claim_id] = appliedScope;
           claimsRepaired += 1;
           break;
         }
@@ -272,6 +321,17 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
               `Interactive edit returned an empty scope for ${claim.claim_id}; non-empty scope required.`,
             );
           }
+          // R-007: when the operator omits new_not but the engine intended
+          // to apply a boundary, fall back to proposed_not. Preserves
+          // back-compat with v0.10 prompter scripts that only supplied
+          // new_scope.
+          const editedNotRaw =
+            response.new_not !== undefined ? response.new_not.trim() : '';
+          const appliedNot = needsNotRepair
+            ? editedNotRaw.length > 0
+              ? editedNotRaw
+              : proposal.proposed_not
+            : null;
           recordToWrite = ScopeRepairSchema.parse({
             claim_id: claim.claim_id,
             section_id: options.sectionId,
@@ -280,13 +340,21 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
             source_signals: proposal.source_signals,
             proposed_scope: proposal.proposed_scope,
             applied_scope: newScope,
+            proposed_not: proposal.proposed_not,
+            applied_not: appliedNot,
             operator_confirmed: true,
             reason: null,
             operator: options.operator,
             research_os_version: RESEARCH_OS_VERSION,
           });
           const idx = mutatedClaims.findIndex((c) => c.claim_id === claim.claim_id);
-          if (idx >= 0) mutatedClaims[idx] = { ...mutatedClaims[idx]!, scope: newScope };
+          if (idx >= 0) {
+            mutatedClaims[idx] = {
+              ...mutatedClaims[idx]!,
+              scope: newScope,
+              not: needsNotRepair ? appliedNot : mutatedClaims[idx]!.not,
+            };
+          }
           appliedScopeByClaimId[claim.claim_id] = newScope;
           claimsRepaired += 1;
           break;
@@ -300,6 +368,12 @@ export async function runScopeRepair(options: ScopeRepairOptions): Promise<Scope
             source_signals: proposal.source_signals,
             proposed_scope: proposal.proposed_scope,
             applied_scope: null,
+            proposed_not: proposal.proposed_not,
+            // Skip leaves both fields unchanged on the claim row. The
+            // ledger records the boundary the engine WOULD have proposed
+            // for audit, but applied_not is null because no mutation
+            // occurred.
+            applied_not: null,
             operator_confirmed: false,
             reason: response.reason ?? 'operator skipped',
             operator: options.operator,

@@ -594,6 +594,12 @@ function buildReadlineScopeRepairPrompter(): ScopeRepairPrompter {
         process.stdout.write(`  Source : ${ctx.source_card_summary}\n`);
         process.stdout.write(`  Asserts: ${ctx.asserts}\n`);
         process.stdout.write(`  Proposed scope: ${ctx.proposed_scope}\n`);
+        // R-007: show the boundary proposal when the engine intends to
+        // apply it. Otherwise the claim already has `not` set and only
+        // scope is being repaired.
+        if (ctx.needs_not_repair) {
+          process.stdout.write(`  Proposed not  : ${ctx.proposed_not}\n`);
+        }
         const answer = (await rl.question('  [a]ccept  [e]dit  [s]kip  [q]uit  > ')).trim().toLowerCase();
         let response: ScopeRepairPrompterResponse;
         if (answer === '' || answer === 'a' || answer === 'accept' || answer === 'y' || answer === 'yes') {
@@ -602,6 +608,16 @@ function buildReadlineScopeRepairPrompter(): ScopeRepairPrompter {
           const edited = (await rl.question('  new scope: ')).trim();
           if (edited.length === 0) {
             response = { action: 'skip', reason: 'edit returned empty scope' };
+          } else if (ctx.needs_not_repair) {
+            // R-007: operator can override the boundary too. Empty input
+            // keeps the engine's proposed_not (back-compat with v0.10).
+            const editedNot = (
+              await rl.question(`  new not (blank to keep proposed): `)
+            ).trim();
+            response =
+              editedNot.length > 0
+                ? { action: 'edit', new_scope: edited, new_not: editedNot }
+                : { action: 'edit', new_scope: edited };
           } else {
             response = { action: 'edit', new_scope: edited };
           }

@@ -1,9 +1,15 @@
 /**
  * v0.10 Slice 2 — R-001: claim-scope-repairs ledger schema.
+ * v0.11 Slice 1 — R-007: extended with proposed_not + applied_not so the
+ *   ledger records boundary repairs alongside scope repairs when the claim
+ *   originally had `not === null`. Both new fields are optional for
+ *   frozen-pack back-compat — v0.10.0 ledger records (which lack these
+ *   fields) continue to parse cleanly.
  *
  * Append-only ledger at evidence/claim-scope-repairs.jsonl.
  * Each record captures one scope-repair decision per claim: what the
- * heuristic proposed, what got applied, who approved it, when.
+ * heuristic proposed for scope (and, when applicable, boundary), what got
+ * applied to each field, who approved it, when.
  *
  * Mirrors the v0.4 source-card-overrides-schema.ts shape — both are
  * audit-trail ledgers for an operator surface that mutates a "canonical"
@@ -30,6 +36,16 @@ export const ScopeRepairSchema = z.object({
   proposed_scope: z.string().min(1),
   // applied_scope is null on operator-skip; non-null on auto/accept/edit.
   applied_scope: z.string().min(1).nullable(),
+  // R-007: proposed boundary text the engine computed for this claim.
+  // Always populated on v0.11+ records when the candidate-set entry path
+  // ran. Optional for v0.10.0 back-compat (records written before R-007
+  // do not have this field).
+  proposed_not: z.string().min(1).optional(),
+  // R-007: boundary applied to the claim row. Null when the claim already
+  // had `not` set at repair time (boundary preserved, no mutation) or when
+  // the operator skipped. Non-null when the engine filled `not` because
+  // claim.not was null at repair time. Optional for v0.10.0 back-compat.
+  applied_not: z.string().min(1).nullable().optional(),
   operator_confirmed: z.boolean(),
   reason: z.string().nullable(),
   operator: z.string().min(1),
