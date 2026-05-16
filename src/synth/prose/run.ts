@@ -17,10 +17,15 @@ import { runPlanner } from './planner.js';
 import { runDrafter } from './drafter.js';
 import { runVerifier } from './verifier.js';
 import { PROSE_PROMPT_VERSION, PLANNER_ROLES_ENUM } from './prompt.js';
+import {
+  DEFAULT_PLANNER_TIMEOUT_MS,
+  wrapClientWithTimeout,
+} from './types.js';
 import type {
   AcceptedClaimInput,
   DraftedParagraph,
   PlannerRole,
+  PlannerTimeoutSource,
   ProseBlock,
   ProseNoAnswerClusterError,
   ProseRole,
@@ -74,11 +79,24 @@ function buildWaiverId(w: WaiverMeta): string {
 }
 
 export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunResult> {
-  const { sectionPurpose, acceptedClaims, sourceCards, waivers, client, model } = input;
+  const { sectionPurpose, acceptedClaims, sourceCards, waivers, model } = input;
 
   if (acceptedClaims.length === 0) {
     return { ok: false, error: 'no accepted claims — cannot generate prose' };
   }
+
+  // R-018 — wrap the MCP client with a per-callTool Promise.race timeout.
+  // Default budget is DEFAULT_PLANNER_TIMEOUT_MS (15000ms); the override
+  // (cli flag / env var) raises the ceiling. The wrapper rejects with a
+  // TIER_TIMEOUT-shaped error whose message embeds `elapsed=…ms` /
+  // `budget=…ms` so R-010's classifyFallbackCause regex extracts numbers
+  // unchanged. Pre-R-018 callers (no plannerTimeoutMs supplied) still get
+  // wrapped at the default — this is the active number recorded in
+  // ProseBlock.planner_timeout_ms.
+  const plannerTimeoutMs = input.plannerTimeoutMs ?? DEFAULT_PLANNER_TIMEOUT_MS;
+  const plannerTimeoutSource: PlannerTimeoutSource =
+    input.plannerTimeoutSource ?? 'default';
+  const client = wrapClientWithTimeout(input.client, plannerTimeoutMs);
 
   // ── Step 1: Plan ────────────────────────────────────────────────────────
   const plannerResult = await runPlanner(client, sectionPurpose, acceptedClaims, model);
@@ -273,6 +291,13 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
       verifier_model: verifierModel,
       prompt_version: PROSE_PROMPT_VERSION,
     },
+    planner_timeout_ms: plannerTimeoutMs,
+    // Default source → omit overridden_by field entirely so default-path
+    // artifacts stay minimal and the override field has unambiguous semantics
+    // (presence ⇒ operator opted in).
+    ...(plannerTimeoutSource !== 'default'
+      ? { planner_timeout_overridden_by: plannerTimeoutSource }
+      : {}),
   };
 
   return { ok: true, block };

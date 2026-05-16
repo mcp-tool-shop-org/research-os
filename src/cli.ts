@@ -44,6 +44,12 @@ import {
   sectionSynthesis as synthSection,
   partialPackSynthesis as synthPartialPack,
 } from './synth/index.js';
+import {
+  MAX_PLANNER_TIMEOUT_MS,
+  DEFAULT_PLANNER_TIMEOUT_MS,
+  resolvePlannerTimeout,
+  validatePlannerTimeoutValue,
+} from './synth/prose/types.js';
 import { recoverPack } from './recover/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
@@ -92,6 +98,21 @@ export function parseIntArg(label: string): (value: string) => number {
     }
     return n;
   };
+}
+
+/**
+ * R-018 (v0.12.1) — commander coercer for `--planner-timeout-ms <ms>`.
+ * Delegates to the pure validator in src/synth/prose/types.ts so the
+ * surface name + bounds appear verbatim in the error message. Rejects
+ * negatives, zero, unit-suffixed strings, non-numerics, and values above
+ * MAX_PLANNER_TIMEOUT_MS.
+ */
+export function parsePlannerTimeoutMsArg(value: string): number {
+  const r = validatePlannerTimeoutValue(value, 'cli_flag');
+  if (!r.ok) {
+    throw new InvalidArgumentError(r.error);
+  }
+  return r.value;
 }
 
 // C2-RE-001 fix: translate --no-progress / --progress Commander flags into the
@@ -1304,11 +1325,31 @@ synthCmd
     '--section <id>',
     'Produce section-scoped synthesis for this section only. The pack remains not-freezable and not-publishable.',
   )
+  .option(
+    '--planner-timeout-ms <ms>',
+    `R-018: planner-timeout budget in milliseconds for synth prose MCP calls. Default ${DEFAULT_PLANNER_TIMEOUT_MS}, upper bound ${MAX_PLANNER_TIMEOUT_MS} (safety rail). Env-var equivalent: RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS. CLI flag wins when both are set.`,
+    parsePlannerTimeoutMsArg,
+  )
   .action(async (opts) => {
     try {
       const sectionId = opts.section as string | undefined;
       if (sectionId) {
-        const result = await synthSection({ sectionId, packPath: opts.pack, spawnMcpClient: true });
+        const plannerTimeoutResolved = resolvePlannerTimeout({
+          cliFlagMs: opts.plannerTimeoutMs as number | undefined,
+          envVar: process.env.RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS,
+        });
+        if (!plannerTimeoutResolved.ok) {
+          process.stderr.write(`research-os: ${plannerTimeoutResolved.error}\n`);
+          process.exitCode = 2;
+          return;
+        }
+        const result = await synthSection({
+          sectionId,
+          packPath: opts.pack,
+          spawnMcpClient: true,
+          plannerTimeoutMs: plannerTimeoutResolved.value,
+          plannerTimeoutSource: plannerTimeoutResolved.source,
+        });
         process.stdout.write(`synthesis section: PARTIAL\n`);
         process.stdout.write(`  section:                  ${result.sectionId}\n`);
         process.stdout.write(`  pack mode:                ${result.packMode}\n`);
@@ -1364,9 +1405,29 @@ synthCmd
   )
   .argument('<section>', 'Section id, e.g. "06-evidence-custody-curated"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--planner-timeout-ms <ms>',
+    `R-018: planner-timeout budget in milliseconds for synth prose MCP calls. Default ${DEFAULT_PLANNER_TIMEOUT_MS}, upper bound ${MAX_PLANNER_TIMEOUT_MS} (safety rail). Env-var equivalent: RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS. CLI flag wins when both are set.`,
+    parsePlannerTimeoutMsArg,
+  )
   .action(async (section: string, opts) => {
     try {
-      const result = await synthSection({ sectionId: section, packPath: opts.pack, spawnMcpClient: true });
+      const plannerTimeoutResolved = resolvePlannerTimeout({
+        cliFlagMs: opts.plannerTimeoutMs as number | undefined,
+        envVar: process.env.RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS,
+      });
+      if (!plannerTimeoutResolved.ok) {
+        process.stderr.write(`research-os: ${plannerTimeoutResolved.error}\n`);
+        process.exitCode = 2;
+        return;
+      }
+      const result = await synthSection({
+        sectionId: section,
+        packPath: opts.pack,
+        spawnMcpClient: true,
+        plannerTimeoutMs: plannerTimeoutResolved.value,
+        plannerTimeoutSource: plannerTimeoutResolved.source,
+      });
       process.stdout.write(`synthesis section: PARTIAL\n`);
       process.stdout.write(`  section:                  ${result.sectionId}\n`);
       process.stdout.write(`  pack mode:                ${result.packMode}\n`);

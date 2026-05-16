@@ -40,7 +40,18 @@ import { MCPClientHandle } from '../mcp/client.js';
 
 import { runProseSynthesis } from './prose/run.js';
 import { renderSectionSynthesisMarkdown, renderNoAnswerClusterMarker } from './prose/markdown.js';
-import type { AcceptedClaimInput, ProseCallToolClient, ProseNoAnswerClusterError, SourceCardMeta, WaiverMeta } from './prose/types.js';
+import {
+  DEFAULT_PLANNER_TIMEOUT_MS,
+  formatPlannerTimeoutLogLine,
+} from './prose/types.js';
+import type {
+  AcceptedClaimInput,
+  PlannerTimeoutSource,
+  ProseCallToolClient,
+  ProseNoAnswerClusterError,
+  SourceCardMeta,
+  WaiverMeta,
+} from './prose/types.js';
 import type { SectionSynthesisOptions, SectionSynthesisSummary } from './types.js';
 
 type SectionState = ReturnType<typeof CoworkHandoffPayloadSchema.parse>['sections'][number];
@@ -116,6 +127,17 @@ interface SectionSynthesisManifest {
   gate_verdict: string | null;
   generated_at: string;
   research_os_version: string;
+  /**
+   * R-018 (v0.12.1) — active planner-timeout in milliseconds. Always
+   * populated. Default runs record DEFAULT_PLANNER_TIMEOUT_MS (15000ms);
+   * override runs record the resolved override value.
+   */
+  planner_timeout_ms: number;
+  /**
+   * R-018 (v0.12.1) — origin of the active planner-timeout value. Present
+   * only when the operator supplied an override; absent on default runs.
+   */
+  planner_timeout_overridden_by?: Exclude<PlannerTimeoutSource, 'default'>;
 }
 
 function buildManifest(args: {
@@ -125,8 +147,19 @@ function buildManifest(args: {
   acceptedClaims: Claim[];
   sourceIds: string[];
   generatedAt: string;
+  plannerTimeoutMs: number;
+  plannerTimeoutSource: PlannerTimeoutSource;
 }): SectionSynthesisManifest {
-  const { research, handoff, handoffSection, acceptedClaims, sourceIds, generatedAt } = args;
+  const {
+    research,
+    handoff,
+    handoffSection,
+    acceptedClaims,
+    sourceIds,
+    generatedAt,
+    plannerTimeoutMs,
+    plannerTimeoutSource,
+  } = args;
   const section = research.sections.find((s) => s.id === handoffSection.section_id);
   // Waivers that apply to this section: pack-scope waivers, or gate-scope
   // waivers whose applied_to mentions this section. Audit-trail only — we do
@@ -158,6 +191,10 @@ function buildManifest(args: {
     gate_verdict: handoffSection.gate_verdict,
     generated_at: generatedAt,
     research_os_version: RESEARCH_OS_VERSION,
+    planner_timeout_ms: plannerTimeoutMs,
+    ...(plannerTimeoutSource !== 'default'
+      ? { planner_timeout_overridden_by: plannerTimeoutSource }
+      : {}),
   };
 }
 
@@ -323,6 +360,23 @@ export async function sectionSynthesis(
   const sortedSourceIds = [...sourceIdSet].sort();
   const cards = await readSectionSourceCards(packPath, sourceIdSet);
 
+  // R-018 (v0.12.1) — resolve the active planner-timeout from options. The
+  // CLI surface (cli.ts) calls resolvePlannerTimeout(...) and forwards the
+  // already-resolved numeric value + source through SectionSynthesisOptions.
+  // When options omit both fields (legacy callers / tests), default to
+  // DEFAULT_PLANNER_TIMEOUT_MS / 'default'.
+  const plannerTimeoutMs = options.plannerTimeoutMs ?? DEFAULT_PLANNER_TIMEOUT_MS;
+  const plannerTimeoutSource: PlannerTimeoutSource =
+    options.plannerTimeoutSource ?? 'default';
+  // R-018.6 — emit a single-line, grep-friendly stderr summary of the
+  // active planner-timeout configuration BEFORE prose generation begins.
+  // Operators can `2>&1 | grep planner_timeout_ms=` to see what budget was
+  // in effect for a given run. The line goes to stderr so it does not
+  // pollute stdout (which carries the structured CLI summary).
+  process.stderr.write(
+    `${formatPlannerTimeoutLogLine({ value: plannerTimeoutMs, source: plannerTimeoutSource })} section=${options.sectionId}\n`,
+  );
+
   const generatedAt = new Date().toISOString();
   const manifest = buildManifest({
     research,
@@ -331,6 +385,8 @@ export async function sectionSynthesis(
     acceptedClaims,
     sourceIds: sortedSourceIds,
     generatedAt,
+    plannerTimeoutMs,
+    plannerTimeoutSource,
   });
 
   const synthDir = join(packPath, 'sections', options.sectionId, 'synthesis');
@@ -406,6 +462,8 @@ export async function sectionSynthesis(
         packMode: manifest.pack_mode,
         client: resolvedClient,
         model: options.proseModel,
+        plannerTimeoutMs,
+        plannerTimeoutSource,
       });
 
       if (proseResult.ok) {

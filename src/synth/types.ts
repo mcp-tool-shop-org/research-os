@@ -1,4 +1,4 @@
-import type { ProseCallToolClient } from './prose/types.js';
+import type { PlannerTimeoutSource, ProseCallToolClient } from './prose/types.js';
 
 export interface SectionAcceptedSummary {
   section_id: string;
@@ -119,6 +119,18 @@ export interface SectionSynthesisOptions {
   // don't inject a client are not affected by MCP subprocess startup latency.
   // The CLI sets this to true; test code injects mcpClient directly instead.
   spawnMcpClient?: boolean;
+  /**
+   * R-018 (v0.12.1) — planner-timeout budget in milliseconds, resolved at
+   * the CLI surface via `resolvePlannerTimeout`. Forwarded as-is to
+   * `runProseSynthesis`. Undefined → DEFAULT_PLANNER_TIMEOUT_MS (15000).
+   */
+  plannerTimeoutMs?: number;
+  /**
+   * R-018 (v0.12.1) — origin of the active planner-timeout value, also
+   * forwarded to `runProseSynthesis` so the synthesis-metadata records
+   * `planner_timeout_overridden_by` when the operator opted in.
+   */
+  plannerTimeoutSource?: PlannerTimeoutSource;
 }
 
 export interface SectionSynthesisSummary {
