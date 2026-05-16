@@ -136,8 +136,11 @@ function hasSeverityClearOverride(card: SourceCard, overrides: SourceCardOverrid
 /**
  * Load fetch-log.jsonl receipts indexed by source_id (latest fetched_at wins).
  * v0.10 Slice 3 needs this to wire raw-text body to detectSeverities.
+ *
+ * Exported for R-013 (v0.12 Slice 2) so the rebuild orchestrator reads
+ * receipts identically to the audit path — single source of truth.
  */
-async function loadLatestReceipts(packPath: string): Promise<Map<string, FetchReceipt>> {
+export async function loadLatestReceipts(packPath: string): Promise<Map<string, FetchReceipt>> {
   const path = join(packPath, 'evidence', 'fetch-log.jsonl');
   const map = new Map<string, FetchReceipt>();
   if (!existsSync(path)) return map;
@@ -155,7 +158,14 @@ async function loadLatestReceipts(packPath: string): Promise<Map<string, FetchRe
   return map;
 }
 
-async function loadRawText(packPath: string, receipt: FetchReceipt | null): Promise<string | null> {
+/**
+ * Read the cached body for a fetch receipt. Returns null when the receipt
+ * has no raw_text_path (e.g. PDFs) or when the cached file is missing.
+ *
+ * Exported for R-013 (v0.12 Slice 2) so rebuild reads cached body via the
+ * same path the audit does — preserves the "no re-fetch" invariant.
+ */
+export async function loadRawText(packPath: string, receipt: FetchReceipt | null): Promise<string | null> {
   if (!receipt || !receipt.raw_text_path) return null;
   const abs = join(packPath, receipt.raw_text_path);
   if (!existsSync(abs)) return null;
@@ -166,7 +176,13 @@ async function loadRawText(packPath: string, receipt: FetchReceipt | null): Prom
   }
 }
 
-async function loadSeverityThresholds(packPath: string): Promise<SeverityThresholds> {
+/**
+ * Resolve per-pack severity thresholds from research.yaml's
+ * audit.severity_thresholds block, falling back to defaults on any read /
+ * parse failure. Exported for R-013 so rebuild uses the same thresholds
+ * an audit would — defense-floor evaluation is consistent across surfaces.
+ */
+export async function loadSeverityThresholds(packPath: string): Promise<SeverityThresholds> {
   const yamlPath = join(packPath, 'research.yaml');
   if (!existsSync(yamlPath)) return resolveSeverityThresholds(null);
   try {

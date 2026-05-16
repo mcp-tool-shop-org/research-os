@@ -53,6 +53,10 @@ import {
   runSourceCardAudit,
   applySourceCardOverrides,
 } from './sources/source-card-audit.js';
+import {
+  rebuildSourceCards,
+  rebuildLedgerPath,
+} from './sources/rebuild-ledger.js';
 import { ResearchOSError, ReviewerProfileNotFoundError } from './errors.js';
 import { HELP_TOPICS } from './cli/help-topics.js';
 import { RESEARCH_OS_VERSION } from './index.js';
@@ -1751,12 +1755,21 @@ sourceCardCmd
   .command('audit')
   .description(
     'Audit source cards in a pack: classifier drift, missing publishers, GitHub UI HTML. ' +
-      'Read-only by default; use --apply --from <file> to commit operator corrections.',
+      'Read-only by default; use --apply --from <file> to commit operator corrections. ' +
+      'Pass --rebuild-cards to materialize current override-effective values into the ' +
+      'persisted card raw JSON (R-013, v0.12 Slice 2).',
   )
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
   .option('--json', 'Print the JSON report to stdout in addition to writing the artifact', false)
   .option('--apply', 'Apply operator-authored overrides from --from <file>', false)
   .option('--from <file>', 'JSON array file of proposed overrides (required with --apply)')
+  .option(
+    '--rebuild-cards',
+    'Re-route persisted source cards through buildCard() with current ledger ' +
+      'overrides applied (R-013). No HTTP, no re-fetch. May be combined with ' +
+      '--apply --from <file>, or used alone to rebuild from the existing ledger.',
+    false,
+  )
   .action(async (opts) => {
     try {
       const packPath = opts.pack as string;
@@ -1774,6 +1787,32 @@ sourceCardCmd
         process.stdout.write(`  entries applied:     ${result.applied}\n`);
         process.stdout.write(`  source_ids touched:  ${result.distinctSourceIds}\n`);
         process.stdout.write(`  ledger:              ${result.ledgerPath}\n`);
+
+        // R-013: when --rebuild-cards is paired with --apply, materialize
+        // the newly-applied (plus any previously-applied) overrides into
+        // the persisted card raw JSON. No re-fetch.
+        if (opts.rebuildCards) {
+          const rb = await rebuildSourceCards({ packPath });
+          process.stdout.write(`source-card rebuild (R-013):\n`);
+          process.stdout.write(`  cards considered:    ${rb.rebuilt}\n`);
+          process.stdout.write(`  cards changed:       ${rb.changed}\n`);
+          process.stdout.write(`  cards unchanged:     ${rb.unchanged}\n`);
+          process.stdout.write(`  cards skipped:       ${rb.skipped}\n`);
+          process.stdout.write(`  rebuild ledger:      ${rebuildLedgerPath(packPath)}\n`);
+        }
+        return;
+      }
+
+      // R-013 standalone path: --rebuild-cards without --apply rebuilds
+      // from the current on-disk override ledger.
+      if (opts.rebuildCards) {
+        const rb = await rebuildSourceCards({ packPath });
+        process.stdout.write(`source-card rebuild (R-013):\n`);
+        process.stdout.write(`  cards considered:    ${rb.rebuilt}\n`);
+        process.stdout.write(`  cards changed:       ${rb.changed}\n`);
+        process.stdout.write(`  cards unchanged:     ${rb.unchanged}\n`);
+        process.stdout.write(`  cards skipped:       ${rb.skipped}\n`);
+        process.stdout.write(`  rebuild ledger:      ${rebuildLedgerPath(packPath)}\n`);
         return;
       }
 
