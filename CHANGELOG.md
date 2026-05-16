@@ -4,6 +4,73 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-05-16 — Synth Planner Timeout Override (Path C Patch)
+
+v0.12.1 is a single-repair patch on top of v0.12.0. It ships R-018 only — a research-os-side wrapper timeout on synth prose MCP `callTool` calls, controlled by an operator-discoverable CLI flag and env var with default behavior preserved byte-identical to v0.12.0.
+
+The release exists because the v0.4 operator-aloneness gate against npm `@mcptoolshop/research-os@0.12.0` returned **PASS_WITH_CONDITIONS, NOT authorization-grade** (`operator_aloneness_dst_v0.4`). The v0.11 defense floor held under live load (R-007 / R-009 / R-010 / R-011 all PROVEN_LIVE; R-008 not needed this run). All six v0.12 coverage-recovery surfaces fired live and carried the operator: R-012 LLM rescue auto-rescued 24/28 source_content_mismatch claims; R-013 rebuilt 19 cards through cached-body buildCard; R-014 exercised both state-changed and no-regen-needed paths; R-015 resume+progress shipped; R-016 example consulted before override authoring; R-017 missed one natural policy-phrasing keyword and was logged as a v0.13 candidate. Sealed envelope coverage reached PASS thresholds (4/5 SUPPORTED + 1 PARTIAL must-include; 2/3 SUPPORTED + 1 PARTIAL moderators; 0/3 traps; 0/5 material failures triggered). Contamination markers were all HARMLESS. The single failure mode was finalization: synth prose hit `TIER_TIMEOUT` reproducibly at ~15010ms vs the 15s Instant-tier budget across both gate-eligible sections, with no documented CLI / env-var override to raise it. Section briefs were envelope-compliant; the pack just couldn't reach freeze.
+
+Path C disposition (new pattern earned at v0.4) — when Session B identifies a single named failure mechanism with an explicit patch path AND envelope coverage is at PASS thresholds AND the defense floor is preserved AND contamination is HARMLESS, the disposition is: ship the patch, rerun the same operator path against the patched version, re-grade. No envelope re-authoring. No human rater. No v0.13 architectural arc. v0.12.1 is the named patch; the v0.4 rerun against published v0.12.1 is the prerequisite for Admissibility Slice 1 authorization.
+
+> **v0.4 proves coverage-grade Research-OS at the section-brief level.**
+> **v0.12.1 must prove finalization-grade by removing the single planner-timeout bottleneck without weakening the defense floor.**
+
+### Added
+
+- **`research-os synth section <id> --planner-timeout-ms <N>`** (R-018, commit `e6957dd`) — opt-in CLI flag that overrides the research-os-side wrapper timeout for synth prose MCP `callTool` calls on a per-section synth run. Also registered on `synth workspace --section <id>`. Accepts integers in `[1, 600000]` (600000ms = 10-minute safety rail against typo runaway). Documented in `--help` with default, upper bound, and env-var alternative.
+- **`RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=<N>` env var** (R-018) — equivalent override surface for environments where flag plumbing is awkward (CI runs, batch scripts). Same `[1, 600000]` range. Empty-string env var is treated as unset (resolves to default).
+- **`planner_timeout_ms` in synthesis manifest + ProseBlock metadata** (R-018) — always populated on every synth section run, defaulting to `15000` when no override is active. Operator can read the active budget directly from `section-synthesis.json` without re-deriving from flags + env state.
+- **`planner_timeout_overridden_by` field** (R-018, optional) — present only on override, naming the source (`'cli'` or `'env'`) responsible for the active value. Absence means default. Same shape in both manifest and ProseBlock metadata.
+- **Pre-prose-generation stderr log line** (R-018) — `[synth] planner_timeout_ms=N source=… section=<id>` emitted before every synth prose call. Operator sees what budget the run is about to use; appears whether default or overridden.
+- **`wrapClientWithTimeout(client, plannerTimeoutMs)` Promise.race wrapper** (R-018) — research-os-side per-`callTool` timeout authority. On timeout, rejects with a `TIER_TIMEOUT`-shaped error whose message embeds `elapsed=<N>ms` + `budget=<N>ms` — matching the R-010 `classifyFallbackCause` regex shape, so AI-advisor TIER_TIMEOUT visibility continues to surface a cause downstream on default-path runs.
+
+### Changed
+
+- **Synth prose path now flows through `wrapClientWithTimeout` before planner / drafter / verifier** (R-018, `src/synth/prose/run.ts`) — the `ProseCallToolClient` interface is decorated per-call with a Promise.race against `setTimeout(reject, plannerTimeoutMs)`. The underlying MCP client is structurally unchanged (no signal parameter added; `AbortController` not needed at this layer because the next CLI invocation gets a fresh subprocess). Default value `15000` matches the de-facto observed Instant-tier number from the v0.4 gate, so v0.12.0 path-equivalent behavior is preserved with no override.
+- **`SectionSynthesisOptions` extended** (R-018, `src/synth/types.ts`) — optional `plannerTimeoutMs` + `plannerTimeoutSource` fields. Pre-R-018 callers that don't set the field get the default. Closed `PLANNER_TIMEOUT_SOURCES` enum (3 values: `default | cli | env`).
+- **`ProseBlock` + `ProseRunInput` shape extended** (R-018, `src/synth/prose/types.ts`) — `DEFAULT_PLANNER_TIMEOUT_MS = 15000`, `MIN_PLANNER_TIMEOUT_MS = 1`, `MAX_PLANNER_TIMEOUT_MS = 600000`, plus helpers `validatePlannerTimeoutValue` / `resolvePlannerTimeout` / `formatPlannerTimeoutLogLine` / `wrapClientWithTimeout`. Additive evolution — no existing tests required changes.
+
+### Fixed
+
+- **No documented CLI flag or env var to raise the synth prose planner timeout** (R-018, originating bug). The v0.4 operator-aloneness gate showed `synth section` hitting `TIER_TIMEOUT` reproducibly at ~15010ms vs the 15s Instant-tier budget across both gate-eligible sections, with no operator surface to raise the budget. Section briefs (substantive partial-synthesis artifacts with grounded claims) were produced before the timeout; only the prose-rendering stage timed out. The operator tested across 3 INTERN_PROFILE values per Session B; no profile produced a different budget. R-018 adds research-os-side authority over the planner budget via the Promise.race wrapper, with the override discoverable from `--help` and visible in synthesis metadata + stderr.
+- **Invalid override values silently degrading or hanging** (R-018) — negative numbers, zero, non-numeric strings, unit-suffixed strings (`10s`, `30000ms`), and values above `MAX_PLANNER_TIMEOUT_MS` (600000) now produce a clear error message naming the surface (`--planner-timeout-ms` or `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS`) and the offending value, and exit with a non-zero status. No silent fallback.
+
+### Architectural note (logged for downstream consumers)
+
+The "15000ms Instant-tier budget" the v0.4 gate hit lives in `ollama-intern-mcp/src/profiles.ts:58` (`DEV_RTX5080_TIMEOUTS.instant = 15_000`), NOT in research-os. Pre-R-018 research-os enforced **no** planner timeout — the timeout fired server-side in ollama-intern-mcp's tier policy. The fallback chain (`ollama_extract` runs on workhorse tier at 20000ms; on timeout, `TIER_FALLBACK.workhorse = "instant"` retries at 15000ms; the final `TIER_TIMEOUT` error reports the LAST attempted tier's `elapsed + budget`) is what produced the observed `elapsed=15010ms budget=15000ms`. ollama-intern-mcp's author explicitly documents that profile timeouts are **not** env-overridable ("hardware property, not a one-off tuning knob" — `profiles.ts:153`). R-018's resolution introduces research-os's own authority over the budget (Promise.race wrapper, defaulting to the de-facto observed Instant-tier number) rather than chasing the override through ollama-intern-mcp's hardware-property timeouts. On override, research-os waits longer than the server-side fallback chain would have allowed before its own timeout fires. The shipping shape honors the R-018 product law ("expose existing internal value with operator-discoverable override") even though the literal architectural premise about WHERE the value lives was wrong.
+
+### Preserved
+
+- **`pack freeze` semantics unchanged.** R-018 wraps the synth prose path only. The frozen 4-pack regression confirms freeze-receipt behavior is unaffected; the wrapper fires only during live prose generation, not during pack-publish or freeze.
+- **`pack publish` semantics unchanged.** No new publish gate. The wrapper is a synth-time authority, not a publish-time gate.
+- **`R-010 fallback-cause regex shape preserved.** R-010 (v0.11 Slice 4) added `classifyFallbackCause` with regexes `/elapsed=(\d+)ms/` and `/budget=(\d+)ms/` extracting numbers from the MCP error message. R-018's wrapper produces new error instances (research-os-side timeouts) that conform to the same shape, so R-010 visibility continues to surface a cause on default-path runs. Asserted via schema-compat test.
+- **All v0.10 + v0.11 + v0.12 defenses preserved.** R-002 / R-003 / R-005 / R-007 / R-008 / R-009 / R-010 / R-011 / R-012 / R-013 / R-014 / R-015 / R-016 / R-017 all untouched. R-018 is a thin operator-knob patch, not an architectural change.
+- **Frozen-pack regression byte-identical** against v0.3.3 baselines for all four frozen packs — **sixteenth consecutive release** where this holds. The four packs were frozen pre-R-018; their receipts cannot regress on a surface-only additive change.
+- **`accepted_claim_floor` remains unwaiveable.** No recovery / advisor / verifier changes in R-018.
+- **Closed enums unchanged.** `FailureShape` (9), `RECOVERY_ACTIONS` (8), `REGENERATION_REASONS` (3), `POLICY_KEYWORDS` (8), `POLICY_RELEVANT_SOURCE_TYPES` (1) all unchanged. R-018 adds `PLANNER_TIMEOUT_SOURCES` (3) as new operator-bookkeeping vocabulary distinct from any gate-routing enum.
+- **AI recovery advisor prompt template untouched.** R-018 does not enter the recover/ code path.
+- **MCP architecture unchanged.** `ollama-intern-mcp@^2.4.0` carries through unchanged. No new MCP tool args; no new MCP tool. The wrapper sits between research-os synth code and the MCP `callTool` interface.
+
+### Not shipped
+
+- v0.13 candidates from the v0.4 gate (F-2 R-009 audit↔extract divergence; F-3 cowork-handoff staleness; F-4 R-017 POLICY_KEYWORDS narrowness). Independent of finalization; v0.13 arc.
+- v0.5 gate-scaffolding doctrine (architect-side findings A-1 README + RUN_CHECKLIST architect-facing context leak; A-2 memory-gate hook collision). Out of patch scope.
+- Admissibility Slice 1. Still gated on v0.4 rerun PASS against published v0.12.1.
+- v1 readiness.
+- R-006 (recover prerequisite chain surfacing, MEDIUM severity from v0.1) — still deferred opportunistically.
+
+### Test counts and regression
+
+- 1542 → 1586 vitest passing (+44 R-018 acceptance tests covering default-unchanged, CLI flag override, env-var override, precedence, invalid-value rejection, metadata visibility, --help text, v0.4 replay condition, R-010 regex-shape compatibility, defense-floor preservation snapshots, and v0.12 module smoke imports). 156 → 157 test files.
+- 4-pack regression byte-identical against v0.3.3 baselines (**sixteenth consecutive** release-test).
+- Translations: 7/7 (ja, zh, es, fr, hi, it, pt-BR) regenerated via TranslateGemma 12B locally **before** publish (zero API cost). First pass with `--concurrency=1` per the v0.12.0 CJK-cold-load mitigation doctrine.
+
+### Operator upgrade note
+
+- **Default behavior is preserved byte-identical to v0.12.0.** Operators who don't set `--planner-timeout-ms` or `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS` see no observable change beyond the new stderr log line and the new `planner_timeout_ms` field in `section-synthesis.json` / ProseBlock metadata.
+- **Operators preparing the v0.4 rerun** (against published v0.12.1) should use `--planner-timeout-ms 30000` (or set `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000`) on `synth section` to raise the budget past the observed 15010ms timing. The override surfaces in synthesis metadata, so the rerun's `section-synthesis.json` is self-documenting.
+- **Stale global install** of `@mcptoolshop/research-os@0.12.0` at `C:\Users\mikey\AppData\Roaming\npm\research-os` (or equivalent on Mac / Linux) will intercept `npx -y @mcptoolshop/research-os@0.12.1` invocations. Operators planning to rerun the v0.4 operator-aloneness gate against v0.12.1 should `npm uninstall -g @mcptoolshop/research-os` first OR use a fresh project-local install for the gate run (mirrors the v0.3 / v0.4 gate hygiene discipline).
+
 ## [0.12.0] - 2026-05-16 — Coverage-Recovery Release
 
 v0.12.0 closes the v0.3 operator-aloneness gate findings surfaced 2026-05-16 (`operator_aloneness_dst_v0.3`, PASS_WITH_CONDITIONS but not authorization-grade). The release is a four-slice arc covering six named findings (R-012 through R-017) across two halves: three architectural repairs that close the v0.4-blocking coverage gaps, and three ergonomic closures that improve the operator surface the v0.4 gate will exercise. v0.3 failed authorization not because defenses regressed — all five v0.11 defense surfaces (R-007 through R-011) fired exactly as designed, captured the contamination cases they were built for, and produced a clean honest narrow synthesis with zero silent-wrong content — but because the same defenses, working correctly, trimmed load-bearing primary-source coverage out of the accepted-claim base. The pack reached FROZEN, the operator hit the gate honestly, and the sealed envelope showed 3/5 must-include claims MISSING + 2/3 moderators MISSING + 2/5 material failure conditions TRIGGERED (failure_3 no null-result; failure_4 AASM omitted). The doctrine ratchet earned at v0.3 named the failure shape: defense-grade operator-aloneness PROVEN; coverage-grade operator-aloneness NOT yet. v0.12.0 is the answer.

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.0"><img src="https://img.shields.io/badge/version-0.12.0-blue" alt="version 0.12.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.1"><img src="https://img.shields.io/badge/version-0.12.1-blue" alt="version 0.12.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -203,7 +203,48 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) and the
 [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## New in v0.12.0 — Coverage-Recovery Release
+## New in v0.12.1 — Synth Planner Timeout Override (Path C Patch)
+
+v0.12.1 is a single-repair patch on top of v0.12.0. It ships R-018 only — a research-os-side wrapper timeout on synth prose MCP `callTool` calls, controlled by an operator-discoverable CLI flag (`--planner-timeout-ms <N>` on `synth section` and `synth workspace`) and matching env var (`RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=<N>`). Precedence: CLI flag > env var > default (15000ms). Default behavior is preserved byte-identical to v0.12.0.
+
+The release exists because the v0.4 operator-aloneness gate against `@mcptoolshop/research-os@0.12.0` returned **PASS_WITH_CONDITIONS, not authorization-grade** (`operator_aloneness_dst_v0.4`). The v0.11 defense floor held under live load; all six v0.12 coverage-recovery surfaces fired and carried the operator; sealed envelope coverage reached PASS thresholds (4/5 SUPPORTED + 1 PARTIAL must-include; 2/3 SUPPORTED + 1 PARTIAL moderators; 0/3 traps; 0/5 material failures triggered); contamination markers were all HARMLESS. The single failure mode was finalization: synth prose hit `TIER_TIMEOUT` reproducibly at ~15010ms vs the 15s Instant-tier budget with no documented operator override. Section briefs were envelope-compliant; the pack just couldn't reach freeze.
+
+**Path C disposition** (new pattern earned at v0.4): when Session B identifies a single named failure mechanism with an explicit patch path AND envelope coverage is at PASS thresholds AND defense floor preserved AND contamination HARMLESS, the disposition is — ship the patch, rerun the same operator path against the patched version, re-grade. No envelope re-authoring. No human rater. No v0.13 architectural arc.
+
+> **v0.4 proves coverage-grade Research-OS at the section-brief level.**
+> **v0.12.1 must prove finalization-grade by removing the single planner-timeout bottleneck without weakening the defense floor.**
+
+### What you can run
+
+```sh
+research-os synth section <id> --planner-timeout-ms 30000
+                                          # Raise planner budget for finalization (R-018)
+RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000 research-os synth section <id>
+                                          # Equivalent env-var path (R-018)
+```
+
+The active budget surfaces in `section-synthesis.json` (`planner_timeout_ms` always populated + `planner_timeout_overridden_by` present only on override), ProseBlock metadata, and stderr (`[synth] planner_timeout_ms=N source=… section=<id>` emitted before prose generation). `synth section --help` documents the flag, default, upper bound (600000ms safety rail), and env-var alternative. Invalid values (negative, zero, non-numeric, unit-suffixed strings, > 600000) fail clearly with a non-zero exit code naming the surface + offending value. No silent fallback.
+
+### Architectural note
+
+The 15000ms budget the v0.4 gate hit lives in `ollama-intern-mcp` (`profiles.ts:58`, `DEV_RTX5080_TIMEOUTS.instant`), NOT research-os. Pre-R-018 research-os enforced no planner timeout — the timeout fired server-side in ollama-intern-mcp's tier policy. R-018's resolution introduces research-os's own authority over the budget via a `Promise.race` wrapper around the MCP `callTool`, defaulting to the de-facto observed Instant-tier number (15000ms) so default behavior is preserved. R-018's wrapper produces `TIER_TIMEOUT`-shaped errors that match the R-010 `classifyFallbackCause` regex (`/elapsed=(\d+)ms/` + `/budget=(\d+)ms/`), preserving downstream AI-advisor visibility on default-path runs.
+
+### Defense floor preserved
+
+R-018 is a thin operator-knob patch, not an architectural change. R-002 / R-003 / R-005 / R-007 / R-008 / R-009 / R-010 / R-011 / R-012 / R-013 / R-014 / R-015 / R-016 / R-017 all untouched. `accepted_claim_floor` remains unwaiveable. Closed enums unchanged (`FailureShape` at 9; `RECOVERY_ACTIONS` at 8; `REGENERATION_REASONS` at 3; `POLICY_KEYWORDS` at 8; `POLICY_RELEVANT_SOURCE_TYPES` at 1). AI recovery advisor prompt template untouched. MCP architecture unchanged — `ollama-intern-mcp@^2.4.0` carries through. R-018 adds `PLANNER_TIMEOUT_SOURCES` (3) as new operator-bookkeeping vocabulary distinct from any gate-routing enum.
+
+Frozen-pack regression byte-identical against v0.3.3 baselines for all four frozen packs — **sixteenth consecutive release** where this holds. 1542 → 1586 vitest passing (+44 R-018 acceptance tests).
+
+### What v0.12.1 does NOT claim
+
+- v1 readiness.
+- v0.4 operator-aloneness gate rerun verdict. v0.4 reruns against `@mcptoolshop/research-os@0.12.1` in a separate session; v0.12.1 is the prerequisite for finalization-grade, not the proof.
+- Admissibility Slice 1. Gated on v0.4 rerun PASS — the v0.4 doctrine ratchet (defense-grade aloneness PROVEN; coverage-grade aloneness SUBSTANTIVELY PROVEN at section-brief level; finalization-grade pending v0.12.1) remains the locked test.
+- v0.13 candidates (F-2 R-009 audit↔extract divergence; F-3 cowork-handoff staleness; F-4 R-017 POLICY_KEYWORDS narrowness). Independent of finalization.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release entry.
+
+## Previously: v0.12.0 — Coverage-Recovery Release
 
 v0.12.0 closes the v0.3 operator-aloneness gate findings surfaced 2026-05-16 (`operator_aloneness_dst_v0.3`, PASS_WITH_CONDITIONS but not authorization-grade). Six named findings across four slices: three architectural repairs that close the v0.4-blocking coverage gaps (R-012, R-013, R-014), and three ergonomic closures that improve the operator surface the v0.4 gate will exercise (R-015, R-016, R-017). v0.3 did not fail because defenses regressed — all five v0.11 defense surfaces fired exactly as designed, produced a clean honest synthesis with zero silent-wrong content, and the pack froze on real-but-narrow evidence. It failed because the same defenses, working correctly, trimmed load-bearing primary-source coverage out of the accepted-claim base. The doctrine ratchet earned at v0.3:
 
@@ -332,25 +373,25 @@ v0.8.0 reconnected research-os to its declared local-LLM substrate (`ollama-inte
 
 **v1 Experiment 1 (ComfyUI workflow durability)** — CLOSED 2026-05-09. All 8 sections at Terminal A, pack frozen, archive live. See [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
-### What research-os is not (and v0.12.0 does not claim to be)
+### What research-os is not (and v0.12.1 does not claim to be)
 
-- Not operator-aloneness-proven on fresh packs. v0.12.0 closes the v0.3 gate findings (defense-grade aloneness PROVEN; coverage-grade aloneness NOT yet — the doctrine ratchet earned at v0.3); v0.4 of the operator-aloneness gate fires against this npm release in a separate session and may surface further repairs. v0.12.0 is the prerequisite for v0.4, not the proof.
-- Not battle-tested by external users beyond the dogfood arcs and the three operator-aloneness gate runs. Six dogfood experiments closed — one self-referential, five external-domain (ComfyUI, XRPL, Godot, reviewer-calibration, deterministic-reviewer) — plus v0.1 / v0.2 / v0.3 operator-aloneness gate runs surfacing 17 named findings (R-001 through R-005 closed in v0.10.0, R-007 through R-011 closed in v0.11.0, R-012 through R-017 closed in v0.12.0). External operator usage at scale remains future work.
-- Not a full-pack synthesis writer. v0.12.0 inherits v0.9's section-scope (`synth section`) and partial-pack-scope (`synth pack --partial`) prose surfaces, each with explicit pack-readiness disclosure. Full-pack synthesis still requires a `synthesis_ready` pack and human (or Cowork) authoring against accepted claim IDs via `synth workspace`.
-- Not an endorsement of any reviewer model. v0.12.0 does not ship a `trusted_baseline` reviewer profile by default; calibration receipts are evidence, not endorsement. The existing v0.6.0 calibration receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path. See the [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+- Not operator-aloneness-proven on fresh packs. v0.12.0 closed the v0.3 gate findings (defense-grade aloneness PROVEN; coverage-grade aloneness NOT yet — the doctrine ratchet earned at v0.3); the v0.4 gate against v0.12.0 returned PASS_WITH_CONDITIONS (NOT authorization-grade) — defense floor preserved, coverage-grade SUBSTANTIVELY PROVEN at section-brief level, single failure mode at finalization. v0.12.1 patches that single failure mode (R-018). The v0.4 rerun against this npm release fires in a separate session and is the prerequisite for finalization-grade.
+- Not battle-tested by external users beyond the dogfood arcs and the four operator-aloneness gate runs. Six dogfood experiments closed — one self-referential, five external-domain (ComfyUI, XRPL, Godot, reviewer-calibration, deterministic-reviewer) — plus v0.1 / v0.2 / v0.3 / v0.4 operator-aloneness gate runs surfacing 18 named findings (R-001 through R-005 closed in v0.10.0, R-007 through R-011 closed in v0.11.0, R-012 through R-017 closed in v0.12.0, R-018 closed in v0.12.1). External operator usage at scale remains future work.
+- Not a full-pack synthesis writer. v0.12.1 inherits v0.9's section-scope (`synth section`) and partial-pack-scope (`synth pack --partial`) prose surfaces, each with explicit pack-readiness disclosure. Full-pack synthesis still requires a `synthesis_ready` pack and human (or Cowork) authoring against accepted claim IDs via `synth workspace`.
+- Not an endorsement of any reviewer model. v0.12.1 does not ship a `trusted_baseline` reviewer profile by default; calibration receipts are evidence, not endorsement. The existing v0.6.0 calibration receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path. See the [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 - Not free of historical artifacts in frozen packs. Pre-v0.4 frozen packs carry `research_os_version: '0.1.0'` due to a pre-v0.4 hardcoded scaffold constant; the fix landed in v0.4.0 but earlier frozen packs are immutable under Law 15 (see [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
-- Not provenance-attested on npm. Sigstore provenance attestation is deferred to a future release; verify v0.12.0 npm packages via package-shasum and the GitHub release commit.
-- Not a cloud-baseline win. The product proof at `local-first-vs-cloud-research/` from v0.7.x identified cloud's advantages on readability and operator burden; v0.12.0 does not claim those have been overcome.
+- Not provenance-attested on npm. Sigstore provenance attestation is deferred to a future release; verify v0.12.1 npm packages via package-shasum and the GitHub release commit.
+- Not a cloud-baseline win. The product proof at `local-first-vs-cloud-research/` from v0.7.x identified cloud's advantages on readability and operator burden; v0.12.1 does not claim those have been overcome.
 
 ### Known limitations
 
-v0.12.0 ships with three operator-visible known limitations carried over from prior releases. Each is documented in the [handbook known-limitations page](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) and in [CHANGELOG.md](CHANGELOG.md). None block release; all have a defined recovery or mitigation path.
+v0.12.1 ships with three operator-visible known limitations carried over from prior releases. Each is documented in the [handbook known-limitations page](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) and in [CHANGELOG.md](CHANGELOG.md). None block release; all have a defined recovery or mitigation path.
 
 - **B-E-001 — pre-v0.4 frozen-pack version stamp is a historical artifact.** Frozen packs published under v0.3.3 through v0.6.0 carry `research_os_version: "0.1.0"` in `pack.manifest.json` and `pack/research.yaml` due to a pre-v0.4 hardcoded scaffold constant. The fix landed in v0.4.0 (scaffold now imports the live `RESEARCH_OS_VERSION`); earlier frozen packs are immutable under Law 15. Audit JSONs inside affected packs already carry their contemporary versions.
-- **B-E-004 — npm provenance attestation is deferred to a future release.** The v0.12.0 npm tarball verifies via package-shasum only. Migrating the publish flow to a CI workflow with sigstore OIDC conflicts with the translation-before-publish discipline (TranslateGemma 12B runs locally); the migration is planned for a future release. Verify v0.12.0 npm packages via package-shasum and the GitHub release commit.
-- **B-A-003 — indexer schema-version migration is documented, not enforced.** v0.12.0 ships a write-side `SCHEMA_VERSION` integer but no read-side migration runner. On a documented `SCHEMA_VERSION` bump, delete `.research-os/index.sqlite` and rerun `research-os index build --all`. The pack itself is unaffected — the indexer is an acceleration layer over evidence + claims (Law 8); rebuilding is idempotent.
+- **B-E-004 — npm provenance attestation is deferred to a future release.** The v0.12.1 npm tarball verifies via package-shasum only. Migrating the publish flow to a CI workflow with sigstore OIDC conflicts with the translation-before-publish discipline (TranslateGemma 12B runs locally); the migration is planned for a future release. Verify v0.12.1 npm packages via package-shasum and the GitHub release commit.
+- **B-A-003 — indexer schema-version migration is documented, not enforced.** v0.12.1 ships a write-side `SCHEMA_VERSION` integer but no read-side migration runner. On a documented `SCHEMA_VERSION` bump, delete `.research-os/index.sqlite` and rerun `research-os index build --all`. The pack itself is unaffected — the indexer is an acceleration layer over evidence + claims (Law 8); rebuilding is idempotent.
 
-**No `trusted_baseline` reviewer profile is admitted at v0.12.0.** This is an intentional trust posture, not a gap: calibration receipts in the repo (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) record the evidence. Trust is earned through repeated seeded-failure recall, not assumed. These receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path.
+**No `trusted_baseline` reviewer profile is admitted at v0.12.1.** This is an intentional trust posture, not a gap: calibration receipts in the repo (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) record the evidence. Trust is earned through repeated seeded-failure recall, not assumed. These receipts predate the v0.8.0 MCP architecture and have not been re-baselined under the MCP path.
 
 ## Roadmap to v1.0
 

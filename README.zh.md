@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.0"><img src="https://img.shields.io/badge/version-0.12.0-blue" alt="version 0.12.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.1"><img src="https://img.shields.io/badge/version-0.12.1-blue" alt="version 0.12.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,7 +182,48 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
 
-## v0.12.0 版本：覆盖范围恢复发布
+## 新功能 v0.12.1 — 合成规划器超时设置（路径 C 补丁）
+
+v0.12.1 是一个针对 v0.12.0 的单点修复补丁。它仅包含 R-018，即一个研究操作系统层面的包装超时设置，用于合成文本的 MCP `callTool` 调用。该设置由一个可供操作员发现的命令行标志控制（在 `synth section` 和 `synth workspace` 中使用 `--planner-timeout-ms <N>`），以及相应的环境变量 (`RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=<N>`)。优先级：命令行标志 > 环境变量 > 默认值 (15000 毫秒)。默认行为与 v0.12.0 完全相同。
+
+此版本存在的原因是，针对 `@mcptoolshop/research-os@0.12.0` 的 v0.4 操作员独立性验证返回了 **PASS_WITH_CONDITIONS，而不是授权级别的通过** (`operator_aloneness_dst_v0.4`)。v0.11 的安全底线在实际负载下保持稳定；所有六个 v0.12 的覆盖范围恢复模块都已启动并承载了操作员；密封信封覆盖范围达到了通过阈值（必须包含 4/5 支持项 + 1 个部分项；2/3 支持项 + 1 个部分项的调节器；0/3 个陷阱；0/5 个材料故障触发）；所有污染标记均为无害。唯一的故障模式是最终化：合成文本在 ~15010 毫秒时可重复地触发 `TIER_TIMEOUT` 错误，而 15 秒的即时层级预算中没有记录任何操作员的覆盖设置。部分摘要符合信封要求；但该软件包无法进入冻结状态。
+
+**路径 C 的处理方式**（在 v0.4 中获得的新的模式）：当会话 B 识别出一个明确的、命名的故障机制，并且信封覆盖范围达到通过阈值，安全底线保持稳定，且污染为无害时，处理方式是：发布补丁，重新运行相同的操作员路径，针对已修复的版本进行重新评估。不进行信封的重新授权。没有人工评估员。没有 v0.13 的架构升级。
+
+> **v0.4 证明了研究操作系统在部分摘要级别的覆盖范围等级。**
+> **v0.12.1 必须通过消除单个规划器超时瓶颈，同时保持安全底线，来证明最终化的等级。**
+
+### 您可以运行的内容
+
+```sh
+research-os synth section <id> --planner-timeout-ms 30000
+                                          # Raise planner budget for finalization (R-018)
+RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000 research-os synth section <id>
+                                          # Equivalent env-var path (R-018)
+```
+
+活动预算信息位于 `section-synthesis.json` 文件中（`planner_timeout_ms` 始终已填充，`planner_timeout_overridden_by` 仅在覆盖时才存在），ProseBlock 元数据以及标准错误输出（在合成文本生成之前，会输出 `[synth] planner_timeout_ms=N source=… section=<id>`）。`synth section --help` 文档记录了该标志、默认值、上限（600000 毫秒的安全范围）以及环境变量的替代方案。无效值（负数、零、非数字、带有单位后缀的字符串、大于 600000）会明确地以非零退出码失败，并显示导致错误的表面信息和错误值。没有静默回退。
+
+### 架构说明
+
+v0.4 验证通过的 15000 毫秒预算位于 `ollama-intern-mcp` 中（`profiles.ts:58`, `DEV_RTX5080_TIMEOUTS.instant`），而不是研究操作系统中。在 R-018 之前，研究操作系统没有强制执行规划器超时——超时是在 ollama-intern-mcp 的层级策略中服务器端触发的。R-018 的解决方案通过在 MCP `callTool` 周围使用 `Promise.race` 包装器，引入了研究操作系统对其预算的自主控制，默认值与实际观察到的即时层级数字（15000 毫秒）相同，从而保持了默认行为。R-018 的包装器会产生与 R-010 的 `classifyFallbackCause` 正则表达式匹配的 `TIER_TIMEOUT` 类型的错误（`/elapsed=(\d+)ms/` + `/budget=(\d+)ms/`），从而在默认路径运行中，保留了下游 AI 顾问对默认行为的可视性。
+
+### 安全底线保持稳定
+
+R-018 只是一个细微的、与操作相关的参数调整，不是架构上的改变。R-002 / R-003 / R-005 / R-007 / R-008 / R-009 / R-010 / R-011 / R-012 / R-013 / R-014 / R-015 / R-016 / R-017 均未进行修改。`accepted_claim_floor` 仍然是不可放弃的。枚举类型未进行更改（`FailureShape` 为 9；`RECOVERY_ACTIONS` 为 8；`REGENERATION_REASONS` 为 3；`POLICY_KEYWORDS` 为 8；`POLICY_RELEVANT_SOURCE_TYPES` 为 1）。AI 恢复建议的提示模板未进行修改。MCP 架构未发生变化——`ollama-intern-mcp@^2.4.0` 保持不变。R-018 增加了 `PLANNER_TIMEOUT_SOURCES` (3)，作为一种新的、与任何网关路由枚举类型都不同的操作相关词汇。
+
+所有四个冻结包的回归测试与 v0.3.3 的基线版本完全一致——这是**连续第十六次**发布的版本，保持了这一特性。1542 → 1586，vitest 测试通过，增加了 44 个 R-018 的验收测试。
+
+### v0.12.1 版本不包含的内容
+
+- v1 版本的可用性。
+- v0.4 版本的独立运行门禁的最终判定。v0.4 版本的运行是在 `@mcptoolshop/research-os@0.12.1` 环境下进行的，这是一个独立的会话；v0.12.1 是最终版本的基础，而不是证明。
+- 可接受性 Slice 1。 依赖于 v0.4 版本的运行结果，如果通过，则通过。 v0.4 版本的策略（防御级别的独立性已证明；覆盖级别的独立性已在概要级别上实质性地证明；最终级别的独立性等待 v0.12.1 的验证）仍然是关键测试。
+- v0.13 版本的候选内容（F-2 R-009 审计↔提取的差异；F-3 协作交接的陈旧性；F-4 R-017 `POLICY_KEYWORDS` 的局限性）。 与最终版本无关。
+
+请参阅 [CHANGELOG.md](CHANGELOG.md) 以获取完整的发布说明。
+
+## 之前版本：v0.12.0 — 覆盖范围恢复版本
 
 v0.12.0 版本修复了 2026-05-16 发现的 v0.3 版本中的“独立操作员”问题（`operator_aloneness_dst_v0.3`），虽然通过了测试（PASS_WITH_CONDITIONS），但未达到授权级别的标准。本次发布包含四个方面的改进，共六个修复点：三个架构改进，解决了阻碍 v0.4 版本的覆盖范围不足问题（R-012、R-013、R-014）；三个用户体验改进，提升了 v0.4 版本测试环节的操作界面体验（R-015、R-016、R-017）。 v0.3 版本没有因为防御机制失效而失败——所有五个 v0.11 版本的防御机制都按预期运行，生成了干净、可靠的结果，没有隐藏的错误，并且系统在发现真实但范围较小的问题时停止了运行。 失败的原因是，即使防御机制正常工作，它们也会裁剪掉一些关键的、用于验证声明的基础数据覆盖范围。 v0.3 版本的核心原则是：
 
@@ -311,25 +352,25 @@ v0.8.0 将 research-os 重新连接到其声明的本地 LLM 基础 (`ollama-int
 
 **v1 Experiment 1 (ComfyUI 工作流程的稳定性)** — 已于 2026-05-09 结束。 终端 A 的所有 8 个部分已完成，软件包已冻结，归档已上线。 参见 [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) 和 [`docs/roadmap.md`](docs/roadmap.md)。
 
-### research-os 的局限性（以及 v0.12.0 版本不声称具备的功能）
+### research-os 的局限性（以及 v0.12.1 版本不声称具备的特性）
 
-- 未在全新版本中经过独立运行验证。v0.12.0版本解决了v0.3版本中发现的独立运行问题（已证明具有防御级别的独立运行能力；但尚未达到覆盖级别的独立运行能力——v0.3版本获得的“安全机制”）。v0.4版本的独立运行验证将在单独的会话中针对此npm版本进行，并可能发现更多需要修复的问题。v0.12.0是v0.4版本的先决条件，而不是独立运行的证明。
-- 未经外部用户在“内部测试”阶段和三次独立运行验证的全面测试。六个“内部测试”实验已完成，包括一个自指实验，以及五个外部领域实验（ComfyUI、XRPL、Godot、评审员校准、确定性评审员），此外，v0.1/v0.2/v0.3版本的独立运行验证发现了17个已知问题（R-001至R-005在v0.10.0版本中已修复，R-007至R-011在v0.11.0版本中已修复，R-012至R-017在v0.12.0版本中已修复）。大规模的外部用户使用仍是未来的工作内容。
-- 并非完整的合成器。v0.12.0版本继承了v0.9版本中的“章节范围”（`synth section`）和“部分包范围”（`synth pack --partial`）功能，每个功能都明确声明了包的可用性。完整的包合成仍然需要一个`synthesis_ready`的包，以及通过`synth workspace`使用人类（或协作者）编写，并基于已接受的ID。
-- 不代表对任何评审模型的认可。v0.12.0版本默认不包含“可信基线”评审员配置文件；校准记录是证据，而不是认可。现有的v0.6.0版本的校准记录是在v0.8.0版本的MCP架构之前创建的，并且尚未在MCP路径下重新校准。请参阅[评审员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
-- 包含历史遗留问题，无法在已冻结的包中消除。在v0.4版本之前的已冻结版本包含`research_os_version: '0.1.0'`，这是由于v0.4版本之前的硬编码常量；该问题已在v0.4.0版本中修复，但较早的已冻结版本由于“第15条规则”而无法修改（请参阅[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
-- 未在npm上进行溯源验证。Sigstore的溯源验证将推迟到未来的版本；请通过package-shasum和GitHub版本提交来验证v0.12.0版本的npm包。
-- 并非云端解决方案的优势。v0.7.x版本的`local-first-vs-cloud-research/`产品验证中，已经指出了云端在可读性和操作负担方面的优势；v0.12.0版本并未声称已经克服了这些优势。
+- 未经在全新安装包上验证的独立操作能力。v0.12.0 版本解决了 v0.3 版本的相关问题（已证明具有防御级别的独立操作能力；但尚未达到覆盖级别的独立操作能力——v0.3 版本获得的策略机制）。v0.4 版本的测试对 v0.12.0 版本的结果为“条件通过”（未达到授权级别），防御层得到了保留，覆盖级别在章节层面已基本得到证明，但在最终阶段存在单一故障模式。v0.12.1 版本修复了该单一故障模式（R-018）。针对此 npm 版本的重新测试将在单独的会话中进行，并且是达到最终版本级别的先决条件。
+- 未经外部用户在实际使用中进行充分测试，仅限于内部测试和四个独立操作能力测试。六个内部测试已完成，包括一个自我参照测试，以及五个外部领域测试（ComfyUI、XRPL、Godot、评审人员校准、确定性评审）。此外，v0.1 / v0.2 / v0.3 / v0.4 的独立操作能力测试发现了 18 个问题（R-001 至 R-005 在 v0.10.0 版本中已解决，R-007 至 R-011 在 v0.11.0 版本中已解决，R-012 至 R-017 在 v0.12.0 版本中已解决，R-018 在 v0.12.1 版本中已解决）。在更大规模的外部操作方面仍有待进一步研究。
+- 并非完整的合成器。v0.12.1 版本继承了 v0.9 版本的章节范围 (`synth section`) 和部分包范围 (`synth pack --partial`) 功能，每个功能都明确声明了包的可用性。完整的包合成仍然需要一个 `synthesis_ready` 级别的包，以及通过 `synth workspace` 使用人类（或协作者）编写，并基于已接受的声明 ID。
+- 不代表对任何评审模型的认可。v0.12.1 版本默认不包含 `trusted_baseline` 评审人员配置文件；校准记录是证据，而非认可。现有的 v0.6.0 校准记录是在 v0.8.0 MCP 架构之前创建的，并且尚未在 MCP 路径下重新基准。请参阅 [评审人员校准手册页面](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)。
+- 冻结的包中可能包含历史遗留信息。在 v0.4 之前的冻结版本包含 `research_os_version: '0.1.0'`，这是由于 v0.4 之前的硬编码常量。该问题已在 v0.4.0 版本中修复，但较早的冻结版本由于 Law 15 的限制而无法修改（请参阅 [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)）。
+- 未在 npm 上进行溯源验证。Sigstore 溯源验证将在未来的版本中实现；请通过 package-shasum 和 GitHub 发布提交来验证 v0.12.1 版本的 npm 包。
+- 并非云端解决方案的优势。v0.7.x 版本的 `local-first-vs-cloud-research/` 报告指出了云端在可读性和操作负担方面的优势；v0.12.1 版本并未声称这些优势已被克服。
 
 ### 已知的局限性
 
-v0.12.0版本包含三个可见的已知限制，这些限制是从之前的版本中继承而来的。每个限制都记录在[手册中的已知限制页面](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)以及[CHANGELOG.md](CHANGELOG.md)中。 没有任何限制会阻止发布；所有限制都有明确的恢复或缓解方案。
+v0.12.1 版本包含三个用户可见的已知限制，这些限制是从之前的版本中继承而来的。每个限制都记录在 [手册中的已知限制页面](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) 和 [CHANGELOG.md](CHANGELOG.md) 中。 没有任何限制会阻止发布；所有限制都有明确的恢复或缓解方案。
 
-- **B-E-001 — 预 v0.4 版本的“frozen-pack”版本标记是一个历史遗留物。** 在 v0.3.3 到 v0.6.0 之间发布的“frozen pack”版本，由于一个预 v0.4 的硬编码常量，在 `pack.manifest.json` 和 `pack/research.yaml` 文件中包含 `research_os_version: "0.1.0"`。 此问题已在 v0.4.0 版本中修复（现在“scaffold”导入的是实时 `RESEARCH_OS_VERSION`）；更早版本的“frozen pack”在第 15 条规则下是不可变的。受影响的“pack”内部的 JSON 文件已经包含了它们当时的版本信息。
-- **B-E-004 — npm provenance 认证将在未来的版本中实现。** v0.12.0 版本的 npm tarball 仅通过 `package-shasum` 进行验证。 将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）存在冲突；此迁移计划在未来的版本中进行。请通过 `package-shasum` 和 GitHub 发布提交来验证 v0.12.0 版本的 npm 包。
-- **B-A-003 — 索引器 schema-version 迁移已记录，但未强制执行。** v0.12.0 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。当 `SCHEMA_VERSION` 发生记录中的更改时，请删除 `.research-os/index.sqlite` 文件，然后重新运行 `research-os index build --all` 命令。 “pack”本身不受影响——索引器是证据 + 声明的加速层（第 8 条规则）；重建是幂等的。
+- **B-E-001 — 预 v0.4 版本的“frozen-pack”版本标记是一个历史遗留物。** 在 v0.3.3 到 v0.6.0 之间发布的“frozen pack”版本，由于一个预 v0.4 版本的硬编码常量，在 `pack.manifest.json` 和 `pack/research.yaml` 文件中包含 `research_os_version: "0.1.0"`。 此问题已在 v0.4.0 版本中修复（现在“scaffold”导入的是实时 `RESEARCH_OS_VERSION`）；更早版本的“frozen pack”在第 15 条规则下是不可变的。 受影响的“pack”内部的 JSON 文件已经包含了它们当时的版本信息。
+- **B-E-004 — npm provenance 认证将在未来的版本中实现。** v0.12.1 版本的 npm tarball 仅通过 package-shasum 进行验证。 将发布流程迁移到具有 sigstore OIDC 的 CI 工作流，与“发布前翻译”的原则（TranslateGemma 12B 在本地运行）存在冲突；此迁移计划在未来的版本中进行。 请通过 package-shasum 和 GitHub 发布提交来验证 v0.12.1 版本的 npm 包。
+- **B-A-003 — 索引器 schema-version 迁移已记录，但未强制执行。** v0.12.1 版本包含一个写入端的 `SCHEMA_VERSION` 整数，但没有读取端的迁移运行器。 当 `SCHEMA_VERSION` 发生记录中的更改时，请删除 `.research-os/index.sqlite` 文件，然后重新运行 `research-os index build --all` 命令。 “pack”本身不受影响——索引器是证据 + 声明的加速层（第 8 条规则）；重建是幂等的。
 
-**在 v0.12.0 版本中，不接受任何“trusted_baseline”审查者配置文件。** 这是一种有意的信任策略，而不是一个缺陷：存储库中的校准记录（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）记录了相关证据。 信任是通过重复的、有预设失败情况的测试获得的，而不是默认信任。 这些记录早于 v0.8.0 版本的 MCP 架构，并且尚未在 MCP 路径下重新基线。
+**在 v0.12.1 版本中，不接受任何“trusted_baseline”审查者配置文件。** 这是一个有意的信任策略，而不是一个缺陷：存储库中的校准记录（`hermes-two-pass=failed`，`mistral-nemo-two-pass=conditional_pass`，`hermes-single-pass=comparison_only`，`hermes-two-pass-deterministic=failed`）记录了相关证据。 信任是通过重复的、有预设失败情况的验证来获得的，而不是默认信任。 这些记录早于 v0.8.0 版本的 MCP 架构，并且尚未在 MCP 路径下重新基线。
 
 ## 通往 v1.0 的路线图
 
