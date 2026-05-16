@@ -26,6 +26,34 @@ export const SourceTypeGuessSchema = z.enum([
   'unknown',
 ]);
 
+/**
+ * v0.11 Slice 2 — R-008 admission-layer relevance check.
+ * Status values:
+ *   - 'verified': title fetched at discover time; keyword overlap with the
+ *     discover query was at or above threshold.
+ *   - 'unverified': title fetch failed (network, non-HTML, no title tag, or
+ *     check disabled). No signal either way — graceful degradation.
+ *   - 'topic_mismatch': title fetched; keyword overlap was below threshold.
+ *     R-008's defense fires here. Quarantined from `approve --top N` by
+ *     default; explicit `approve --candidate <id>` is the operator override.
+ */
+export const RelevanceStatusSchema = z.enum([
+  'verified',
+  'unverified',
+  'topic_mismatch',
+]);
+
+export const RelevanceCheckSchema = z.object({
+  status: RelevanceStatusSchema,
+  fetched_title: z.string().nullable(),
+  query_keywords: z.array(z.string()),
+  matched_keywords: z.array(z.string()),
+  overlap_score: z.number().min(0).max(1),
+  threshold: z.number().min(0).max(1),
+  error: z.string().nullable(),
+  checked_at: z.string(),
+});
+
 export const DiscoveryCandidateSchema = z.object({
   candidate_id: z.string().regex(/^disc_[a-f0-9]{12}$/),
   section_id: z.string().regex(/^[0-9]{2}-[a-z0-9-]+$/),
@@ -44,6 +72,10 @@ export const DiscoveryCandidateSchema = z.object({
   status: DiscoveryCandidateStatusSchema,
   discovered_by: z.string().min(1),
   reason: z.string().nullable().default(null),
+  // v0.11 Slice 2 (R-008): admission-layer relevance check. Null when the
+  // check was disabled or omitted (back-compat with v0.10 ledgers — pre-R-008
+  // candidate records parse cleanly).
+  relevance: RelevanceCheckSchema.nullable().optional().default(null),
 });
 
 export const DiscoverySummarySchema = z.object({
@@ -63,3 +95,5 @@ export type DiscoveryCandidate = z.infer<typeof DiscoveryCandidateSchema>;
 export type DiscoveryCandidateStatus = z.infer<typeof DiscoveryCandidateStatusSchema>;
 export type SourceTypeGuess = z.infer<typeof SourceTypeGuessSchema>;
 export type DiscoverySummary = z.infer<typeof DiscoverySummarySchema>;
+export type RelevanceStatus = z.infer<typeof RelevanceStatusSchema>;
+export type RelevanceCheck = z.infer<typeof RelevanceCheckSchema>;

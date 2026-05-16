@@ -14,6 +14,7 @@ import {
   type DiscoveryCandidate,
   type DiscoveryCandidateStatus,
   type DiscoverySummary,
+  type RelevanceCheck,
 } from './schema.js';
 import type {
   ApproveOptions,
@@ -26,8 +27,15 @@ import type {
   ExportUrlsResult,
   RejectOptions,
   RejectResult,
+  RelevanceTotals,
 } from './types.js';
 import { LlmHeuristicDiscoverProvider } from './providers/llm-heuristic.js';
+import {
+  assessRelevanceBatch,
+  DEFAULT_RELEVANCE_THRESHOLD,
+  DEFAULT_RELEVANCE_FETCH_TIMEOUT_MS,
+  DEFAULT_RELEVANCE_FETCH_CONCURRENCY,
+} from './relevance.js';
 
 const DEFAULT_TARGET_COUNT = 12;
 
@@ -109,12 +117,27 @@ async function loadSectionPurpose(packPath: string, sectionId: string): Promise<
   return section?.purpose ?? '';
 }
 
+function relevanceCellLabel(c: DiscoveryCandidate): string {
+  if (!c.relevance) return '—';
+  switch (c.relevance.status) {
+    case 'verified':
+      return `verified (${Math.round(c.relevance.overlap_score * 100)}%)`;
+    case 'unverified':
+      return c.relevance.error
+        ? `unverified (${c.relevance.error.slice(0, 40)})`
+        : 'unverified';
+    case 'topic_mismatch':
+      return `**topic_mismatch** (${Math.round(c.relevance.overlap_score * 100)}%)`;
+  }
+}
+
 function buildReportMarkdown(args: {
   sectionId: string;
   query: string;
   provider: string;
   ranAt: string;
   candidates: DiscoveryCandidate[];
+  relevanceTotals: RelevanceTotals;
 }): string {
   const lines: string[] = [];
   lines.push(`# Discovery report: ${args.sectionId}`);
@@ -123,7 +146,23 @@ function buildReportMarkdown(args: {
   lines.push(`- **Provider:** ${args.provider}`);
   lines.push(`- **Ran at:** ${args.ranAt}`);
   lines.push(`- **Candidates:** ${args.candidates.length}`);
+  const r = args.relevanceTotals;
+  const ranAnyCheck = r.verified + r.unverified + r.topic_mismatch > 0;
+  if (ranAnyCheck) {
+    lines.push(
+      `- **Relevance:** ${r.verified} verified, ${r.unverified} unverified, ${r.topic_mismatch} topic_mismatch`,
+    );
+  }
   lines.push('');
+  if (r.topic_mismatch > 0) {
+    lines.push(
+      `> ⚠ ${r.topic_mismatch} candidate${r.topic_mismatch === 1 ? '' : 's'} flagged \`topic_mismatch\` — fetched URL title shows no overlap with the discover query.`,
+    );
+    lines.push(
+      '> These candidates are EXCLUDED from `discover approve --top N` by default. To approve a flagged candidate anyway, name it explicitly: `discover approve <section> --candidate disc_<hex>`.',
+    );
+    lines.push('');
+  }
   lines.push('## Candidates');
   lines.push('');
   if (args.candidates.length === 0) {
@@ -132,13 +171,29 @@ function buildReportMarkdown(args: {
   }
   lines.push('Discovery results are LEADS, not evidence. A lead becomes evidence only after `research-os gather` produces a fetch receipt + source card + excerpt ledger + claim extraction.');
   lines.push('');
-  lines.push('| Rank | Status | Type | Title | Publisher | Why relevant | URL |');
-  lines.push('|---:|---|---|---|---|---|---|');
+  if (ranAnyCheck) {
+    lines.push('| Rank | Status | Relevance | Type | Title (LLM) | Fetched title | Publisher | Why relevant | URL |');
+    lines.push('|---:|---|---|---|---|---|---|---|---|');
+  } else {
+    lines.push('| Rank | Status | Type | Title | Publisher | Why relevant | URL |');
+    lines.push('|---:|---|---|---|---|---|---|');
+  }
   const sorted = [...args.candidates].sort((a, b) => a.rank - b.rank);
   for (const c of sorted) {
-    lines.push(
-      `| ${c.rank} | \`${c.status}\` | ${c.source_type_guess} | ${c.title.replace(/\|/g, '\\|')} | ${(c.publisher ?? '—').replace(/\|/g, '\\|')} | ${c.why_relevant.replace(/\|/g, '\\|')} | ${c.url} |`,
-    );
+    const safeTitle = c.title.replace(/\|/g, '\\|');
+    const safePub = (c.publisher ?? '—').replace(/\|/g, '\\|');
+    const safeWhy = c.why_relevant.replace(/\|/g, '\\|');
+    if (ranAnyCheck) {
+      const fetched = c.relevance?.fetched_title ?? '—';
+      const safeFetched = fetched.replace(/\|/g, '\\|');
+      lines.push(
+        `| ${c.rank} | \`${c.status}\` | ${relevanceCellLabel(c)} | ${c.source_type_guess} | ${safeTitle} | ${safeFetched} | ${safePub} | ${safeWhy} | ${c.url} |`,
+      );
+    } else {
+      lines.push(
+        `| ${c.rank} | \`${c.status}\` | ${c.source_type_guess} | ${safeTitle} | ${safePub} | ${safeWhy} | ${c.url} |`,
+      );
+    }
   }
   lines.push('');
   lines.push('---');
@@ -211,12 +266,41 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
   const existingByUrl = new Map<string, DiscoveryCandidate>();
   for (const e of latestPerCandidate(existing).values()) existingByUrl.set(e.url, e);
 
-  const newCandidates: DiscoveryCandidate[] = [];
+  // Determine which proposals are net-new (not duplicates).
+  const newProposals: DiscoverProposal[] = [];
   for (const p of validProposals) {
     if (existingByUrl.has(p.url)) {
       warnings.push(`Skipped duplicate (already proposed): ${p.url}`);
       continue;
     }
+    newProposals.push(p);
+  }
+
+  // R-008 — admission-layer relevance check. Runs BEFORE candidate-record
+  // construction so each new ledger entry carries its relevance verdict.
+  // Only the new proposals are checked (avoid re-fetching for duplicates).
+  let relevanceChecks: (RelevanceCheck | null)[] = newProposals.map(() => null);
+  const relevanceTotals: RelevanceTotals = { verified: 0, unverified: 0, topic_mismatch: 0 };
+  if (options.relevanceCheck && options.relevanceCheck.enabled && newProposals.length > 0) {
+    const cfg = options.relevanceCheck;
+    const results = await assessRelevanceBatch({
+      urls: newProposals.map((p) => p.url),
+      query,
+      fetchImpl: cfg.fetchImpl,
+      threshold: cfg.threshold ?? DEFAULT_RELEVANCE_THRESHOLD,
+      fetchTimeoutMs: cfg.fetchTimeoutMs ?? DEFAULT_RELEVANCE_FETCH_TIMEOUT_MS,
+      concurrency: cfg.concurrency ?? DEFAULT_RELEVANCE_FETCH_CONCURRENCY,
+      now: options.now,
+    });
+    relevanceChecks = results;
+    for (const rc of results) {
+      relevanceTotals[rc.status] += 1;
+    }
+  }
+
+  const newCandidates: DiscoveryCandidate[] = [];
+  for (let i = 0; i < newProposals.length; i += 1) {
+    const p = newProposals[i]!;
     const candidate = DiscoveryCandidateSchema.parse({
       candidate_id: makeCandidateId(options.sectionId, p.url),
       section_id: options.sectionId,
@@ -231,6 +315,7 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
       status: 'candidate',
       discovered_by: provider.name,
       reason: null,
+      relevance: relevanceChecks[i] ?? null,
     });
     newCandidates.push(candidate);
   }
@@ -244,14 +329,21 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
 
   // Render the human-readable report against the FULL latest set (not just
   // this run's new candidates), so the report reflects current section state.
+  // R-008: relevanceTotals in the report rolls up the FULL ledger (so prior
+  // mismatches stay visible even on subsequent discover runs).
   const all = await readCandidates(packPath, options.sectionId);
   const latest = Array.from(latestPerCandidate(all).values());
+  const fullRelevanceTotals: RelevanceTotals = { verified: 0, unverified: 0, topic_mismatch: 0 };
+  for (const c of latest) {
+    if (c.relevance) fullRelevanceTotals[c.relevance.status] += 1;
+  }
   const md = buildReportMarkdown({
     sectionId: options.sectionId,
     query,
     provider: provider.name,
     ranAt: stampIso,
     candidates: latest,
+    relevanceTotals: fullRelevanceTotals,
   });
   await writeFile(reportPath(packPath, options.sectionId), md, 'utf8');
 
@@ -280,6 +372,9 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
     candidatesPath: ledgerPath,
     reportPath: reportPath(packPath, options.sectionId),
     summaryPath: summaryPath(packPath, options.sectionId),
+    // R-008: counts span only THIS run's new candidates (matches candidatesAdded).
+    // Pre-R-008 ledger entries (relevance: null) do not contribute.
+    relevanceTotals,
   };
 }
 
@@ -326,8 +421,16 @@ export async function approve(options: ApproveOptions): Promise<ApproveResult> {
       targets.push(c);
     }
   } else if (options.topN && options.topN > 0) {
+    // R-008 — `--top N` quarantine. Candidates flagged `topic_mismatch` by
+    // the discover-time relevance check are EXCLUDED from automatic top-N
+    // approval. Operator override path: name the candidate explicitly via
+    // `--candidate <id>` (the explicit-naming above is the override channel,
+    // analogous to R-003's clear_severities[] "name the severity to clear"
+    // semantics). `unverified` candidates remain eligible — graceful
+    // degradation on title-fetch failure.
     const eligible = Array.from(latest.values())
       .filter((c) => c.status === 'candidate')
+      .filter((c) => c.relevance?.status !== 'topic_mismatch')
       .sort((a, b) => a.rank - b.rank);
     targets.push(...eligible.slice(0, options.topN));
   } else {

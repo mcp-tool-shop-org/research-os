@@ -310,17 +310,38 @@ discoverCmd
   .option('--target <n>', 'Soft target candidate count', parseIntArg('--target'), 12)
   .action(async (section: string, opts) => {
     try {
+      // R-008: relevance check is on by default in the production CLI path.
+      // Operators can opt out per-run by setting RESEARCH_OS_DISCOVER_RELEVANCE=0
+      // (e.g., for air-gapped runs where title-fetch is unreachable). Library
+      // callers control via DiscoverOptions.relevanceCheck; this default does
+      // not affect them.
+      const relevanceEnabled = process.env.RESEARCH_OS_DISCOVER_RELEVANCE !== '0';
       const result = await runDiscover({
         sectionId: section,
         packPath: opts.pack,
         query: opts.query,
         targetCount: opts.target,
+        relevanceCheck: {
+          enabled: relevanceEnabled,
+          fetchImpl: globalThis.fetch,
+        },
       });
       process.stdout.write(`discover complete\n`);
       process.stdout.write(`  section:                ${section}\n`);
       process.stdout.write(`  candidates proposed:    ${result.candidatesProposed}\n`);
       process.stdout.write(`  candidates added:       ${result.candidatesAdded}\n`);
       process.stdout.write(`  invalid url rejected:   ${result.candidatesRejectedInvalidUrl}\n`);
+      const r = result.relevanceTotals;
+      if (r.verified + r.unverified + r.topic_mismatch > 0) {
+        process.stdout.write(
+          `  relevance:              ${r.verified} verified, ${r.unverified} unverified, ${r.topic_mismatch} topic_mismatch\n`,
+        );
+        if (r.topic_mismatch > 0) {
+          process.stdout.write(
+            `  ⚠ ${r.topic_mismatch} topic_mismatch candidate${r.topic_mismatch === 1 ? '' : 's'} excluded from \`approve --top N\`. Use \`approve --candidate <id>\` to override.\n`,
+          );
+        }
+      }
       process.stdout.write(`  candidates ledger:      ${result.candidatesPath}\n`);
       process.stdout.write(`  report:                 ${result.reportPath}\n`);
       process.stdout.write(`  summary:                ${result.summaryPath}\n`);
