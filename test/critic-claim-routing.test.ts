@@ -454,6 +454,14 @@ describe('Critic routing — label → draft state', () => {
       // source-content precheck. Zero in this test because no
       // sourceRawText was supplied (the precheck degrades gracefully).
       source_content_mismatch: 0,
+      // v0.12 Slice 1 (R-012) — rescue stage counters. All zero in this
+      // test because no source_content_mismatch claims exist (the rescue
+      // stage operates only on R-011-excluded drafts).
+      rescue_eligible_evaluated: 0,
+      rescue_ineligible: 0,
+      rescued_by_llm: 0,
+      rescue_llm_declined: 0,
+      rescue_llm_call_failed: 0,
     });
   });
 });

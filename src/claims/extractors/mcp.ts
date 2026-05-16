@@ -38,6 +38,11 @@ import {
   computeSourceContentSignature,
   DEFAULT_FRAME_SOURCE_CONTENT_THRESHOLD,
 } from '../critic/source-content.js';
+import {
+  checkRescueEligibility,
+  type PeerSnapshot,
+} from '../critic/rescue-eligibility.js';
+import { runRescueCritic } from '../critic/rescue-critic.js';
 
 // Phase 1b-b diagnostic finding (2026-05-12): under 5_000 the cosmology
 // off-topic source on the dev-rtx5080 workhorse profile (8K context) pages
@@ -49,6 +54,136 @@ import {
 // retains 5_000 because it is unwired archival code and its tests pin to
 // historical byte counts.
 const DEFAULT_WINDOW_CHARS = 3_000;
+
+/**
+ * v0.12 Slice 1 (R-012) — rescue stage for source_content_mismatch
+ * exclusions. Runs ONCE per source after the per-window per-claim critic
+ * loop and dedup have completed; mutates drafts in place to set
+ * rescue_status, rescue_eligibility_check, and (on LLM rescue) clear
+ * frame_excluded + populate rescue_boundary / rescue_scope / rescue_reason.
+ *
+ * Sequential pipeline (kickoff-locked architecture):
+ *   1. Eligibility gate (deterministic): non_excluded_peer_count >= 2
+ *   2. LLM rescue critic (ONLY when eligible): rescue / decline + boundary
+ *   3. Operator rescue surface (post-extraction, via CLI): handled elsewhere
+ *
+ * The gate is NEVER bypassed: ineligible drafts get rescue_status=
+ * ineligible_for_rescue and the LLM call is short-circuited.
+ *
+ * Failure routing (LLM stage): any failure mode (transport error, parse
+ * error, timeout, label-without-boundary) → rescue_status='not_rescued'
+ * (DEFAULT). The claim remains frame_excluded=true and is open to operator
+ * rescue via the CLI. NEVER silently rescues on LLM failure.
+ *
+ * Env opt-out: when RESEARCH_OS_FRAME_SOURCE_CONTENT=0, R-011's precheck
+ * doesn't fire, so there are no source_content_mismatch drafts and this
+ * stage is a no-op by virtue of having no candidates.
+ */
+async function runR012RescueStage(args: {
+  client: CriticCallToolClient;
+  drafts: DraftClaim[];
+  sectionPurpose: string;
+  sourceRawText: string | null;
+  sourceTitle: string;
+  sourcePublisher: string | null;
+  sourceType: string | null;
+  effectiveModel: string | undefined;
+  criticTally: CriticTally;
+}): Promise<void> {
+  const { client, drafts, sectionPurpose, sourceRawText, sourceTitle,
+    sourcePublisher, sourceType, effectiveModel, criticTally } = args;
+
+  // Find rescue candidates: drafts excluded with source_content_mismatch.
+  // Other exclusion reasons (off_topic, background_only, source_chrome,
+  // critic_unavailable) are NOT in R-012's scope — they ARE off-topic
+  // and rescuing them would weaken R-011's defense floor.
+  const candidates: DraftClaim[] = [];
+  for (const d of drafts) {
+    if (
+      d.frame_excluded === true &&
+      d.frame_exclusion_reason === 'source_content_mismatch'
+    ) {
+      candidates.push(d);
+    }
+  }
+  if (candidates.length === 0) return;
+
+  // Pre-compute the peer asserts that the LLM rescue critic will see as
+  // topical-relevance evidence: non-excluded drafts from the same source.
+  // These are the same peers the eligibility gate counts.
+  const peerAsserts: string[] = [];
+  for (const d of drafts) {
+    if (d.frame_excluded === false) {
+      peerAsserts.push(d.asserts);
+    }
+  }
+
+  for (const target of candidates) {
+    // Build the peer snapshot for the eligibility gate. Exclude the target
+    // draft itself (defensive — the gate is robust to its inclusion, but
+    // semantically peers are OTHER drafts).
+    const peers: PeerSnapshot[] = [];
+    for (const d of drafts) {
+      if (d === target) continue;
+      peers.push({ frame_excluded: d.frame_excluded ?? false });
+    }
+    const eligibility = checkRescueEligibility({ peers });
+    target.rescue_eligibility_check = eligibility;
+    criticTally.rescue_eligible_evaluated =
+      (criticTally.rescue_eligible_evaluated ?? 0) + 1;
+
+    // Gate failed → terminal ineligible_for_rescue. The LLM rescue critic
+    // and the operator rescue command both refuse on this state. This is
+    // the LOAD-BEARING defense-floor preservation: no rescue from a
+    // source body that hasn't proven topical relevance.
+    if (!eligibility.passed) {
+      target.rescue_status = 'ineligible_for_rescue';
+      criticTally.rescue_ineligible =
+        (criticTally.rescue_ineligible ?? 0) + 1;
+      continue;
+    }
+
+    // Eligible — invoke the LLM rescue critic. Failure modes → not_rescued
+    // (operator rescue path remains open via the CLI).
+    const rescue = await runRescueCritic(client, {
+      sectionPurpose,
+      claimAsserts: target.asserts,
+      sourceTitle,
+      sourcePublisher,
+      sourceType,
+      sourceExcerpt: sourceRawText,
+      peerAsserts,
+      effectiveModel,
+    });
+
+    if (!rescue.ok) {
+      target.rescue_status = 'not_rescued';
+      criticTally.rescue_llm_call_failed =
+        (criticTally.rescue_llm_call_failed ?? 0) + 1;
+      continue;
+    }
+    if (rescue.label === 'decline') {
+      target.rescue_status = 'not_rescued';
+      criticTally.rescue_llm_declined =
+        (criticTally.rescue_llm_declined ?? 0) + 1;
+      continue;
+    }
+    // rescue.label === 'rescue' — apply the rescue: frame_excluded flips
+    // to false, rescue metadata stamped on the draft. The original
+    // frame_exclusion_reason is DELETED on rescue (the claim is no longer
+    // excluded — keeping the reason would be a silent contradiction).
+    // The original scope/not stay intact; rescue_boundary is a separate
+    // field carrying the rescue-supplied constraint.
+    target.frame_excluded = false;
+    delete target.frame_exclusion_reason;
+    delete target.frame_exclusion_rationale;
+    target.rescue_status = 'rescued_by_llm';
+    target.rescue_boundary = rescue.rescueBoundary;
+    target.rescue_scope = rescue.rescueScope;
+    target.rescue_reason = rescue.rationale;
+    criticTally.rescued_by_llm = (criticTally.rescued_by_llm ?? 0) + 1;
+  }
+}
 
 // The span-grounding rule lives in the MCP `hint` parameter. The server prepends
 // it as `\nHint: ${hint}` to the prompt, so it has to stand on its own (no
@@ -354,6 +489,13 @@ Source-card not: ${card.not ?? 'null'}`;
       source_chrome: 0,
       critic_call_failed: 0,
       source_content_mismatch: 0,
+      // v0.12 Slice 1 (R-012) — rescue stage counters, populated by the
+      // post-dedup rescue pass below.
+      rescue_eligible_evaluated: 0,
+      rescue_ineligible: 0,
+      rescued_by_llm: 0,
+      rescue_llm_declined: 0,
+      rescue_llm_call_failed: 0,
     };
     // v0.11 Slice 3 (R-011) — source-content topical signature, computed
     // once per source (not per claim). The signature is the Set of unique
@@ -368,6 +510,12 @@ Source-card not: ${card.not ?? 'null'}`;
       r011Enabled && typeof input.sourceRawText === 'string'
         ? computeSourceContentSignature(input.sourceRawText)
         : new Set<string>();
+    // drafts populated INSIDE the try block (after dedup and R-012 stage).
+    // Declared at function-scope so the post-try error-check + result-build
+    // can see it. No initial value — drafts is always assigned inside the
+    // try before any read; if the try throws, the throw propagates without
+    // a read.
+    let drafts: DraftClaim[];
     try {
       const client = (await handle.connect()) as unknown as CallToolClient;
       for (let i = 0; i < windows.length; i += 1) {
@@ -503,6 +651,62 @@ Source-card not: ${card.not ?? 'null'}`;
 
         allDrafts.push(...page.drafts);
       }
+
+      // PASS 2: dedup. Moved INSIDE the try (was previously post-try) so
+      // the R-012 rescue stage below can reuse the live MCP client without
+      // re-opening the subprocess. Off-topic markers DO NOT prevent dedup:
+      // if two windows produce the same assert, keep one. If either window
+      // was off-topic, preserve the off-topic flag (any-off-topic wins) so
+      // we don't silently launder a frame_excluded claim into the accepted
+      // set via deduplication. Critic-derived frame_exclusion_reason /
+      // rationale flow with whichever copy was marked excluded — if both
+      // were, prefer the prior one (stable order).
+      const seen = new Map<string, DraftClaim>();
+      for (const d of allDrafts) {
+        const key = d.asserts.toLowerCase().replace(/\s+/g, ' ').trim();
+        const prior = seen.get(key);
+        if (!prior) {
+          seen.set(key, d);
+          continue;
+        }
+        if (d.frame_excluded || prior.frame_excluded) {
+          prior.frame_excluded = true;
+          // Carry forward exclusion metadata from whichever copy had it.
+          if (!prior.frame_exclusion_reason && d.frame_exclusion_reason) {
+            prior.frame_exclusion_reason = d.frame_exclusion_reason;
+          }
+          if (!prior.frame_exclusion_rationale && d.frame_exclusion_rationale) {
+            prior.frame_exclusion_rationale = d.frame_exclusion_rationale;
+          }
+        }
+      }
+      drafts = Array.from(seen.values());
+
+      // PASS 3: v0.12 Slice 1 (R-012) rescue stage. Runs on the deduped
+      // draft set so we don't fire the LLM rescue critic on each window-
+      // local duplicate of the same claim. Requires framePurpose (the
+      // section context the rescue critic is judging against) and at
+      // least one draft. No-op when env opt-out is set because R-011
+      // never fires source_content_mismatch in that case (and the loop's
+      // candidate filter finds nothing to rescue).
+      if (
+        input.framePurpose !== undefined &&
+        input.framePurpose.trim().length > 0 &&
+        drafts.length > 0
+      ) {
+        const criticClient = client as unknown as CriticCallToolClient;
+        await runR012RescueStage({
+          client: criticClient,
+          drafts,
+          sectionPurpose: input.framePurpose,
+          sourceRawText: input.sourceRawText ?? null,
+          sourceTitle: card.title,
+          sourcePublisher: card.publisher,
+          sourceType: card.source_type,
+          effectiveModel: input.effectiveModel,
+          criticTally,
+        });
+      }
     } finally {
       await handle.close();
     }
@@ -514,36 +718,6 @@ Source-card not: ${card.not ?? 'null'}`;
           : `all ${windows.length} ledger pages failed (first error: ${pageErrors[0] ?? 'unknown'})`;
       return { ok: false, error: summary };
     }
-
-    // Dedup by normalised asserts — same as the legacy extractor. Off-topic
-    // markers DO NOT prevent dedup: if two windows produce the same assert,
-    // keep one. If either window was off-topic, preserve the off-topic flag
-    // (any-off-topic wins) so we don't silently launder a frame_excluded claim
-    // into the accepted set via deduplication. Critic-derived
-    // frame_exclusion_reason / rationale flow with whichever copy was marked
-    // excluded — if both were, prefer the prior one (stable order).
-    const seen = new Map<string, DraftClaim>();
-    for (const d of allDrafts) {
-      const key = d.asserts.toLowerCase().replace(/\s+/g, ' ').trim();
-      const prior = seen.get(key);
-      if (!prior) {
-        seen.set(key, d);
-        continue;
-      }
-      if (d.frame_excluded || prior.frame_excluded) {
-        prior.frame_excluded = true;
-        // Carry forward exclusion metadata from whichever copy had it. If
-        // the prior already has a reason, keep it; otherwise inherit from
-        // the duplicate.
-        if (!prior.frame_exclusion_reason && d.frame_exclusion_reason) {
-          prior.frame_exclusion_reason = d.frame_exclusion_reason;
-        }
-        if (!prior.frame_exclusion_rationale && d.frame_exclusion_rationale) {
-          prior.frame_exclusion_rationale = d.frame_exclusion_rationale;
-        }
-      }
-    }
-    const drafts = Array.from(seen.values());
 
     if (drafts.length === 0) {
       return {

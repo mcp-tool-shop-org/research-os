@@ -18,6 +18,11 @@ import {
   type ScopeRepairPrompterResponse,
 } from './claims/index.js';
 import { triage as runTriage } from './triage/index.js';
+import {
+  declineClaimRescueByOperator,
+  listRescueCandidates,
+  rescueClaimByOperator,
+} from './claims/rescue-ledger.js';
 import { map as contradictMap, resolve as contradictResolve } from './contradictions/index.js';
 import { gate as runGate } from './gates/index.js';
 import {
@@ -701,6 +706,131 @@ claimCmd
           `\nNext: re-run \`research-os claim triage ${result.sectionId}\` then \`research-os review ${result.sectionId}\` to advance the repaired claims through the pipeline.\n`,
         );
       }
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
+claimCmd
+  .command('rescue')
+  .description(
+    'v0.12 R-012 — operator rescue surface for source_content_mismatch frame-exclusions. ' +
+      'Promotes a claim that R-011 excluded from frame_excluded:true to frame_excluded:false ' +
+      'when the source body has otherwise proven topical relevance through ≥2 other non-excluded ' +
+      'claims. Eligibility gate is enforced in code — operator cannot rescue from a source that ' +
+      'hasn\'t proven topical relevance. Append-only ledger at evidence/claim-frame-rescues.jsonl. ' +
+      'Use --list to see candidates; --claim-id + --scope + --reason + --boundary to rescue; ' +
+      '--decline + --reason to explicitly decline a candidate.',
+  )
+  .argument('<section>', 'Section id, e.g. "01-dst-evidence"')
+  .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option('--list', 'List rescue candidates with their eligibility verdicts', false)
+  .option('--claim-id <id>', 'Claim id to rescue or decline (e.g. clm_f6ffc9e9d86f_ollama_intern_8)')
+  .option('--scope <text>', 'Operator-supplied positive scope for the rescue (required when rescuing)')
+  .option('--boundary <text>', 'Operator-supplied negative constraint for the rescue (required when rescuing)')
+  .option('--reason <text>', 'Operator rationale — required for both rescue and --decline')
+  .option('--decline', 'Explicitly decline the rescue (records operator_declined; distinguishable from not_rescued)', false)
+  .option('--operator <id>', 'Operator identity recorded in the ledger', 'cli')
+  .action(async (section: string, opts) => {
+    try {
+      if (opts.list === true) {
+        const candidates = await listRescueCandidates({
+          packPath: opts.pack,
+          sectionId: section,
+        });
+        process.stdout.write(`R-012 rescue candidates for section ${section}:\n`);
+        if (candidates.length === 0) {
+          process.stdout.write(`  (none — no source_content_mismatch claims in not_rescued state)\n`);
+          return;
+        }
+        for (const c of candidates) {
+          const verdict = c.eligibility.passed ? 'ELIGIBLE' : 'INELIGIBLE';
+          process.stdout.write(
+            `  ${c.claim.claim_id}  [${verdict} — peer_count=${c.eligibility.peer_count}/${c.eligibility.threshold}]\n`,
+          );
+          process.stdout.write(`    asserts: ${c.claim.asserts.slice(0, 100)}\n`);
+        }
+        return;
+      }
+
+      const claimId = opts.claimId as string | undefined;
+      if (claimId === undefined || claimId.trim().length === 0) {
+        throw new InvalidArgumentError(
+          'either --list OR --claim-id <id> is required',
+        );
+      }
+      const reason = opts.reason as string | undefined;
+      if (reason === undefined || reason.trim().length === 0) {
+        throw new InvalidArgumentError('--reason is required');
+      }
+
+      if (opts.decline === true) {
+        const outcome = await declineClaimRescueByOperator({
+          packPath: opts.pack,
+          sectionId: section,
+          claimId,
+          declineReason: reason,
+          operator: opts.operator,
+        });
+        if (outcome.kind === 'not_found') {
+          throw new ResearchOSError(
+            `claim ${claimId} not found in section ${section}`,
+            'r012_claim_not_found',
+          );
+        }
+        if (outcome.kind === 'not_a_candidate') {
+          throw new ResearchOSError(outcome.reason, 'r012_not_a_candidate');
+        }
+        if (outcome.kind === 'ineligible') {
+          process.stdout.write(
+            `decline refused: claim ${claimId} is ineligible for rescue ` +
+              `(peer_count=${outcome.eligibility.peer_count}/${outcome.eligibility.threshold}). ` +
+              `Marked rescue_status=ineligible_for_rescue; no ledger entry written.\n`,
+          );
+          return;
+        }
+        process.stdout.write(`claim ${claimId} marked operator_declined; ledger entry written.\n`);
+        return;
+      }
+
+      const scope = opts.scope as string | undefined;
+      const boundary = opts.boundary as string | undefined;
+      if (scope === undefined || scope.trim().length === 0) {
+        throw new InvalidArgumentError('--scope is required when rescuing');
+      }
+      if (boundary === undefined || boundary.trim().length === 0) {
+        throw new InvalidArgumentError('--boundary is required when rescuing');
+      }
+      const outcome = await rescueClaimByOperator({
+        packPath: opts.pack,
+        sectionId: section,
+        claimId,
+        rescueScope: scope,
+        rescueReason: reason,
+        rescueBoundary: boundary,
+        operator: opts.operator,
+      });
+      if (outcome.kind === 'not_found') {
+        throw new ResearchOSError(
+          `claim ${claimId} not found in section ${section}`,
+          'r012_claim_not_found',
+        );
+      }
+      if (outcome.kind === 'not_a_candidate') {
+        throw new ResearchOSError(outcome.reason, 'r012_not_a_candidate');
+      }
+      if (outcome.kind === 'ineligible') {
+        process.stdout.write(
+          `rescue refused: claim ${claimId} is ineligible ` +
+            `(peer_count=${outcome.eligibility.peer_count}/${outcome.eligibility.threshold}). ` +
+            `Source body has not proven topical relevance through ≥2 other non-excluded claims. ` +
+            `Marked rescue_status=ineligible_for_rescue; no ledger entry written.\n`,
+        );
+        return;
+      }
+      process.stdout.write(
+        `claim ${claimId} rescued by operator; frame_excluded:false; rescue_boundary applied; ledger entry written.\n`,
+      );
     } catch (err) {
       reportError(err);
     }

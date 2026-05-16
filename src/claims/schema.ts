@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { EXCERPT_ID_PATTERN } from '../sources/excerpts/schema.js';
+import { FRAME_RESCUE_STATUSES } from './critic/rescue-eligibility.js';
 
 export const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
@@ -74,6 +75,37 @@ export const ClaimSchema = z.object({
     ])
     .optional(),
   frame_exclusion_rationale: z.string().optional(),
+
+  // v0.12 Slice 1 (R-012) — rescue path for source_content_mismatch
+  // exclusions. See src/claims/critic/rescue-eligibility.ts for the
+  // closed FrameRescueStatus enum + the eligibility-gate predicate.
+  //
+  // rescue_status is the closed enum. ABSENT on claims that never
+  // entered the rescue path (e.g., frame_excluded=false from the start,
+  // or excluded with a reason other than source_content_mismatch); set
+  // for every source_content_mismatch claim after the R-012 stage runs.
+  //
+  // rescue_eligibility_check captures peer_count + threshold + passed,
+  // so operators can see why a rescue was or wasn't possible without
+  // re-running the gate.
+  //
+  // rescue_boundary is the explicit scope constraint that downstream
+  // synthesis MUST honor when citing this claim. Set ONLY on rescues
+  // (rescue_status=rescued_by_llm or rescued_by_operator). The
+  // ORIGINAL claim.scope and claim.not fields are NEVER rewritten by
+  // R-012 — they stay intact as the source's literal grounding;
+  // rescue_boundary carries the rescuer-supplied constraint.
+  rescue_status: z
+    .enum([...FRAME_RESCUE_STATUSES] as [string, ...string[]])
+    .optional(),
+  rescue_eligibility_check: z
+    .object({
+      peer_count: z.number().int().nonnegative(),
+      threshold: z.number().int().positive(),
+      passed: z.boolean(),
+    })
+    .optional(),
+  rescue_boundary: z.string().optional(),
 });
 
 export type Claim = z.infer<typeof ClaimSchema>;

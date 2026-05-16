@@ -26,6 +26,7 @@ import { readOverrides } from '../sources/source-card-overrides.js';
 import { getEffectiveSeverities } from '../sources/effective-card.js';
 import { detectSeverities, resolveSeverityThresholds } from '../sources/severities.js';
 import { defaultClaimExtractors, pickClaimExtractor } from './extractors/index.js';
+import { appendRescueLedgerRecord } from './rescue-ledger.js';
 import { ClaimSchema, type Claim } from './schema.js';
 import type {
   ClaimExtractor,
@@ -269,6 +270,22 @@ function buildClaim(args: {
             : {}),
         }
       : {};
+  // v0.12 Slice 1 (R-012) — propagate rescue fields from the draft to the
+  // persisted claim. rescue_status / rescue_eligibility_check are set
+  // whenever the R-012 stage ran (i.e., every source_content_mismatch
+  // draft). rescue_boundary is set only on rescues (rescue_status=
+  // rescued_by_llm). The transient rescue_scope / rescue_reason on the
+  // draft do NOT flow to the claim — they go straight to the ledger.
+  const rescueExtras: Record<string, unknown> = {};
+  if (draft.rescue_status !== undefined) {
+    rescueExtras.rescue_status = draft.rescue_status;
+  }
+  if (draft.rescue_eligibility_check !== undefined) {
+    rescueExtras.rescue_eligibility_check = draft.rescue_eligibility_check;
+  }
+  if (draft.rescue_boundary !== undefined) {
+    rescueExtras.rescue_boundary = draft.rescue_boundary;
+  }
   return ClaimSchema.parse({
     claim_id: claimId,
     section_id: sectionId,
@@ -286,6 +303,7 @@ function buildClaim(args: {
     // sets this; default in the schema is false.
     frame_excluded: frameExcluded,
     ...exclusionExtras,
+    ...rescueExtras,
     extractor,
     extraction_method: extractionMethod,
     created_at: new Date().toISOString(),
@@ -499,6 +517,36 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       // drafts; this counts admitted claims that survived persistence + dedup.
       if (claim.frame_excluded === false) {
         summary.claimsAdmittedPersisted += 1;
+      }
+      // v0.12 Slice 1 (R-012) — write the LLM rescue ledger entry for
+      // every rescued_by_llm claim. The draft carries the transient
+      // rescue_scope / rescue_reason; combined with the persisted claim's
+      // rescue_status / rescue_eligibility_check / rescue_boundary, this
+      // forms the full RescueLedgerRecord. "No silent rescue" invariant:
+      // every claim that goes frame_excluded:true → false via R-012 gets
+      // a witnessed ledger entry written here. Operator rescues write
+      // their own ledger entries from the operator CLI surface.
+      if (
+        claim.rescue_status === 'rescued_by_llm' &&
+        claim.rescue_eligibility_check &&
+        claim.rescue_boundary &&
+        draft.rescue_scope &&
+        draft.rescue_reason
+      ) {
+        await appendRescueLedgerRecord(packPath, {
+          claim_id: claim.claim_id,
+          section_id: claim.section_id,
+          original_exclusion_reason: 'source_content_mismatch',
+          eligibility_check: claim.rescue_eligibility_check,
+          rescue_status: 'rescued_by_llm',
+          rescue_scope: draft.rescue_scope,
+          rescue_reason: draft.rescue_reason,
+          rescue_boundary: claim.rescue_boundary,
+          rescued_by: 'llm',
+          rescued_at: claim.created_at,
+          operator: null,
+          research_os_version: RESEARCH_OS_VERSION,
+        });
       }
     }
   }

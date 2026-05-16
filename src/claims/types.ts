@@ -1,5 +1,9 @@
 import type { Excerpt } from '../sources/excerpts/schema.js';
 import type { SourceCard, FetchReceipt } from '../sources/schema.js';
+import type {
+  FrameRescueStatus,
+  RescueEligibilityResult,
+} from './critic/rescue-eligibility.js';
 
 export type ClaimExtractor = 'heuristic' | 'ollama-intern';
 export type Confidence = 'low' | 'medium' | 'high';
@@ -46,6 +50,32 @@ export interface DraftClaim {
     | 'critic_unavailable'
     | 'source_content_mismatch';
   frame_exclusion_rationale?: string;
+
+  // v0.12 Slice 1 (R-012) — rescue path for source_content_mismatch
+  // exclusions. The eligibility gate runs once per source, after the
+  // per-claim critic loop has decided every draft. Drafts that R-011
+  // excluded with source_content_mismatch AND that have ≥2 non-excluded
+  // peers from the same source body become rescue-candidates. The LLM
+  // rescue critic may accept (rescue_status=rescued_by_llm,
+  // frame_excluded=false, rescue_boundary set) or decline (rescue_status=
+  // not_rescued, claim remains excluded but open to operator rescue
+  // post-extraction). Ineligible drafts get rescue_status=
+  // ineligible_for_rescue.
+  //
+  // The original frame_exclusion_reason stays on the draft for ledger /
+  // audit even after rescue (rescue_status disambiguates downstream).
+  // The original scope/not fields are NEVER rewritten by R-012 — operator-
+  // supplied scope goes into rescue_boundary, separate from the original.
+  rescue_status?: FrameRescueStatus;
+  rescue_eligibility_check?: RescueEligibilityResult;
+  rescue_boundary?: string;
+  // TRANSIENT (DraftClaim-only — NOT persisted to Claim record). Carries
+  // ledger-only fields from the extractor through to extract.ts so the
+  // ledger writer can compose the full RescueLedgerRecord without
+  // re-doing the rescue. These never reach the persisted claims.jsonl
+  // — only the rescue ledger.
+  rescue_scope?: string;
+  rescue_reason?: string;
 }
 
 // Substitution surfaced by the MCP envelope when model_requested !== model.
@@ -77,6 +107,16 @@ export interface CriticTally {
   // deterministic layer is firing vs. the LLM layer. Optional for
   // back-compat with pre-v0.11 callers that destructure CriticTally.
   source_content_mismatch?: number;
+  // v0.12 Slice 1 (R-012) — rescue stage counters. Surfaces how many
+  // source_content_mismatch exclusions the rescue path acted on at
+  // extract time. Operator-rescue events occur post-extraction via the
+  // CLI and are tracked in the append-only rescue ledger, not here.
+  // All fields optional for back-compat with pre-v0.12 callers.
+  rescue_eligible_evaluated?: number;
+  rescue_ineligible?: number;
+  rescued_by_llm?: number;
+  rescue_llm_declined?: number;
+  rescue_llm_call_failed?: number;
 }
 
 export type ClaimExtractionResult =
