@@ -81,6 +81,17 @@ export interface EvidenceState {
   sources: number;
   distinct_publishers: number;
   distinct_primary_publishers: number;
+  // R-014 (v0.12 Slice 3): distinct repair-shape counts. The action graph's
+  // `accepted_claim_floor` recommendation routes by which shape dominates
+  // rather than the OR'd `needs_repair_claims` aggregate. The previous
+  // aggregate stays for backward compatibility (frozen recovery artifacts +
+  // existing test fixtures); the two distinct fields are optional and
+  // populated by `buildEvidenceState` going forward. When absent (pre-R-014
+  // artifacts, hand-rolled test fixtures), the heuristic falls back to the
+  // legacy aggregate which assumes the v0.3-era "all repair shapes treated
+  // as scope" behavior.
+  scope_repair_blocked?: number;
+  source_repair_blocked?: number;
 }
 
 export interface SectionDiagnosis {
@@ -245,6 +256,14 @@ export interface RecoveryArtifact {
   // Sections ordered as in research.yaml. Healthy + advised + fallback all
   // appear in this list; the operator sees the full pack at a glance.
   sections: SectionRecoveryResult[];
+  // R-014 (v0.12 Slice 3): SHA-256 hash of canonicalized pack inputs that
+  // produced this artifact (gate audits + handoff section blockers + claim
+  // reviews + source-card classifications). Used by
+  // `recover pack --regenerate-action-graph` to detect when the recovery
+  // output is stale relative to current pack state. Missing on artifacts
+  // produced before R-014; the regenerate path treats absence as
+  // "stale, regenerate."
+  input_state_hash?: string;
 }
 
 // ── Orchestrator input/output ───────────────────────────────────────────────
@@ -259,7 +278,28 @@ export interface RecoverPackOptions {
   spawnMcpClient?: boolean;
   // Model hint forwarded to MCP calls.
   advisorModel?: string;
+  // R-014 (v0.12 Slice 3): opt-in regenerate path. When true:
+  //   - Compute the current input_state_hash from pack inputs.
+  //   - Read the existing recovery/blocked-section-recovery.json (if any).
+  //   - If the existing artifact's input_state_hash matches → emit
+  //     "no regeneration needed" and exit cleanly (no file mutation,
+  //      no ledger entry, no history archive).
+  //   - Else → archive the existing recovery files to recovery/history/,
+  //     regenerate, append a regeneration-ledger entry.
+  // When false / undefined: legacy behavior (overwrites recovery files
+  // unconditionally; does not consult existing input_state_hash).
+  regenerateActionGraph?: boolean;
 }
+
+// R-014 (v0.12 Slice 3): why a regenerate run exited the way it did. Closed
+// vocabulary so operator reports + ledger entries are filterable.
+export const REGENERATION_REASONS = [
+  'state_changed',          // existing input_state_hash differs from current
+  'missing_input_hash',     // pre-R-014 artifact without input_state_hash field
+  'no_prior_artifact',      // recovery/blocked-section-recovery.json absent
+] as const;
+
+export type RegenerationReason = (typeof REGENERATION_REASONS)[number];
 
 export interface RecoverPackSummary {
   packPath: string;
@@ -271,6 +311,16 @@ export interface RecoverPackSummary {
   healthySections: number;
   fallbackSections: number;        // sections where the advisor exhausted + fallback rendered
   verifierRejections: number;       // total rejections across all advisor calls
+  // R-014 (v0.12 Slice 3): regenerate-path observability. Present only when
+  // `regenerateActionGraph: true` was requested. `regenerated: false` means
+  // the existing artifact's input_state_hash matched current state and no
+  // file mutation happened ("no regeneration needed" path).
+  regenerated?: boolean;
+  regenerationReason?: RegenerationReason | null;
+  inputStateHash?: string;
+  previousInputStateHash?: string | null;
+  archivedJsonPath?: string | null;
+  archivedMarkdownPath?: string | null;
 }
 
 // ── Advisor MCP call shape (internal to Layer 3) ────────────────────────────

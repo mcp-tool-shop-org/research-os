@@ -120,6 +120,55 @@ function commandHint(action: RecoveryActionId, sectionId: string, stage?: string
 // recommendation.
 const REPAIR_CLAIM_SCOPE_MIN_NEEDS_REPAIR = 3;
 
+// v0.12 Slice 3 (R-014): distinct-shape repair counts.
+//
+// The v0.3 operator-aloneness gate exposed C4: the deterministic-fallback
+// advisor recommended `repair_claim_scope` when scope was already populated
+// because `needs_repair_claims` OR'd `needs_scope_repair` with
+// `needs_source_repair`. The operator had already run `claim repair-scope
+// --auto` (R-007 closed the scope-only blockers) but `needs_source_repair`
+// claims still existed; the aggregate stayed high enough to re-trigger
+// `repair_claim_scope`, which is a no-op when scope is already populated.
+//
+// R-014 routes the recommendation by which repair shape DOMINATES:
+//   - scope-dominant (and scope >= threshold) → top = repair_claim_scope
+//   - source-dominant → top = add_on_topic_sources (the closed enum has
+//     no `repair_claim_source`; sourcing IS the source-side repair)
+//   - tie or neither shape >= threshold → legacy fallback unchanged
+//
+// The new EvidenceState fields are OPTIONAL (additive evolution). When
+// either is undefined — pre-R-014 frozen artifacts, hand-rolled test
+// fixtures that only set the aggregate — the heuristic falls back to
+// `needs_repair_claims` as the scope count (matching the v0.3-era
+// "all-shapes-treated-as-scope" assumption that the test suite encodes).
+// This preserves the R-001 acceptance tests byte-identically.
+interface RepairShapeCounts {
+  scope: number;
+  source: number;
+  // True when the diagnosis carried distinct-shape counts. False means we
+  // fell back to legacy aggregate-as-scope; the heuristic stays conservative
+  // (prefers `repair_claim_scope` like the v0.10 R-001 era did).
+  distinctShapesAvailable: boolean;
+}
+
+function repairShapeCounts(evidence_state: { needs_repair_claims: number; scope_repair_blocked?: number; source_repair_blocked?: number }): RepairShapeCounts {
+  const haveDistinct =
+    typeof evidence_state.scope_repair_blocked === 'number' ||
+    typeof evidence_state.source_repair_blocked === 'number';
+  if (haveDistinct) {
+    return {
+      scope: evidence_state.scope_repair_blocked ?? 0,
+      source: evidence_state.source_repair_blocked ?? 0,
+      distinctShapesAvailable: true,
+    };
+  }
+  return {
+    scope: evidence_state.needs_repair_claims,
+    source: 0,
+    distinctShapesAvailable: false,
+  };
+}
+
 // ── Action graph constructor ────────────────────────────────────────────────
 //
 // For each diagnosis we build a small, ranked allowed_actions list (1–3 items)
@@ -143,12 +192,60 @@ export function buildActionGraph(diagnosis: SectionDiagnosis): LawfulActionGraph
         // plausibly satisfy the floor (>= 3) do we surface this above
         // add_on_topic_sources; below that threshold the gate floor cannot
         // be cleared by scope-repair alone, so we keep the legacy ranking.
-        const needsRepair = evidence_state.needs_repair_claims;
-        if (needsRepair >= REPAIR_CLAIM_SCOPE_MIN_NEEDS_REPAIR) {
+        //
+        // R-014 (v0.12 Slice 3): distinguish needs_scope_repair from
+        // needs_source_repair so the recommendation routes by which shape
+        // dominates. The v0.3 trap: aggregate count high enough to trigger
+        // repair_claim_scope, but scope already populated and the actual
+        // blocker is needs_source_repair → add_on_topic_sources (sourcing
+        // IS the source-side repair in the closed enum).
+        const shapes = repairShapeCounts(evidence_state);
+        const scopeMeetsThreshold = shapes.scope >= REPAIR_CLAIM_SCOPE_MIN_NEEDS_REPAIR;
+        // Source dominates only when distinct shapes are available, source
+        // has claims to act on, and source STRICTLY exceeds scope. Ties go
+        // to the scope path — that preserves R-001 tie semantics for legacy
+        // fixtures (which present as scope=N, source=0 after the legacy
+        // fallback in repairShapeCounts) and matches the kickoff's
+        // "higher-count" routing language.
+        const sourceDominant =
+          shapes.distinctShapesAvailable &&
+          shapes.source > 0 &&
+          shapes.source > shapes.scope;
+
+        if (sourceDominant) {
+          const candidates: Array<{ action_id: RecoveryActionId; why: string; rerunStage?: string }> = [
+            {
+              action_id: 'add_on_topic_sources',
+              why: `Section has ${shapes.source} claim(s) parked in needs_source_repair (vs ${shapes.scope} in needs_scope_repair); the dominant blocker is source-side. Adding on-topic primary or official sources lets the extractor re-anchor those claims to evidence that survives review.`,
+            },
+          ];
+          // Surface repair_claim_scope as a Hick's-Law-capped alternative
+          // ONLY when the scope side still has a plausible payoff (>= threshold).
+          // Below threshold it stays out of the allowed list entirely.
+          if (scopeMeetsThreshold) {
+            candidates.push({
+              action_id: 'repair_claim_scope',
+              why: `${shapes.scope} claim(s) are also in needs_scope_repair; running repair-scope after a fresh gather can compound the recovery.`,
+            });
+          }
+          candidates.push({
+            action_id: 'narrow_section_purpose',
+            why: 'If extracted claims are on-topic for the sources but off-topic for the purpose, tightening the purpose can convert the same evidence into accepted claims.',
+          });
+          return candidates;
+        }
+
+        if (scopeMeetsThreshold) {
+          // Scope path: covers (1) legacy fixtures (distinct shapes absent)
+          // where the aggregate-as-scope assumption mirrors R-001 behavior,
+          // and (2) explicit scope-dominant or tied cases.
+          const repairLabel = shapes.distinctShapesAvailable
+            ? `${shapes.scope} claim(s) in needs_scope_repair`
+            : `${shapes.scope} claim(s) parked in needs_scope_repair / weak_scope`;
           return [
             {
               action_id: 'repair_claim_scope',
-              why: `Section has ${needsRepair} claim(s) parked in needs_scope_repair / weak_scope. Auto-repair (or interactive review) populates scope on those claims so the next review pass can promote them to accepted, often the smallest reversible move toward clearing the accepted_claim_floor.`,
+              why: `Section has ${repairLabel}. Auto-repair (or interactive review) populates scope on those claims so the next review pass can promote them to accepted, often the smallest reversible move toward clearing the accepted_claim_floor.`,
             },
             {
               action_id: 'add_on_topic_sources',

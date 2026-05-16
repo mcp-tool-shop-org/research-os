@@ -40,6 +40,11 @@ export const EvidenceStateSchema = z
     sources: z.number().int().nonnegative(),
     distinct_publishers: z.number().int().nonnegative(),
     distinct_primary_publishers: z.number().int().nonnegative(),
+    // R-014 additive fields. Optional for backward-compat with pre-R-014
+    // artifacts + hand-rolled test fixtures that omit them; populated by
+    // `buildEvidenceState` going forward.
+    scope_repair_blocked: z.number().int().nonnegative().optional(),
+    source_repair_blocked: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -225,5 +230,9 @@ export const RecoveryArtifactSchema = z
     generated_at: z.string().min(1),
     research_os_version: z.string().min(1),
     sections: z.array(SectionRecoveryResultSchema),
+    // R-014 (v0.12 Slice 3): SHA-256 hex digest of canonicalized pack inputs.
+    // Optional so pre-R-014 artifacts on disk parse cleanly; populated by
+    // `buildRecoveryArtifact` going forward.
+    input_state_hash: z.string().min(1).optional(),
   })
   .strict();

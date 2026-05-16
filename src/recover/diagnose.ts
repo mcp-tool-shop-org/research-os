@@ -236,6 +236,18 @@ function buildEvidenceState(
       )
       .map((r) => r.claim_id),
   );
+  // R-014: distinct repair-shape counts. The aggregate `needs_repair_claims`
+  // OR'd these three shapes together and the v0.3 gate run exposed the
+  // misrouting that caused (recommended `repair_claim_scope` when scope was
+  // already populated and `needs_source_repair` was the actual blocker). The
+  // action graph's `accepted_claim_floor` heuristic uses these distinct
+  // counts going forward.
+  const scopeRepairIds = new Set(
+    reviews.filter((r) => r.decision === 'needs_scope_repair').map((r) => r.claim_id),
+  );
+  const sourceRepairIds = new Set(
+    reviews.filter((r) => r.decision === 'needs_source_repair').map((r) => r.claim_id),
+  );
 
   const publishers = new Set<string>();
   const primaryPublishers = new Set<string>();
@@ -252,6 +264,8 @@ function buildEvidenceState(
     sources: cards.length,
     distinct_publishers: publishers.size,
     distinct_primary_publishers: primaryPublishers.size,
+    scope_repair_blocked: scopeRepairIds.size,
+    source_repair_blocked: sourceRepairIds.size,
   };
 }
 

@@ -1433,12 +1433,33 @@ recoverCmd
   .description(
     'Generate recovery guidance for every section in the pack. Healthy sections appear as ' +
       'no-action; blocked / failed / unrun sections get a ranked recovery plan with contrastive ' +
-      'framing and explicit "do not" warnings. The pack remains NOT freezable and NOT publishable.',
+      'framing and explicit "do not" warnings. The pack remains NOT freezable and NOT publishable. ' +
+      'Pass --regenerate-action-graph to re-compute the recovery action graph against current ' +
+      'pack state, archive the prior artifact under recovery/history/, and append a regeneration ' +
+      'ledger entry (R-014, v0.12 Slice 3).',
   )
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
+  .option(
+    '--regenerate-action-graph',
+    'Re-compute the recovery action graph against current pack state. When the existing ' +
+      'recovery output already reflects current state, exits cleanly without writing files ' +
+      '(no regeneration needed). Otherwise archives the prior recovery/blocked-section-recovery.{json,md} ' +
+      'to recovery/history/, writes a new recovery artifact, and appends a record to ' +
+      'recovery/regeneration-history.jsonl. R-014 (v0.12 Slice 3).',
+  )
   .action(async (opts) => {
     try {
-      const result = await recoverPack({ packPath: opts.pack, spawnMcpClient: true });
+      const result = await recoverPack({
+        packPath: opts.pack,
+        spawnMcpClient: true,
+        regenerateActionGraph: opts.regenerateActionGraph === true,
+      });
+      if (opts.regenerateActionGraph === true && result.regenerated === false) {
+        // Clean-exit path already wrote the explicit "no regeneration needed"
+        // message to stdout. Return without re-emitting the standard summary
+        // so the operator sees a single coherent message.
+        return;
+      }
       process.stdout.write(`recovery advisor complete\n`);
       process.stdout.write(`  pack mode:              ${result.packMode}\n`);
       process.stdout.write(`  total sections:         ${result.totalSections}\n`);
@@ -1448,6 +1469,23 @@ recoverCmd
       process.stdout.write(`  verifier rejections:    ${result.verifierRejections}\n`);
       process.stdout.write(`  json:                   ${result.jsonPath}\n`);
       process.stdout.write(`  markdown:               ${result.markdownPath}\n`);
+      if (result.regenerated === true) {
+        process.stdout.write(`  regeneration reason:    ${result.regenerationReason}\n`);
+        process.stdout.write(
+          `  input_state_hash:       ${(result.inputStateHash ?? '').slice(0, 12)}…\n`,
+        );
+        if (result.previousInputStateHash) {
+          process.stdout.write(
+            `  previous hash:          ${result.previousInputStateHash.slice(0, 12)}…\n`,
+          );
+        }
+        if (result.archivedJsonPath) {
+          process.stdout.write(`  archived json:          ${result.archivedJsonPath}\n`);
+        }
+        if (result.archivedMarkdownPath) {
+          process.stdout.write(`  archived markdown:      ${result.archivedMarkdownPath}\n`);
+        }
+      }
     } catch (err) {
       reportError(err);
     }

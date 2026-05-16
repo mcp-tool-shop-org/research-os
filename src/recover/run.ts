@@ -49,17 +49,27 @@ import { deterministicFallbackAdvice } from './fallback.js';
 import { classifyFallbackCause } from './fallback-cause.js';
 import { renderRecoveryMarkdown } from './markdown.js';
 import { defaultSystemCannotSee } from './prompt.js';
+import {
+  appendRegenerationLedgerRecord,
+  archiveExistingRecoveryFiles,
+  buildRegenerationLedgerRecord,
+  classifyRegenerationReason,
+  computeInputStateHash,
+  readExistingRecoveryArtifact,
+} from './regeneration-ledger.js';
 import { RecoveryArtifactSchema } from './schema.js';
 import { verifyRecoveryAdvice } from './verifier.js';
 import {
   RECOVERY_ARTIFACT_STATUS,
   type AdvisorPath,
   type AdviceVerificationResult,
+  type HealthySectionResult,
   type RecoverPackOptions,
   type RecoverPackSummary,
   type RecoveryAdvice,
   type RecoveryArtifact,
   type RecoveryProseError,
+  type RegenerationReason,
   type SectionDiagnosis,
   type SectionRecoveryResult,
 } from './types.js';
@@ -274,6 +284,11 @@ export interface BuildRecoveryArtifactInput {
   model?: string;
   // Optional override of generated_at — useful for deterministic tests.
   generatedAt?: string;
+  // R-014: when supplied, embed this hash on the resulting artifact. Callers
+  // that need to short-circuit on a hash-match (recoverPack with
+  // `regenerateActionGraph: true`) pre-compute the hash from the diagnoses
+  // and pass it through here so the persisted artifact carries it.
+  inputStateHash?: string;
 }
 
 export interface BuildRecoveryArtifactOutput {
@@ -302,6 +317,7 @@ export async function buildRecoveryArtifact(
   let healthySections = 0;
   let fallbackSections = 0;
   const sectionResults: SectionRecoveryResult[] = [];
+  const diagnosesForHash: Array<SectionDiagnosis | HealthySectionResult> = [];
 
   for (const section of research.sections) {
     const out = await recoverOneSection({
@@ -317,11 +333,23 @@ export async function buildRecoveryArtifact(
     verifierRejections += out.verifierRejections;
     if (out.wasHealthy) {
       healthySections += 1;
+      diagnosesForHash.push({
+        section_id: out.result.section_id,
+        section_purpose: out.result.section_purpose,
+        status: 'healthy',
+      });
     } else {
       advisedSections += 1;
       if (out.wasFallback) fallbackSections += 1;
+      if (out.result.diagnosis) diagnosesForHash.push(out.result.diagnosis);
     }
   }
+
+  // R-014: always populate input_state_hash on the persisted artifact. The
+  // hash discriminates regenerate-needed vs already-current state. Pre-R-014
+  // artifacts on disk lack this field; the regenerate path treats absence
+  // as "stale" via the classifier in regeneration-ledger.ts.
+  const inputStateHash = input.inputStateHash ?? computeInputStateHash(diagnosesForHash);
 
   const artifact: RecoveryArtifact = {
     status: RECOVERY_ARTIFACT_STATUS,
@@ -331,6 +359,7 @@ export async function buildRecoveryArtifact(
     generated_at: generatedAt,
     research_os_version: RESEARCH_OS_VERSION,
     sections: sectionResults,
+    input_state_hash: inputStateHash,
   };
 
   RecoveryArtifactSchema.parse(artifact);
@@ -369,12 +398,93 @@ export async function writeRecoveryArtifact(
   return { jsonPath, markdownPath: mdPath };
 }
 
+/**
+ * R-014: pre-flight diagnose pass used by the regenerate-action-graph path
+ * to compute the current state-hash WITHOUT triggering the advisor. This
+ * is the work `buildRecoveryArtifact` would do anyway via `recoverOneSection`
+ * — but we need the result before deciding whether to short-circuit, and
+ * the per-section advisor calls (LLM) are the expensive part we want to
+ * skip when state is unchanged.
+ */
+async function diagnoseAllSections(args: {
+  packPath: string;
+  research: ResearchYaml;
+  handoff: CoworkHandoffPayload;
+}): Promise<Array<SectionDiagnosis | HealthySectionResult>> {
+  const { packPath, research, handoff } = args;
+  const results: Array<SectionDiagnosis | HealthySectionResult> = [];
+  for (const section of research.sections) {
+    const diag = await diagnoseSection({
+      packPath,
+      sectionId: section.id,
+      sectionPurpose: section.purpose,
+      handoff,
+    });
+    results.push(diag);
+  }
+  return results;
+}
+
 export async function recoverPack(
   options: RecoverPackOptions = {},
 ): Promise<RecoverPackSummary> {
   const packPath = options.packPath ? resolve(options.packPath) : process.cwd();
   const { research, handoff } = await readPackInputs(packPath);
   if (!handoff) throw new HandoffNotFoundError();
+
+  const regenerateRequested = options.regenerateActionGraph === true;
+
+  // R-014: regenerate pre-flight. Compute the current state-hash WITHOUT
+  // calling the advisor; compare with the prior artifact's input_state_hash;
+  // short-circuit when the hashes match so we don't waste a model round-trip
+  // (the expensive part) on a no-op regeneration. The "no regeneration
+  // needed" exit explicitly does NOT mutate disk and does NOT write a
+  // ledger entry — that's the operator's clean-state signal.
+  let currentStateHash: string | null = null;
+  let previousArtifact: RecoveryArtifact | null = null;
+  let regenerationReason: RegenerationReason | null = null;
+  if (regenerateRequested) {
+    const diagnoses = await diagnoseAllSections({ packPath, research, handoff });
+    currentStateHash = computeInputStateHash(diagnoses);
+    previousArtifact = await readExistingRecoveryArtifact(packPath);
+    regenerationReason = classifyRegenerationReason({
+      previousArtifact,
+      currentStateHash,
+    });
+    if (regenerationReason === null) {
+      // No regeneration needed: prior artifact's hash already matches.
+      process.stdout.write(
+        'No regeneration needed: existing recovery output reflects current pack state ' +
+          `(input_state_hash=${currentStateHash.slice(0, 12)}…). ` +
+          'No files written, no ledger entry, no history archive.\n',
+      );
+      return {
+        packPath,
+        packMode: handoff.mode,
+        jsonPath: join(packPath, 'recovery', 'blocked-section-recovery.json'),
+        markdownPath: join(packPath, 'recovery', 'blocked-section-recovery.md'),
+        totalSections: previousArtifact ? previousArtifact.sections.length : research.sections.length,
+        advisedSections: previousArtifact
+          ? previousArtifact.sections.filter((s) => s.status === 'recovery_advised').length
+          : 0,
+        healthySections: previousArtifact
+          ? previousArtifact.sections.filter((s) => s.status === 'healthy').length
+          : 0,
+        fallbackSections: previousArtifact
+          ? previousArtifact.sections.filter(
+              (s) => s.advisor_path === 'deterministic_fallback',
+            ).length
+          : 0,
+        verifierRejections: 0,
+        regenerated: false,
+        regenerationReason: null,
+        inputStateHash: currentStateHash,
+        previousInputStateHash: previousArtifact?.input_state_hash ?? null,
+        archivedJsonPath: null,
+        archivedMarkdownPath: null,
+      };
+    }
+  }
 
   // Resolve MCP client. To keep TypeScript's flow analysis happy across
   // the closure boundary, we hold the spawned handle in an object property
@@ -398,6 +508,19 @@ export async function recoverPack(
   };
 
   try {
+    // R-014: archive existing recovery files BEFORE writing the new ones so
+    // the operator can correlate the new artifact's input_state_hash with
+    // the archived predecessor's filename suffix. Only the regenerate path
+    // archives; the default path overwrites in place (legacy behavior).
+    let archivedJsonPath: string | null = null;
+    let archivedMarkdownPath: string | null = null;
+    if (regenerateRequested && regenerationReason !== null) {
+      const previousHash = previousArtifact?.input_state_hash ?? null;
+      const archive = await archiveExistingRecoveryFiles(packPath, previousHash);
+      archivedJsonPath = archive.archivedJsonPath;
+      archivedMarkdownPath = archive.archivedMarkdownPath;
+    }
+
     const client = await ensureClient();
     const { artifact, stats } = await buildRecoveryArtifact({
       packPath,
@@ -405,8 +528,21 @@ export async function recoverPack(
       handoff,
       client,
       model: options.advisorModel,
+      inputStateHash: currentStateHash ?? undefined,
     });
     const { jsonPath, markdownPath } = await writeRecoveryArtifact({ packPath, artifact });
+
+    if (regenerateRequested && regenerationReason !== null) {
+      const record = buildRegenerationLedgerRecord({
+        previousArtifact,
+        currentArtifact: artifact,
+        previousStateHash: previousArtifact?.input_state_hash ?? null,
+        newStateHash: artifact.input_state_hash ?? '',
+        regenerationReason,
+        archive: { archivedJsonPath, archivedMarkdownPath },
+      });
+      await appendRegenerationLedgerRecord(packPath, record);
+    }
 
     return {
       packPath,
@@ -418,6 +554,16 @@ export async function recoverPack(
       healthySections: stats.healthySections,
       fallbackSections: stats.fallbackSections,
       verifierRejections: stats.verifierRejections,
+      ...(regenerateRequested
+        ? {
+            regenerated: true,
+            regenerationReason,
+            inputStateHash: artifact.input_state_hash,
+            previousInputStateHash: previousArtifact?.input_state_hash ?? null,
+            archivedJsonPath,
+            archivedMarkdownPath,
+          }
+        : {}),
     };
   } finally {
     if (mcpState.handle) {
