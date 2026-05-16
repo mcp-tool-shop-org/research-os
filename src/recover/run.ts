@@ -46,6 +46,7 @@ import { buildActionGraph } from './action-graph.js';
 import { runRecoveryAdvisor } from './advisor.js';
 import { diagnoseSection, isHealthy } from './diagnose.js';
 import { deterministicFallbackAdvice } from './fallback.js';
+import { classifyFallbackCause } from './fallback-cause.js';
 import { renderRecoveryMarkdown } from './markdown.js';
 import { defaultSystemCannotSee } from './prompt.js';
 import { RecoveryArtifactSchema } from './schema.js';
@@ -229,15 +230,21 @@ async function recoverOneSection(args: {
       advice = fallback;
       advisorPath = 'deterministic_fallback';
       wasFallback = true;
+      const lastRejectionReason =
+        'mcp_error' in attempt2
+          ? `mcp_error: ${attempt2.mcp_error}`
+          : `${attempt2.verifier.reason}: ${attempt2.verifier.detail}`;
+      // R-010: structural cause classification + optional timing.
+      // Pure read over the rejection string; no logic change.
+      const { cause, timing } = classifyFallbackCause(lastRejectionReason);
       proseError = {
         code: 'advisor_verifier_exhausted',
         message:
           'Recovery advisor failed verifier checks twice. Deterministic recovery rendering applied.',
         attempts: 2,
-        last_rejection_reason:
-          'mcp_error' in attempt2
-            ? `mcp_error: ${attempt2.mcp_error}`
-            : `${attempt2.verifier.reason}: ${attempt2.verifier.detail}`,
+        last_rejection_reason: lastRejectionReason,
+        fallback_cause: cause,
+        ...(timing ? { timing_ms: timing } : {}),
       };
     }
   }

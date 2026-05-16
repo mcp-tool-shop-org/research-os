@@ -8,6 +8,7 @@ import {
   ADVICE_CONFIDENCE_LEVELS,
   ADVISOR_PATHS,
   FAILURE_SHAPES,
+  FALLBACK_CAUSES,
   PIPELINE_STAGES,
   RECOVERY_ACTIONS,
   RECOVERY_ARTIFACT_STATUS,
@@ -20,6 +21,13 @@ export const PipelineStageSchema = z.enum(PIPELINE_STAGES);
 export const AdviceConfidenceSchema = z.enum(ADVICE_CONFIDENCE_LEVELS);
 export const AdvisorPathSchema = z.enum(ADVISOR_PATHS);
 export const VerifierRejectionReasonSchema = z.enum(VERIFIER_REJECTION_REASONS);
+export const FallbackCauseSchema = z.enum(FALLBACK_CAUSES);
+export const FallbackTimingSchema = z
+  .object({
+    elapsed_ms: z.number().int().nonnegative(),
+    budget_ms: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const ReversibilitySchema = z.enum(['high', 'medium', 'low']);
 
@@ -188,6 +196,8 @@ export const AdvisorVerifierExhaustedErrorSchema = z
     message: z.string().min(1),
     attempts: z.number().int().positive(),
     last_rejection_reason: z.string(),
+    fallback_cause: FallbackCauseSchema.optional(),
+    timing_ms: FallbackTimingSchema.optional(),
   })
   .strict();
 

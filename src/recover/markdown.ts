@@ -7,8 +7,11 @@
 
 import type {
   AdvisorPath,
+  FallbackCause,
+  FallbackTiming,
   RecoveryAdvice,
   RecoveryArtifact,
+  RecoveryProseError,
   SectionRecoveryResult,
 } from './types.js';
 
@@ -33,6 +36,69 @@ function confidenceBadge(confidence: RecoveryAdvice['confidence']): string {
     case 'needs_human_judgment':
       return '**Confidence:** needs human judgment';
   }
+}
+
+// R-010 — operator-readable headline for the fallback cause. The cause is
+// classified at orchestrator time from the existing last_rejection_reason;
+// here we just project it into language an operator can act on.
+function fallbackCauseHeadline(cause: FallbackCause, timing: FallbackTiming | undefined): string {
+  switch (cause) {
+    case 'tier_timeout':
+      if (timing) {
+        return `AI advisor timed out (TIER_TIMEOUT) — elapsed ${timing.elapsed_ms}ms over ${timing.budget_ms}ms budget.`;
+      }
+      return 'AI advisor timed out (TIER_TIMEOUT).';
+    case 'mcp_error':
+      return 'AI advisor unavailable — the MCP advisor call returned an error.';
+    case 'retry_exhausted':
+      return 'AI advisor exhausted — both attempts were rejected by the verifier (retry-exhausted).';
+  }
+}
+
+function renderFallbackCauseBlock(proseError: RecoveryProseError): string[] {
+  const lines: string[] = [];
+  // Defensive: only fired for the deterministic-fallback path. Older
+  // recovery artifacts written before R-010 won't have fallback_cause —
+  // in that case, render nothing new (graceful back-compat).
+  if (!proseError.fallback_cause) return lines;
+
+  lines.push('### Why the AI advisor fell back');
+  lines.push('');
+  lines.push(`**Cause:** ${fallbackCauseHeadline(proseError.fallback_cause, proseError.timing_ms)}`);
+  lines.push('');
+  lines.push(
+    'The recovery guidance below was generated deterministically from pack law rather than the AI advisor. The fallback recovery action and pack-law forbiddings are unchanged.',
+  );
+  lines.push('');
+  lines.push(
+    'Raw error and timing are preserved at `prose_error.last_rejection_reason` (and `prose_error.timing_ms` when parseable) in `recovery/blocked-section-recovery.json` for full inspection.',
+  );
+  lines.push('');
+  return lines;
+}
+
+// Per-cause counter for the top callout — operators see at a glance whether
+// fallbacks were primarily timeouts vs verifier-rejected.
+function summarizeFallbackCauses(sections: SectionRecoveryResult[]): string | null {
+  const counts: Record<FallbackCause, number> = {
+    tier_timeout: 0,
+    mcp_error: 0,
+    retry_exhausted: 0,
+  };
+  let total = 0;
+  for (const s of sections) {
+    if (s.advisor_path !== 'deterministic_fallback') continue;
+    const cause = s.prose_error?.fallback_cause;
+    if (!cause) continue;
+    counts[cause] += 1;
+    total += 1;
+  }
+  if (total === 0) return null;
+  const parts: string[] = [];
+  if (counts.tier_timeout > 0) parts.push(`${counts.tier_timeout} timeout`);
+  if (counts.mcp_error > 0) parts.push(`${counts.mcp_error} mcp_error`);
+  if (counts.retry_exhausted > 0) parts.push(`${counts.retry_exhausted} retry_exhausted`);
+  return parts.join(', ');
 }
 
 function renderHealthy(section: SectionRecoveryResult): string[] {
@@ -70,6 +136,14 @@ function renderAdvised(section: SectionRecoveryResult): string[] {
     lines.push(`**ProseError:** \`${prose_error.code}\` — ${prose_error.message}`);
   }
   lines.push('');
+
+  // R-010 — fallback cause callout. Only rendered for the deterministic-
+  // fallback path AND only when the orchestrator populated fallback_cause.
+  // Operator sees the cause (timeout vs verifier vs other MCP error) +
+  // optional elapsed/budget timing before scanning the recommended action.
+  if (prose_error) {
+    lines.push(...renderFallbackCauseBlock(prose_error));
+  }
 
   // Recommended action
   lines.push('### Recommended next move');
@@ -138,7 +212,9 @@ export function renderRecoveryMarkdown(artifact: RecoveryArtifact): string {
   lines.push(`> **Pack mode:** ${artifact.pack_mode}`);
   lines.push(`> **Sections:** ${artifact.sections.length} total — ${advisedCount} advised, ${healthyCount} healthy`);
   if (fallbackCount > 0) {
-    lines.push(`> **Deterministic fallback applied to:** ${fallbackCount} section(s) (AI advisor exhausted)`);
+    const causeSummary = summarizeFallbackCauses(artifact.sections);
+    const causeSuffix = causeSummary ? ` — ${causeSummary}` : '';
+    lines.push(`> **Deterministic fallback applied to:** ${fallbackCount} section(s) (AI advisor exhausted)${causeSuffix}`);
   }
   lines.push('>');
   lines.push('> This is a recovery advisor artifact. It tells the operator what lawful');

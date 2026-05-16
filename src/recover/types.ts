@@ -177,11 +177,35 @@ export type AdviceVerificationResult =
 
 // ── ProseError shapes for recovery artifact ─────────────────────────────────
 
+// v0.11 Slice 4 (R-010) — structural cause classification for the
+// deterministic-fallback path. Read from the orchestrator's existing
+// last_rejection_reason string at fallback-construction time so the
+// operator-facing markdown can surface "AI advisor timed out" rather than
+// burying the cause in JSON. Purely additive on the prose_error shape;
+// recovery selection logic is unchanged.
+export const FALLBACK_CAUSES = [
+  'tier_timeout',     // MCP error contained TIER_TIMEOUT marker
+  'mcp_error',        // MCP error other than TIER_TIMEOUT (parse, network, etc.)
+  'retry_exhausted',  // Verifier rejected both advisor attempts (no MCP error)
+] as const;
+
+export type FallbackCause = (typeof FALLBACK_CAUSES)[number];
+
+// Optional structured timing extracted from TIER_TIMEOUT messages of the
+// shape `elapsed=NNNNms budget=NNNNms`. Populated only when the classifier
+// can parse both numbers from the rejection string; absent otherwise.
+export interface FallbackTiming {
+  elapsed_ms: number;
+  budget_ms: number;
+}
+
 export interface AdvisorVerifierExhaustedError {
   code: 'advisor_verifier_exhausted';
   message: string;
   attempts: number;
   last_rejection_reason: string;
+  fallback_cause?: FallbackCause;
+  timing_ms?: FallbackTiming;
 }
 
 export type RecoveryProseError = AdvisorVerifierExhaustedError;
