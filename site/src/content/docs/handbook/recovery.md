@@ -243,6 +243,28 @@ The top callout extends with a per-cause summary (e.g., `Deterministic fallback 
 
 ---
 
+## Recover advisor — distinct-shape heuristic + `--regenerate-action-graph` (v0.12.0+ R-014)
+
+**Symptom.** `recovery/blocked-section-recovery.md` recommends `repair_claim_scope` for a section whose claims already have `scope` populated; the actual blocker is missing on-topic sources. OR the persisted recovery artifact is stale relative to current claim state and re-running `recover pack` keeps producing the same stale advice.
+
+**Cause (the v0.3 trap).** Pre-v0.12 the deterministic-fallback action graph for `accepted_claim_floor` counted `needs_repair_claims` as the OR'd union of `needs_scope_repair ∪ needs_source_repair ∪ needs_contradiction_mapping`. If 5 source-shape blockers existed (and 0 scope-shape), the aggregate hit 5 ≥ 3 and the graph fired `repair_claim_scope` even though scope had nothing to act on. AND existing recovery artifacts stayed on disk with no operator-facing regenerate verb — re-running `recover pack` didn't change advice if the underlying state had changed but the persisted artifact predated those changes.
+
+**Recover (R-014 closes both halves).**
+
+1. **Distinct-shape heuristic — automatic.** `recover pack` now reads `evidence_state.scope_repair_blocked` + `evidence_state.source_repair_blocked` (additive optional fields on the diagnose layer) and routes by which shape DOMINATES. Source-dominant (`source > 0 AND source > scope`) → top = `add_on_topic_sources`, with `repair_claim_scope` surfaced as a Hick's-Law-capped secondary only when `scope_count ≥ 3`. Scope-meets-threshold-and-not-source-dominant → top = `repair_claim_scope` (R-001 behavior preserved for ties). Legacy fixtures without distinct counts treat `needs_repair_claims` as the scope count — R-001 byte-identical compatibility.
+2. **`--regenerate-action-graph` flag — opt-in operator-facing.** When the persisted recovery artifact has gone stale, re-run with the flag:
+   ```bash
+   research-os recover pack --regenerate-action-graph
+   ```
+   - SHA-256 `input_state_hash` on the recovery artifact (canonical projection over `failure_shape` + `evidence_state` + `stage` + `blocking/waiveable`; `section_purpose` + `detail` wording excluded so copy edits don't trip false staleness).
+   - 3-reason classifier: `state_changed` / `missing_input_hash` (pre-R-014 artifact) / `no_prior_artifact` (first run).
+   - **Skip path** (state hash matches): emits explicit `No regeneration needed: existing recovery output reflects current pack state (input_state_hash=<prefix>…). No files written, no ledger entry, no history archive.` Operator gets an unambiguous "safe to re-run" signal.
+   - **Regenerate path**: archives prior artifact to `recovery/history/blocked-section-recovery-<ISO>-<hash-prefix>.{json,md}` BEFORE writing fresh output (write-ahead discipline), then appends a record to the append-only `recovery/regeneration-history.jsonl` ledger.
+
+Hard invariants preserved: no new `RECOVERY_ACTIONS` (snapshot asserts 8 values); AI advisor prompt template untouched (new EvidenceState fields are observable in persisted diagnosis JSON but NOT rendered in the prompt); verifier rules unchanged; regenerate path mutates ONLY `recovery/` files (claims and source-cards read-only); history files append-only; flag is OPT-IN (default `recover pack` byte-identical except for the additive `input_state_hash` field on the artifact).
+
+---
+
 ## Freeze — refusal with stable `reason_code`
 
 **Symptom.** `research-os freeze` exits 2 and writes

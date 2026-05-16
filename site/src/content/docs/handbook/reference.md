@@ -85,16 +85,27 @@ Default overlap threshold `0.2`. The CLI report renders a Relevance column and a
 
 ---
 
-### `research-os claim extract <section>`
+### `research-os claim extract <section>` (v0.12.0+ resume/progress)
 
 Extract claims from gathered sources.
 
 ```bash
 research-os claim extract 01-landscape
-research-os claim extract 01-landscape --model hermes3:8b   # override model
+research-os claim extract 01-landscape --model hermes3:8b      # override model
+research-os claim extract 01-landscape --resume                # v0.12.0 (R-015)
+research-os claim extract 01-landscape --progress              # v0.12.0 (R-015)
+research-os claim extract 01-landscape --resume --progress     # combined
 ```
 
 All claims ship at `review_state: candidate`. Extraction never promotes.
+
+**v0.12.0+ per-source completion ledger (R-015).** Every successful per-source extraction appends a record to `evidence/extract-completion.jsonl` (always-on; written regardless of flags). Failed extractions (TIER_TIMEOUT, MCP error, validation failure) and pre-extract gate skips (no card, severity quarantine, no excerpts) do NOT write — they re-attempt on the next run. Records carry `(source_id, section_id, completed_at, claim_count, extraction_attempt, research_os_version, duration_ms)`.
+
+- **`--resume`** skips sources whose successful extraction is already in the ledger for THIS section. Same source in a different section is tracked independently (key is `section_id + source_id`).
+- **`--progress`** emits per-source `[extract N/M] <src_id> starting...` / `done — K claims in Tms` / `failed — <reason> in Tms` lines to stderr. Stdout (canonical claims output) is byte-identical to the default path. Counter reflects post-resume-filter position.
+- Combined: emits `[skip] <src_id> (already extracted at <ISO>)` for ledger-completed sources before the `[extract N/M]` lines for the remaining work.
+
+Default behavior (no flags) is byte-identical to v0.11.0 except for the new always-on `evidence/extract-completion.jsonl` artifact.
 
 ---
 
@@ -106,6 +117,28 @@ Shape the candidate set before review: dedup, cap per-source density, park low-v
 research-os claim triage 01-landscape
 research-os claim audit-density 01-landscape   # read-only density diagnostic
 ```
+
+---
+
+### `research-os claim rescue <section>` (v0.12.0+ R-012)
+
+Post-extraction rescue of `source_content_mismatch`-excluded claims that have ≥2 on-topic peers from the same source body. Closes the v0.3 over-trim case where R-011's 20% vocab-overlap precheck structurally excluded high-quality secondary-source moderator claims (e.g., Healthline's "western-edge crash spike" moderator at 11% overlap while the same source body produced 4 accepted on-topic claims).
+
+```bash
+research-os claim rescue 01-landscape                 # interactive (default)
+research-os claim rescue 01-landscape --llm           # invoke LLM rescue critic only (no operator prompt)
+research-os claim rescue 01-landscape --operator      # operator decides on each eligible claim
+```
+
+Three-stage sequential pipeline runs inside the extract loop AND at this post-extraction surface:
+
+1. **Deterministic eligibility gate** — `non_excluded_on_topic_peers >= 2` from the same source body. Claims without enough peers get `rescue_status = ineligible_for_rescue` and stay excluded.
+2. **LLM rescue critic** — eligible claims go to the rescue critic with peer-bundle context; the critic emits `rescued_by_llm` (with operator-readable `rescue_reason` + new `rescue_scope`/`rescue_boundary` constraints) or `not_rescued`.
+3. **Operator decision** — for claims the LLM declined (or when the LLM is unavailable / opted-out), the operator CLI presents the claim + peers + critic decision and prompts for `accept` (operator-authored `rescue_scope` + `rescue_boundary`) / `decline` / `skip`.
+
+Closed `FrameRescueStatus` enum (5 values): `not_rescued | rescued_by_llm | rescued_by_operator | operator_declined | ineligible_for_rescue`.
+
+**Hard invariant: rescues that flip `frame_excluded: true → false` are WITNESSED** in the append-only `evidence/claim-frame-rescues.jsonl` ledger with `rescue_scope` + `rescue_boundary` metadata. The original claim's `scope` and `not` fields are NEVER rewritten by rescue — rescue metadata lives separately. The hard gate (`non_excluded_on_topic_peers >= 2`) is enforced at three layers in code (extractor, operator CLI, pure gate) so rescue cannot silently bypass it.
 
 ---
 

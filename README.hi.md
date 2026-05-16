@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/version-0.11.0-blue" alt="version 0.11.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.0"><img src="https://img.shields.io/badge/version-0.12.0-blue" alt="version 0.12.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -202,85 +202,86 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 एक अंतर्निहित उदाहरण के रूप में उपलब्ध है। [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) और
 [समीक्षक अंशांकन पुस्तिका पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) देखें।
 
-## नया संस्करण v0.11.0 — दूसरा ऑपरेटर-अकेलापन सुधार रिलीज
+## नया संस्करण v0.12.0 — कवरेज-पुनर्प्राप्ति रिलीज
 
-v0.11.0, v0.2 ऑपरेटर-अकेलापन गेट विफलता की स्थितियों को ठीक करता है, जो 15 मई, 2026 को सामने आई थीं (`operator_aloneness_dst_v0.2`, PASS_WITH_CONDITIONS, लेकिन प्राधिकरण-स्तर नहीं)। चार सुधारों को एक साथ लागू किया गया है: स्कोप/सीमा मरम्मत संरेखण (R-007), खोज के समय URL प्रासंगिकता जांच (R-008), निष्कर्षण और फ्रेम-क्रिटिक लेयर्स में युग्मित स्रोत-सामग्री सुरक्षा (R-009 + R-011), और सलाहकार के बैकअप-कारण दृश्यता को पुनर्प्राप्त करना (R-010)। v0.2 प्राधिकरण में विफल रहा क्योंकि तीन स्वतंत्र संदूषण पथ v0.10.0 की सुरक्षा से बच गए — `repair-scope --auto` ने `scope` को भरा लेकिन `not` को खाली छोड़ दिया, इसलिए ट्राइएज ने दावों को `needs_scope_repair` के रूप में पुन: वर्गीकृत किया, `llm-heuristic` ने वास्तविक लेकिन अप्रासंगिक PMC URL को उच्च आत्मविश्वास वाले उम्मीदवारों के रूप में प्रस्तुत किया, और एक्सट्रैक्टर + फ्रेम-क्रिटिक श्रृंखला ने DST-फ्रेम वाले पाठ के साथ 11 कैंसर-पेपर से संबंधित दावों को स्वीकार किया। केवल `accept-floor` अपरिवर्तनीय रक्षा थी जो संरचनात्मक रूप से सक्रिय थी; v0.11.0 ऊपरी स्तर की कमियों को ठीक करता है ताकि गेट का v0.3 संस्करण नए ऑपरेटर रनों के खिलाफ काम कर सके।
+v0.12.0, v0.3 ऑपरेटर-अकेलापन जांच (operator-aloneness gate) से संबंधित उन समस्याओं को ठीक करता है जो 16 मई, 2026 को सामने आई थीं (`operator_aloneness_dst_v0.3`, PASS_WITH_CONDITIONS, लेकिन प्राधिकरण-स्तर तक नहीं)। चार क्षेत्रों में छह महत्वपूर्ण सुधार किए गए हैं: तीन आर्किटेक्चरल सुधार जो v0.4 के लिए आवश्यक कवरेज अंतराल को भरते हैं (R-012, R-013, R-014), और तीन एर्गोनॉमिक सुधार जो v0.4 जांच के दौरान उपयोग किए जाने वाले ऑपरेटर इंटरफ़ेस को बेहतर बनाते हैं (R-015, R-016, R-017)। v0.3 विफल नहीं हुआ क्योंकि सुरक्षा उपाय कमजोर हुए थे - सभी पांच v0.11 सुरक्षा उपाय ठीक उसी तरह काम कर रहे थे जैसा कि डिज़ाइन किया गया था, उन्होंने बिना किसी त्रुटि के एक सटीक परिणाम दिया, और सिस्टम ने वास्तविक लेकिन सीमित प्रमाणों के आधार पर काम किया। यह इसलिए विफल हुआ क्योंकि, सही ढंग से काम करने के बावजूद, समान सुरक्षा उपायों ने स्वीकृत दावों के आधार से महत्वपूर्ण कवरेज को हटा दिया। v0.3 में प्राप्त सिद्धांत:
+
+> **v0.11 ने सिस्टम को इतना सुरक्षित बना दिया कि यह बिना किसी त्रुटि के परिणाम दे सके।**
+> **v0.12 इसे बिना उन सुरक्षा उपायों को कमजोर किए कवरेज को बेहतर ढंग से पुनर्प्राप्त करने में सक्षम बनाता है।**
+
+सिद्धांत: **कठोर सुरक्षा उपाय गलत परिणामों को रोकने में सक्षम हैं, लेकिन वे सिस्टम को आवश्यक कवरेज से भी वंचित कर सकते हैं।** v0.12 कवरेज-पुनर्प्राप्ति का समाधान है। v0.11 के सुरक्षा उपायों को अपरिवर्तित रखा गया है - R-007 से R-011 तक के सभी सुरक्षा उपाय अभी भी काम कर रहे हैं। v0.12 में, वैध और सत्यापित पुनर्प्राप्ति पथ जोड़े गए हैं।
 
 ### आप क्या चला सकते हैं
 
 ```sh
-research-os claim repair-scope <section-id> [--auto | --interactive]
-                                              # now fills BOTH scope AND not when both are null (R-007)
-research-os discover run <section-id>          # now fetches URL <title> + relevance-checks vs query (R-008)
-research-os discover approve <section-id> --candidate <id>
-                                              # explicit override for topic_mismatch candidates (R-008)
-research-os source-card audit                  # new severity source_identity_mismatch (R-009)
-research-os recover pack                       # MD now surfaces fallback cause + timing (R-010)
+research-os claim rescue <section-id> [--llm | --operator]
+                                              # NEW: post-extraction rescue of frame-excluded
+                                              # source_content_mismatch claims with peer evidence (R-012)
+research-os source-card audit --apply --from <file> --rebuild-cards
+                                              # NEW: overrides materialize into persisted card raw JSON
+                                              # without re-fetching (closes C2+C3 architectural trap) (R-013)
+research-os recover pack --regenerate-action-graph
+                                              # NEW: re-runs advisor against current state when
+                                              # recovery artifact has gone stale (R-014)
+research-os claim extract <section-id> [--resume] [--progress]
+                                              # NEW: per-source resume + stderr progress lines (R-015)
 ```
 
-### तीन-स्तरीय स्रोत-सामग्री सुरक्षा
-
-v0.11.0, स्रोत-सामग्री संदूषण सुरक्षा को तीन स्वतंत्र चरणों में पूरा करता है:
+### तीन आर्किटेक्चरल सुधार (v0.4-ब्लॉकिंग आधार)
 
 ```
-discover  →  R-008  fetches each URL's <title>, computes keyword overlap vs the discover query
-              ↓     topic_mismatch quarantined from `approve --top N`; override via `approve --candidate <id>`
-extract   →  R-009  compares emitted card.title against fetched HTML <title>
-              ↓     mismatch → source_identity_mismatch (HARD FAIL); override via clear_severities[]
-critic    →  R-011  computes source-content signature once per source; precheck vs claim asserts
-              ↓     mismatch → frame_excluded with reason source_content_mismatch (LLM critic short-circuited)
-accept-floor       → unchanged; remains the floor of safety, not the only designed defense
+extract critic  →  R-012  source_content_mismatch claims with ≥2 on-topic peers from same source
+                    ↓     become rescue-eligible; LLM critic rescues or operator decides via
+                    ↓     `claim rescue` CLI; append-only evidence/claim-frame-rescues.jsonl ledger
+                    ↓     witnesses every state change; original claim.scope/not NEVER rewritten
+source-card     →  R-013  audit --apply --rebuild-cards routes persisted cards through SAME
+                    ↓     buildCard() gather uses; raw card.source_type == effective post-rebuild;
+                    ↓     reviewer reads pass; no HTTP, no re-fetch; defense floor preserved
+                    ↓     (R-003/R-005/R-009 still fire during rebuild on cached bodies)
+recover advisor →  R-014  needs_repair_claims partitioned into scope_repair_blocked +
+                    ↓     source_repair_blocked; v0.3 regression replay (0 scope + 5 source) now
+                    ↓     recommends add_on_topic_sources (the actual unblock), NOT repair_claim_scope;
+                    ↓     --regenerate-action-graph with SHA-256 input_state_hash freshness detection
 ```
 
-प्रत्येक परत का तंत्र स्वतंत्र रूप से चलता है; यदि एक को अक्षम किया जाता है (पर्यावरण विकल्प से) या हटा दिया जाता है (ऑपरेटर द्वारा ओवरराइड), तो अन्य दो अभी भी सुरक्षा प्रदान करते हैं। `RESEARCH_OS_DISCOVER_RELEVANCE=0` R-008 को अक्षम करता है; `RESEARCH_OS_FRAME_SOURCE_CONTENT=0` R-011 की प्रारंभिक जांच को अक्षम करता है।
-
-### मरम्मत-स्कोप संरेखण
+### तीन एर्गोनॉमिक सुधार (v0.4-गेट-अनुभव में सुधार)
 
 ```
-gate blocked on accepted_claim_floor  →  recover  →  repair_claim_scope rank-1
-                                          ↓
-                                          claim repair-scope --auto
-                                          ↓        fills BOTH scope AND not (R-007)
-                                          ↓
-                                          claim triage re-runs cleanly; claims promote without
-                                                hand-editing claims.jsonl
+claim extract    →  R-015  always-on evidence/extract-completion.jsonl ledger (NEW persistent
+                    ↓     artifact); --resume skips ledger-completed sources (failed re-attempted);
+                    ↓     --progress emits per-source [extract N/M] stderr lines; canonical stdout
+                    ↓     unchanged; default behavior byte-identical except for the new ledger
+override docs    →  R-016  examples/source-card-override.example.json shipped in tarball with
+                    ↓     2 realistic entries (effective_source_type-only + clear_severities);
+                    ↓     converts C1 schema-discovery-by-runtime-error from operator-friction
+                    ↓     to TRIVIAL
+policy coverage  →  R-017  audits/missing-policy-sources.{json,md} informational pack-level audit;
+                    ↓     fires when policy keyword in research.yaml topic+decision AND zero
+                    ↓     docs sources; honors R-013 rebuild via getEffectiveSourceType;
+                    ↓     INFORMATIONAL ONLY — never affects verdict/freeze/pack-publish
 ```
-
-v0.10 का R-001 क्लोज CLI के साथ जारी किया गया था; R-007 मरम्मत आउटपुट को उस ट्राइएज स्थिति के साथ संरेखित करता है जिसके कारण मरम्मत हुई। `evidence/claim-scope-repairs.jsonl` में स्थित अपरिवर्तनीय लेजर, `applied_scope` के साथ-साथ `applied_not` को भी रिकॉर्ड करता है।
-
-### पुनर्प्राप्ति MD बैकअप दृश्यता
-
-जब AI पुनर्प्राप्ति सलाहकार नियतात्मक पुनर्प्राप्ति पर वापस आता है (समय सीमा, MCP त्रुटि, या सत्यापनकर्ता द्वारा दो बार अस्वीकृत), तो `recovery/blocked-section-recovery.md` अब कारण को प्रमुखता से प्रदर्शित करता है। एक नया बंद enum `FALLBACK_CAUSES` (3 मान: `tier_timeout | mcp_error | retry_exhausted`) पथ को वर्गीकृत करता है; वैकल्पिक संरचित समय `prose_error.timing_ms = { elapsed_ms, budget_ms }` तब भरा जाता है जब `ollama-intern-mcp` `elapsed=NNNNms budget=NNNNms` उत्सर्जित करता है। MD अब (v0.2 के मामले के लिए) पढ़ता है:
-
-```
-### Why the AI advisor fell back
-
-**Cause:** AI advisor timed out (TIER_TIMEOUT) — elapsed 15012ms over 15000ms budget.
-
-The recovery guidance below was generated deterministically from pack law
-rather than the AI advisor. The fallback recovery action and pack-law
-forbiddings are unchanged.
-```
-
-पुनर्प्राप्ति चयन तर्क अपरिवर्तित है; यह ऑपरेटर-स्पष्टीकरण है, ऑपरेटर-अवरोधक नहीं।
 
 ### नियमों की सीमा
 
-मरम्मत आर्क योज्य है। पैक-कानून निषेधों को संरक्षित किया गया है: `accepted_claim_floor` अपरिवर्तनीय रहता है; पुनर्प्राप्ति सलाहकार अभी भी अपरिवर्तनीय विफलताओं के लिए `apply_waiver` की सिफारिश करने से इनकार करता है। बंद `FailureShape` enum अपरिवर्तित है (अभी भी नौ मान)। `RECOVERY_ACTIONS` 8 मानों पर अपरिवर्तित है — कोई नया सलाहकार कार्रवाई नहीं; R-007 एक मौजूदा कार्रवाई (`repair_claim_scope`) का विस्तार करता है, और R-010 केवल एक अलग `FALLBACK_CAUSES` enum के माध्यम से `prose_error` पर मेटाडेटा जोड़ता है। गंभीरता संगरोध कभी भी स्पष्ट ऑपरेटर ओवरराइड के बिना ऑडिट गेट से आगे स्वचालित रूप से नहीं बढ़ता है (रिकॉर्ड किया गया ऑपरेटर निर्णय `clear_severities[]` फ़ील्ड है, अपरिवर्तनीय)।
+सिस्टम नियमों का पालन किया गया। `accepted_claim_floor` अपरिवर्तित है। `FailureShape` enum में नौ मान हैं, जो अपरिवर्तित हैं। `RECOVERY_ACTIONS` enum में 8 मान हैं - कोई नया सलाहकार कार्रवाई नहीं; R-014 का विशिष्ट-आकार का अनुमान मौजूदा कार्यों के मार्ग को बढ़ाता है। AI पुनर्प्राप्ति सलाहकार प्रॉम्प्ट टेम्पलेट अपरिवर्तित है (नए `EvidenceState` फ़ील्ड स्थायी JSON में दिखाई देते हैं, लेकिन प्रॉम्प्ट में प्रदर्शित नहीं होते हैं)। पुनर्प्राप्ति सत्यापन नियमों में कोई बदलाव नहीं किया गया है। MCP आर्किटेक्चर अपरिवर्तित है - `ollama-intern-mcp@^2.4.0` का उपयोग जारी है; निष्कर्षण पर MCP कॉल आकार में कोई बदलाव नहीं है। R-017 की चेतावनी केवल सूचनात्मक है और गेट निर्णय, फ्रीज स्वीकृति या पैक प्रकाशन को प्रभावित नहीं करती है। सभी v0.10 + v0.11 सुरक्षा उपायों को बनाए रखा गया है; सुरक्षा आधार अपरिवर्तित है, और v0.12 इस पर आधारित है।
 
-फ्रीज-पैक प्रतिगमन v0.3.3 बेसलाइन के खिलाफ सभी चार फ्रीज पैक के लिए बाइट-समान है — **ग्यारहवीं लगातार रिलीज** जहां यह सच है।
+फ्रीज किए गए पैक का प्रतिगमन, v0.3.3 बेसलाइन के साथ बाइट-समान है, सभी चार फ्रीज किए गए पैक के लिए - **पंद्रहवीं लगातार रिलीज** जिसमें यह सच है (v0.4 → v0.5 → v0.6 → v0.7 → v0.8 → v0.9 → v0.10 → v0.11 → v0.12)।
 
-### v0.11.0 क्या दावा नहीं करता है
+### v0.12.0 क्या दावा नहीं करता है
 
-- v1 तत्परता।
-- v0.3 ऑपरेटर-अकेलापन गेट निर्णय। v0.3 npm `@mcptoolshop/research-os@0.11.0` के साथ एक अलग सत्र में चलता है।
-- स्वीकार्यता सिद्धांत कार्य। v0.3 PASS पर गेटेड।
+- v1 की तत्परता।
+- v0.4 ऑपरेटर-अकेलापन जांच का परिणाम। v0.4, npm `@mcptoolshop/research-os@0.12.0` के साथ एक अलग सत्र में चलाया जाता है।
+- स्वीकार्यता स्लाइस 1। v0.4 पास होने पर गेट किया गया - v0.3 का सिद्धांत (सुरक्षा-स्तर का अकेलापन सिद्ध; कवरेज-स्तर का अकेलापन अभी तक नहीं) अभी भी परीक्षण है।
 - क्लाउड-आधारित अनुसंधान उपकरणों पर जीत।
 - एक पूर्ण विश्वसनीय समीक्षक अंशांकन मॉडल।
 
-v0.11.0, ऑपरेटर-अकेलापन गेट के v0.3 का पूर्व शर्त है, प्रमाण नहीं।
+v0.12.0, ऑपरेटर-अकेलापन जांच के v0.4 के लिए एक पूर्व शर्त है, प्रमाण नहीं।
 
-[`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md) और [CHANGELOG.md](CHANGELOG.md) देखें।
+[CHANGELOG.md](CHANGELOG.md) और ऑपरेटर-फेसिंग ओवरराइड उदाहरण को [`examples/source-card-override.example.json`](examples/source-card-override.example.json) पर देखें।
+
+## पिछला संस्करण: v0.11.0 — दूसरा ऑपरेटर-अकेलापन सुधार रिलीज
+
+v0.11.0 ने v0.2 ऑपरेटर-अकेलापन जांच की विफलता स्थितियों को ठीक किया: स्कोप/सीमा मरम्मत संरेखण (R-007), खोज समय पर URL प्रासंगिकता जांच (R-008), निष्कर्षण और फ्रेम-क्रिटिक परतों में युग्मित स्रोत-सामग्री संदूषण रक्षा (R-009 + R-011), और पुनर्प्राप्ति सलाहकार के फॉलबैक-कारण दृश्यता (R-010)। तीन-स्तरीय स्रोत-सामग्री गार्ड (प्रवेश पर R-008 + निष्कर्षण पर R-009 + फ्रेम क्रिटिक पर R-011) यहां लागू किया गया है। [`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md) देखें।
 
 ## पिछला: v0.10.0 — ऑपरेटर-अकेलापन मरम्मत रिलीज
 
@@ -330,25 +331,27 @@ v0.8.0 ने research-os को इसके घोषित स्थानी
 
 **v1 प्रयोग 1 (ComfyUI वर्कफ़्लो स्थायित्व)** — 2026-05-09 को समाप्त। टर्मिनल ए के सभी 8 खंड, पैकेज स्थिर, संग्रह लाइव। विवरण के लिए [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) और [`docs/roadmap.md`](docs/roadmap.md) देखें।
 
-### research-os क्या नहीं है (और v0.11.0 क्या होने का दावा नहीं करता है)
+### research-os क्या नहीं है (और v0.12.0 क्या होने का दावा नहीं करता है)
 
-- यह अभी तक पूरी तरह से परीक्षणित नहीं है। v0.11.0, v0.2 के विफल होने की स्थितियों को ठीक करता है; v0.3, एक अलग सत्र में इस npm रिलीज़ के खिलाफ "ऑपरेटर-अकेलापन" गेट को सक्रिय करता है और इसमें आगे सुधार हो सकते हैं। v0.11.0, v0.3 के लिए आवश्यक है, प्रमाण नहीं।
-- बाहरी उपयोगकर्ताओं द्वारा व्यापक परीक्षण नहीं किया गया है, सिवाय "डॉगफूड" परीक्षणों और "ऑपरेटर-अकेलापन" गेट के दो परीक्षणों के। छह "डॉगफूड" प्रयोगों को बंद कर दिया गया है - जिनमें से एक आत्म-संदर्भित था, पांच बाहरी डोमेन (ComfyUI, XRPL, Godot, समीक्षक-कैलिब्रेशन, नियतात्मक-समीक्षक) और v0.1 और v0.2 "ऑपरेटर-अकेलापन" गेट परीक्षणों से 11 ज्ञात समस्याओं (R-001 से R-005, v0.10.0 में बंद, R-007 से R-011, v0.11.0 में बंद) सामने आईं। बाहरी ऑपरेटरों का बड़े पैमाने पर उपयोग भविष्य का कार्य है।
-- यह एक पूर्ण पैकेज संश्लेषण लेखक नहीं है। v0.11.0, v0.9 के "सेक्शन-स्कोप" (`synth section`) और "आंशिक-पैकेज-स्कोप" (`synth pack --partial`) सुविधाओं को बरकरार रखता है, जिनमें से प्रत्येक में स्पष्ट रूप से पैकेज की उपयोगिता के बारे में जानकारी दी गई है। पूर्ण पैकेज संश्लेषण के लिए अभी भी एक `synthesis_ready` पैकेज और स्वीकृत दावा आईडी के माध्यम से `synth workspace` का उपयोग करके मानव (या Cowork) द्वारा निर्माण की आवश्यकता होती है।
-- यह किसी भी समीक्षक मॉडल का समर्थन नहीं करता है। v0.11.0 डिफ़ॉल्ट रूप से कोई `trusted_baseline` समीक्षक प्रोफ़ाइल शामिल नहीं करता है; कैलिब्रेशन रसीदें समर्थन नहीं हैं, बल्कि प्रमाण हैं। मौजूदा v0.6.0 कैलिब्रेशन रसीदें v0.8.0 MCP आर्किटेक्चर से पहले की हैं और MCP पथ के तहत उन्हें फिर से कैलिब्रेट नहीं किया गया है। [समीक्षक कैलिब्रेशन हैंडबुक पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) देखें।
-- इसमें पुराने संस्करणों के अवशेष मौजूद हैं। v0.4 से पहले के "फ्रीज" किए गए पैकेजों में `research_os_version: '0.1.0'` होता है, क्योंकि v0.4 से पहले एक हार्डकोडेड "स्काफोल्ड" स्थिरांक का उपयोग किया गया था; यह सुधार v0.4.0 में लागू किया गया था, लेकिन पुराने "फ्रीज" किए गए पैकेज कानून 15 के तहत अपरिवर्तनीय हैं (देखें [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)।
-- यह npm पर प्रमाणित नहीं है। Sigstore प्रमाणीकरण को भविष्य के रिलीज़ में लागू किया जाएगा; पैकेज-shasum और GitHub रिलीज़ प्रतिबद्धता के माध्यम से v0.11.0 npm पैकेजों को सत्यापित करें।
-- यह क्लाउड-आधारित समाधान का विकल्प नहीं है। v0.7.x से प्राप्त `local-first-vs-cloud-research/` पर उत्पाद प्रमाण ने क्लाउड के फायदे, जैसे पठनीयता और ऑपरेटर का बोझ, की पहचान की थी; v0.11.0 यह दावा नहीं करता है कि इन समस्याओं को हल कर दिया गया है।
+- यह सुविधा अभी तक पूरी तरह से जांचा नहीं गया है। v0.12.0, v0.3 में सामने आई कुछ समस्याओं को ठीक करता है (सुरक्षा के लिहाज से यह सुविधा प्रमाणित है; लेकिन कवरेज के लिहाज से अभी भी जांच जारी है - v0.3 में प्राप्त 'डॉक्ट्रिन' अभी भी लागू है)। v0.4 का संस्करण इस npm रिलीज़ के खिलाफ एक अलग सत्र में जांचा जाएगा और इसमें और सुधार हो सकते हैं। v0.12.0, v0.4 के लिए आवश्यक है, लेकिन यह इस सुविधा का अंतिम प्रमाण नहीं है।
+- बाहरी उपयोगकर्ताओं द्वारा इसका परीक्षण केवल 'डॉगफूड' परीक्षणों और तीन 'ऑपरेटर-अलूननेस' जांचों में ही किया गया है। छह 'डॉगफूड' प्रयोग पूरे किए गए हैं - जिनमें से एक स्वयं-संदर्भित था, और पांच अन्य क्षेत्रों (ComfyUI, XRPL, Godot, समीक्षक-कैलिब्रेशन, नियतात्मक-समीक्षक) से संबंधित थे। इसके अलावा, v0.1 / v0.2 / v0.3 के 'ऑपरेटर-अलूननेस' जांचों में 17 समस्याएं सामने आईं (R-001 से R-005, v0.10.0 में ठीक की गईं; R-007 से R-011, v0.11.0 में ठीक की गईं; R-012 से R-017, v0.12.0 में ठीक की गईं)। बड़े पैमाने पर 'ऑपरेटर' उपयोग अभी भी भविष्य में किया जाएगा।
+- यह एक पूर्ण पैकेज संश्लेषण लेखक नहीं है। v0.12.0, v0.9 के 'सेक्शन-स्कोप' (`synth section`) और 'आंशिक-पैकेज-स्कोप' (`synth pack --partial`) सुविधाओं को बरकरार रखता है, जिनमें से प्रत्येक में स्पष्ट रूप से पैकेज की तैयारी की जानकारी दी गई है। पूर्ण पैकेज संश्लेषण के लिए अभी भी एक `synthesis_ready` पैकेज और स्वीकृत 'क्लेम आईडी' के माध्यम से 'सिंथ वर्कस्पेस' का उपयोग करके मानव (या 'कोवर्क') द्वारा लेखन की आवश्यकता होती है।
+- यह किसी भी समीक्षक मॉडल का समर्थन नहीं करता है। v0.12.0 डिफ़ॉल्ट रूप से कोई `trusted_baseline` समीक्षक प्रोफ़ाइल प्रदान नहीं करता है; 'कैलिब्रेशन' रसीदें समर्थन नहीं हैं, बल्कि प्रमाण हैं। मौजूदा v0.6.0 'कैलिब्रेशन' रसीदें v0.8.0 MCP आर्किटेक्चर से पहले की हैं और MCP पथ के तहत फिर से जांच नहीं की गई हैं। 'समीक्षक कैलिब्रेशन' के बारे में अधिक जानकारी के लिए, [इस पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) को देखें।
+- इसमें पुराने संस्करणों के अवशेष मौजूद हैं। v0.4 से पहले के 'फ्रीज' किए गए पैकेजों में `research_os_version: '0.1.0'` लिखा होता है, क्योंकि v0.4 से पहले एक निश्चित 'स्काफॉल्ड' स्थिरांक का उपयोग किया गया था; यह सुधार v0.4.0 में किया गया था, लेकिन पुराने 'फ्रीज' किए गए पैकेज अपरिवर्तनीय हैं (कानून 15 के अनुसार, देखें [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/))।
+- यह npm पर 'प्रॉवेनेंस' प्रमाणित नहीं है। 'सिग्नेचर' प्रमाणीकरण भविष्य में जारी किया जाएगा; v0.12.0 के npm पैकेजों को 'package-shasum' और GitHub रिलीज़ 'कमिट' के माध्यम से सत्यापित करें।
+- यह 'क्लाउड' की तुलना में बेहतर नहीं है। v0.7.x के `local-first-vs-cloud-research/` में किए गए परीक्षणों से पता चला कि 'क्लाउड' में पढ़ने और 'ऑपरेटर' के बोझ के मामले में कुछ फायदे हैं; v0.12.0 यह दावा नहीं करता है कि इन फायदों को समाप्त कर दिया गया है।
 
 ### ज्ञात सीमाएँ
 
-v0.11.0 में तीन ज्ञात सीमाएं हैं जो पिछले रिलीज़ से लाई गई हैं और जो ऑपरेटरों को दिखाई देती हैं। प्रत्येक को [हैंडबुक ज्ञात-सीमाएं पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) और [CHANGELOG.md](CHANGELOG.md) में प्रलेखित किया गया है। इनमें से कोई भी रिलीज़ को अवरुद्ध नहीं करता है; सभी के लिए एक परिभाषित रिकवरी या शमन पथ है।
+v0.12.0 में तीन 'ऑपरेटर' द्वारा दिखाई देने वाली ज्ञात सीमाएं हैं, जो पिछले संस्करणों से ली गई हैं। प्रत्येक सीमा को [इस पृष्ठ](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) और [CHANGELOG.md](CHANGELOG.md) में प्रलेखित किया गया है। इनमें से कोई भी रिलीज़ को अवरुद्ध नहीं करता है; सभी के लिए एक निश्चित 'रिकवरी' या 'शमन' का तरीका मौजूद है।
 
-- **B-E-001 — v0.4 से पहले के "फ्रीज" किए गए पैकेज का संस्करण स्टैम्प एक ऐतिहासिक अवशेष है।** v0.3.3 से v0.6.0 तक प्रकाशित "फ्रीज" किए गए पैकेजों में `pack.manifest.json` और `pack/research.yaml` में `research_os_version: "0.1.0"` होता है, क्योंकि v0.4 से पहले एक हार्डकोडेड "स्काफोल्ड" स्थिरांक का उपयोग किया गया था। यह सुधार v0.4.0 में लागू किया गया था (अब "स्काफोल्ड" लाइव `RESEARCH_OS_VERSION` आयात करता है); पुराने "फ्रीज" किए गए पैकेज कानून 15 के तहत अपरिवर्तनीय हैं। प्रभावित पैकेजों के अंदर मौजूद JSON फ़ाइलों में उनके वर्तमान संस्करण शामिल हैं।
-- **B-E-004 — npm प्रमाणीकरण को भविष्य के रिलीज़ में लागू किया जाएगा।** v0.11.0 npm tarball केवल पैकेज-shasum के माध्यम से सत्यापित होता है। प्रकाशन प्रक्रिया को एक CI वर्कफ़्लो में माइग्रेट करना जिसमें sigstore OIDC शामिल है, "अनुवाद-से-पहले-प्रकाशन" अनुशासन (TranslateGemma 12B स्थानीय रूप से चलता है) के साथ संघर्ष करता है; यह माइग्रेशन भविष्य के रिलीज़ में योजनाबद्ध है। पैकेज-shasum और GitHub रिलीज़ प्रतिबद्धता के माध्यम से v0.11.0 npm पैकेजों को सत्यापित करें।
-- **B-A-003 — इंडेक्सर स्कीमा-संस्करण माइग्रेशन प्रलेखित है, लेकिन लागू नहीं है।** v0.11.0 में एक राइट-साइड `SCHEMA_VERSION` पूर्णांक शामिल है, लेकिन कोई रीड-साइड माइग्रेशन रनर नहीं है। प्रलेखित `SCHEMA_VERSION` में वृद्धि होने पर, `.research-os/index.sqlite` को हटाएं और `research-os index build --all` को फिर से चलाएं। स्वयं पैकेज अप्रभावित रहता है - इंडेक्सर साक्ष्य + दावों पर एक त्वरण परत है (कानून 8); पुनर्निर्माण idempotent है।
+- **B-E-001 — v0.4 से पहले के "फ्रीज़ेन-पैक" संस्करण का स्टैम्प एक ऐतिहासिक अवशेष है।** v0.3.3 से v0.6.0 तक प्रकाशित "फ्रीज़ेन पैक" में `pack.manifest.json` और `pack/research.yaml` फ़ाइलों में `research_os_version: "0.1.0"` लिखा हुआ है, क्योंकि v0.4 से पहले एक निश्चित मान (हार्डकोडेड स्केफॉल्ड कांस्टेंट) का उपयोग किया गया था। यह सुधार v0.4.0 में लागू किया गया था (अब स्केफॉल्ड लाइव `RESEARCH_OS_VERSION` को आयात करता है); पहले के "फ्रीज़ेन पैक" कानून 15 के तहत अपरिवर्तनीय हैं। प्रभावित "पैक" के अंदर मौजूद ऑडिट JSON फ़ाइलों में पहले से ही उनके संबंधित संस्करण मौजूद हैं।
 
-**v0.11.0 में, कोई भी `trusted_baseline` समीक्षक प्रोफाइल स्वीकार नहीं किया जाएगा।** यह एक जानबूझकर किया गया सुरक्षा उपाय है, कोई कमी नहीं: रिपॉजिटरी में मौजूद कैलिब्रेशन रिकॉर्ड (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) इस बात का प्रमाण देते हैं। विश्वास अर्जित किया जाता है, यह अनुमानित नहीं किया जाता, और यह बार-बार किए गए परीक्षणों के माध्यम से प्राप्त होता है। ये रिकॉर्ड v0.8.0 के एमसीपी आर्किटेक्चर से पहले के हैं और एमसीपी पथ के तहत इन्हें फिर से जांचा नहीं गया है।
+- **B-E-004 — npm प्रोवेनेंस एटेस्टेशन को भविष्य में जारी होने वाले संस्करण में स्थानांतरित किया जाएगा।** v0.12.0 npm टारबॉल केवल पैकेज-शासम के माध्यम से सत्यापन करता है। प्रकाशन प्रक्रिया को एक CI वर्कफ़्लो में स्थानांतरित करने से सिग्स्टोर OIDC के साथ टकराव होता है, जो प्रकाशन से पहले अनुवाद की आवश्यकता (TranslateGemma 12B स्थानीय रूप से चलता है); यह परिवर्तन भविष्य में जारी होने वाले संस्करण में किया जाएगा। v0.12.0 npm पैकेजों को पैकेज-शासम और GitHub रिलीज़ कमिट के माध्यम से सत्यापित करें।
+
+- **B-A-003 — इंडेक्सर स्कीमा-संस्करण माइग्रेशन प्रलेखित है, लेकिन लागू नहीं है।** v0.12.0 में एक "राइट-साइड" `SCHEMA_VERSION` पूर्णांक शामिल है, लेकिन कोई "रीड-साइड" माइग्रेशन रनर नहीं है। प्रलेखित `SCHEMA_VERSION` अपडेट होने पर, `.research-os/index.sqlite` फ़ाइल को हटा दें और `research-os index build --all` कमांड को फिर से चलाएं। "पैक" स्वयं अप्रभावित रहता है - इंडेक्सर साक्ष्य + दावों पर एक त्वरण परत है (कानून 8); पुनर्निर्माण एक समान प्रक्रिया है।
+
+v0.12.0 में कोई भी `trusted_baseline` समीक्षक प्रोफ़ाइल स्वीकार नहीं किया जाता है। यह एक जानबूझकर किया गया विश्वास-आधारित निर्णय है, कोई कमी नहीं: रिपॉजिटरी में मौजूद कैलिब्रेशन रसीदें (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) इस साक्ष्य को दर्ज करती हैं। विश्वास बार-बार किए गए "सीडेड-विफलता" रिकॉल के माध्यम से अर्जित किया जाता है, न कि केवल अनुमान लगाकर। ये रसीदें v0.8.0 MCP आर्किटेक्चर से पहले की हैं और MCP पथ के तहत फिर से निर्धारित नहीं की गई हैं।
 
 ## v1.0 के लिए रोडमैप
 

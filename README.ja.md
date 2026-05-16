@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/version-0.11.0-blue" alt="version 0.11.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.0"><img src="https://img.shields.io/badge/version-0.12.0-blue" alt="version 0.12.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,85 +182,88 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 
 **再現性のあるレビュー担当者プロファイル** — `research.yaml`の`review_profiles.<name>.reviewer_options`を使用して、`temperature`、`seed`、およびその他のOllamaのサンプリングパラメータを、本番環境のレビュープロセスにおけるすべての`OllamaInternReviewer`の構築に適用します。`hermes-two-pass-deterministic`プロファイルは、組み込みのサンプルとして提供されています。詳細は[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)と、[レビュー担当者キャリブレーションハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
 
-## 新機能 v0.11.0 — オペレーター単独運用対応の改善リリース（第2弾）
+## バージョン0.12.0の新機能：カバレッジ回復リリース
 
-v0.11.0では、2026年5月15日に発生したv0.2のオペレーター単独運用におけるエラー条件を修正します (`operator_aloneness_dst_v0.2`)。この修正には、スコープ/境界の調整 (R-007)、発見時のURLの関連性チェック (R-008)、抽出およびフレーム評価層におけるペアリングされたソースコンテンツの防御 (R-009 + R-011)、およびアドバイザーのフォールバック原因の可視化 (R-010) の4つの改善が含まれます。v0.2では、3つの独立した汚染経路がv0.10.0の防御を突破したため、認証に失敗しました。具体的には、`repair-scope --auto` コマンドが `scope` を設定しましたが、`not` が null のままだったため、トリエイジによってクレームが `needs_scope_repair` として再分類されました。また、`llm-heuristic` が、実際には関連性のないPMCのURLを高い信頼度を持つ候補として提示し、抽出器とフレーム評価の組み合わせが、DST形式のテキストを含む11件の癌関連論文からのクレームを許可してしまいました。設計された防御機能のうち、`accept-floor` のみが構造的に有効でしたが、v0.11.0ではこれらの問題を修正し、v0.3のゲートがオペレーターの実行に対して正常に機能するようにします。
+v0.12.0では、2026年5月16日に報告されたv0.3における「オペレーターの単独作業」に関する問題が解決されました（`operator_aloneness_dst_v0.3`）。この問題は、条件付きで合格（PASS_WITH_CONDITIONS）でしたが、認証レベルには達していませんでした。このバージョンでは、4つの領域にわたる6つの問題が修正されました。具体的には、v0.4の評価基準をクリアするためのアーキテクチャの修正（R-012、R-013、R-014）が3つ、そして、v0.4の評価で使用されるオペレーターインターフェースを改善するためのユーザビリティの改善（R-015、R-016、R-017）が3つです。
+
+v0.3で問題が発生したのは、防御機能が弱体化したためではありません。すべての防御機能は、設計通りに正しく動作し、誤った情報を含まない正確な結果を生成しました。問題は、これらの防御機能が正しく動作した結果、重要な情報源からのデータが、許容される範囲から除外されたことです。v0.3で獲得された知識体系は以下の通りです。
+
+v0.11では、システムを十分に安全にし、意図しない誤った結果が生じる可能性を排除しました。
+v0.12では、その安全性を損なうことなく、より効果的にデータ収集を再開できるようになりました。
+
+この論文の主張は以下の通りです：**保守的な防御策は、意図しない誤った合成を防ぐことができますが、同時に、必要な防御範囲を著しく狭めてしまう可能性があります。** バージョン0.12は、この問題を解決するためのものです。 バージョン0.11で設定された防御の最低限の基準は変更されていません。R-007からR-011までのすべての表面は、引き続き機能します。バージョン0.12では、合法的な、そして監視下での復旧経路が追加されています。
 
 ### 実行可能なもの
 
 ```sh
-research-os claim repair-scope <section-id> [--auto | --interactive]
-                                              # now fills BOTH scope AND not when both are null (R-007)
-research-os discover run <section-id>          # now fetches URL <title> + relevance-checks vs query (R-008)
-research-os discover approve <section-id> --candidate <id>
-                                              # explicit override for topic_mismatch candidates (R-008)
-research-os source-card audit                  # new severity source_identity_mismatch (R-009)
-research-os recover pack                       # MD now surfaces fallback cause + timing (R-010)
+research-os claim rescue <section-id> [--llm | --operator]
+                                              # NEW: post-extraction rescue of frame-excluded
+                                              # source_content_mismatch claims with peer evidence (R-012)
+research-os source-card audit --apply --from <file> --rebuild-cards
+                                              # NEW: overrides materialize into persisted card raw JSON
+                                              # without re-fetching (closes C2+C3 architectural trap) (R-013)
+research-os recover pack --regenerate-action-graph
+                                              # NEW: re-runs advisor against current state when
+                                              # recovery artifact has gone stale (R-014)
+research-os claim extract <section-id> [--resume] [--progress]
+                                              # NEW: per-source resume + stderr progress lines (R-015)
 ```
 
-### 3層のソースコンテンツ保護
-
-v0.11.0では、3つの独立した段階でソースコンテンツの汚染に対する防御を強化します。
+### 建築関連の修正点（v0.4：床の修正）
 
 ```
-discover  →  R-008  fetches each URL's <title>, computes keyword overlap vs the discover query
-              ↓     topic_mismatch quarantined from `approve --top N`; override via `approve --candidate <id>`
-extract   →  R-009  compares emitted card.title against fetched HTML <title>
-              ↓     mismatch → source_identity_mismatch (HARD FAIL); override via clear_severities[]
-critic    →  R-011  computes source-content signature once per source; precheck vs claim asserts
-              ↓     mismatch → frame_excluded with reason source_content_mismatch (LLM critic short-circuited)
-accept-floor       → unchanged; remains the floor of safety, not the only designed defense
+extract critic  →  R-012  source_content_mismatch claims with ≥2 on-topic peers from same source
+                    ↓     become rescue-eligible; LLM critic rescues or operator decides via
+                    ↓     `claim rescue` CLI; append-only evidence/claim-frame-rescues.jsonl ledger
+                    ↓     witnesses every state change; original claim.scope/not NEVER rewritten
+source-card     →  R-013  audit --apply --rebuild-cards routes persisted cards through SAME
+                    ↓     buildCard() gather uses; raw card.source_type == effective post-rebuild;
+                    ↓     reviewer reads pass; no HTTP, no re-fetch; defense floor preserved
+                    ↓     (R-003/R-005/R-009 still fire during rebuild on cached bodies)
+recover advisor →  R-014  needs_repair_claims partitioned into scope_repair_blocked +
+                    ↓     source_repair_blocked; v0.3 regression replay (0 scope + 5 source) now
+                    ↓     recommends add_on_topic_sources (the actual unblock), NOT repair_claim_scope;
+                    ↓     --regenerate-action-graph with SHA-256 input_state_hash freshness detection
 ```
 
-各層の機能は独立して動作し、いずれか1つが無効化される（環境設定によるオプトアウト）か、上書きされる（オペレーターによる上書き）場合でも、他の2つは引き続き防御機能を維持します。`RESEARCH_OS_DISCOVER_RELEVANCE=0` を設定すると、R-008が無効化され、`RESEARCH_OS_FRAME_SOURCE_CONTENT=0` を設定すると、R-011の事前チェックが無効化されます。
-
-### スコープの調整
+### 人間工学に基づいた3つの改良点（v0.4版、ゲート操作の改善）
 
 ```
-gate blocked on accepted_claim_floor  →  recover  →  repair_claim_scope rank-1
-                                          ↓
-                                          claim repair-scope --auto
-                                          ↓        fills BOTH scope AND not (R-007)
-                                          ↓
-                                          claim triage re-runs cleanly; claims promote without
-                                                hand-editing claims.jsonl
+claim extract    →  R-015  always-on evidence/extract-completion.jsonl ledger (NEW persistent
+                    ↓     artifact); --resume skips ledger-completed sources (failed re-attempted);
+                    ↓     --progress emits per-source [extract N/M] stderr lines; canonical stdout
+                    ↓     unchanged; default behavior byte-identical except for the new ledger
+override docs    →  R-016  examples/source-card-override.example.json shipped in tarball with
+                    ↓     2 realistic entries (effective_source_type-only + clear_severities);
+                    ↓     converts C1 schema-discovery-by-runtime-error from operator-friction
+                    ↓     to TRIVIAL
+policy coverage  →  R-017  audits/missing-policy-sources.{json,md} informational pack-level audit;
+                    ↓     fires when policy keyword in research.yaml topic+decision AND zero
+                    ↓     docs sources; honors R-013 rebuild via getEffectiveSourceType;
+                    ↓     INFORMATIONAL ONLY — never affects verdict/freeze/pack-publish
 ```
-
-v0.10のR-001でCLIが導入されました。R-007は、トリエイジによって引き起こされた修正の原因に合わせて、修正結果を調整します。`evidence/claim-scope-repairs.jsonl` にあるログには、`applied_scope` と共に `applied_not` が記録されます。
-
-### MDフォールバックの可視化
-
-AI回復アドバイザーが、タイムアウト、MCPエラー、または検証拒否（2回）などの理由で、決定的な回復にフォールバックした場合、`recovery/blocked-section-recovery.md` に、その原因が明確に表示されるようになりました。新しいクローズドなenum `FALLBACK_CAUSES` (3つの値: `tier_timeout | mcp_error | retry_exhausted`) が、その経路を分類します。`ollama-intern-mcp` が `elapsed=NNNNms budget=NNNNms` を出力する場合、オプションの構造化されたタイミング情報 `prose_error.timing_ms = { elapsed_ms, budget_ms }` が設定されます。MDは、v0.2の場合、以下の情報を表示します。
-
-```
-### Why the AI advisor fell back
-
-**Cause:** AI advisor timed out (TIER_TIMEOUT) — elapsed 15012ms over 15000ms budget.
-
-The recovery guidance below was generated deterministically from pack law
-rather than the AI advisor. The fallback recovery action and pack-law
-forbiddings are unchanged.
-```
-
-回復の選択ロジックは変更されていません。これは、オペレーターの理解を助けるためのものであり、オペレーターの作業を妨げるものではありません。
 
 ### 制約
 
-修正は段階的に追加されます。既存の制限事項は維持されます。`accepted_claim_floor` は依然として変更できません。回復アドバイザーは、依然として、変更できないエラーに対して `apply_waiver` を推奨しません。クローズドな `FailureShape` enum は変更されていません（9つの値のままです）。`RECOVERY_ACTIONS` は8つの値のまま変更されていません。新しいアドバイザーのアクションはありません。R-007は、既存のアクション (`repair_claim_scope`) を拡張し、R-010は、`prose_error` の新しいenum `FALLBACK_CAUSES` を使用して、メタデータを追加するだけです。重大度に関する隔離は、明示的なオペレーターによる上書きがない限り、監査ゲートを通過しません（`clear_severities[]` フィールドは、オペレーターの決定を記録したものであり、変更できません）。
+既存の制限事項は維持されます。`accepted_claim_floor` の値は変更できません。`FailureShape` 列挙型は、引き続き9つの値で構成されています。`RECOVERY_ACTIONS` 列挙型も、8つの値で変更されていません。新しいアドバイザリーアクションは追加されていません。R-014の形状に基づくヒューリスティックにより、既存のアクションのルーティングが拡張されます。AIによる復旧アドバイザリーのプロンプトテンプレートは変更されていません（新しい `EvidenceState` フィールドは保存されたJSONファイルで確認できますが、プロンプトには表示されません）。復旧検証ルールは変更されていません。MCPアーキテクチャは変更されていません。`ollama-intern-mcp@^2.4.0` が引き続き使用されます。抽出処理におけるMCPの呼び出し形状は変更されていません。R-017の警告は情報提供のみを目的としており、ゲートの判定、フリーズの受信、またはパックの公開に影響を与えません。v0.10およびv0.11のすべての防御機能は維持されており、防御の基準値はそのまま、v0.12ではそれに基づいて機能が拡張されています。
 
-v0.3.3を基準とした、すべての4つのフローズンパックにおいて、バイト単位で完全に同一の状態を維持しています。 これは、今回で7回目の連続となります。
+すべての4つのフローズンパックにおいて、v0.3.3を基準とした際のデータは、バイナリレベルで完全に一致しています。これは、今回で**15回目の連続リリース**であり、この状態が維持されています（v0.4 → v0.5 → v0.6 → v0.7 → v0.8 → v0.9 → v0.10 → v0.11 → v0.12）。
 
-### v0.11.0で主張されていないこと
+### バージョン0.12.0で謳っている内容（に含まれる）もの
 
-- v1の対応。
-- v0.2のオペレーター単独作業ゲートの検証結果。 v0.2は、`@mcptoolshop/research-os@0.10.0`を使用して、別のセッションで実行されます。
-- 許容基準に関する作業。 v0.2でPASSになることが前提です。
-- クラウドベースの研究ツールとの連携。
-- 完全な信頼できるレビューアのキャリブレーションモデル。
+- v1 の準備状況。
+- v0.4 の単独動作に関する検証結果。v0.4 は、別のセッションで npm パッケージ `@mcptoolshop/research-os@0.12.0` を使用して実行されます。
+- 許容範囲の第1段階。v0.4 で合格 - v0.3 の原則（防御レベルでの単独動作が証明済みだが、カバレッジレベルでの単独動作はまだ検証されていない）が、引き続き主要なテスト項目です。
+- クラウドベースの研究ツールに対する優位性。
+- 完全な、信頼性の高いレビュー担当者評価モデル。
 
-v0.11.0は、オペレーター単独運用ゲートのv0.3の前提条件であり、検証ではありません。
+v0.12.0 は、オペレーターの独立性に関する機能 v0.4 を利用するための前提条件であり、証明ではありません。
 
-[`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md) および [CHANGELOG.md](CHANGELOG.md) を参照してください。
+詳細については、[CHANGELOG.md](CHANGELOG.md) を参照してください。また、管理者向けのオーバーライドの例は、[`examples/source-card-override.example.json`](examples/source-card-override.example.json) で確認できます。
+
+## 以前のバージョン: v0.11.0 — オペレーター単独での問題修正に関するリリース（第2弾）
+
+v0.11.0では、v0.2におけるオペレーターの単独動作によるエラー条件を修正しました。具体的には、スコープ/境界の修正 (R-007)、発見時のURLの関連性チェック (R-008)、抽出時およびフレーム評価層におけるペアリングされたソースコンテンツの汚染対策 (R-009 + R-011)、およびアドバイザーのフォールバック原因の可視化 (R-010) を実現しました。このバージョンでは、3層のソースコンテンツ保護機構 (受信時: R-008、抽出時: R-009、フレーム評価時: R-011) が実装されました。詳細は、[`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md) をご参照ください。
 
 ## 以前のバージョン: v0.10.0 — オペレーター単独運用対応リリース
 
@@ -322,25 +325,25 @@ v0.8.0 は、research-os を、主張抽出のための宣言されたローカ�
 
 **v1 実験1 (ComfyUI ワークフローの安定性)** — 2026年5月9日に終了。8つのセクションすべてが Terminal A で完了し、パッケージは凍結され、アーカイブは公開されました。詳細は [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) と [`docs/roadmap.md`](docs/roadmap.md) を参照してください。
 
-### research-os が何ではないか (そして v0.11.0 が主張しないこと)
+### "What research-os でないのか、そして v0.12.0 が主張していないこと"
 
-- 新しいパッケージで、オペレーター単独での動作が検証されていません。v0.11.0では、v0.2のゲートに関するエラー条件が修正されました。v0.3のオペレーター単独のゲートは、別のセッションでこのnpmリリースに対して実行され、さらなる修正が見つかる可能性があります。v0.3を使用するには、v0.11.0が前提条件ですが、検証ではありません。
-- ドッグフードテストや、オペレーター単独のゲートの2回の実行以外では、外部ユーザーによるテストは行われていません。6つのドッグフード実験が終了しました。そのうち、1つは自己参照型、5つは外部ドメイン（ComfyUI、XRPL、Godot、レビューア校正、決定論的レビューア）です。また、v0.1とv0.2のオペレーター単独のゲートの実行により、11件の既知の問題（R-001～R-005はv0.10.0で、R-007～R-011はv0.11.0で修正）が特定されました。大規模なオペレーター利用は今後の課題です。
-- 完全なパッケージ合成ツールではありません。v0.11.0は、v0.9のセクション範囲（`synth section`）と部分パッケージ範囲（`synth pack --partial`）の機能を継承しています。それぞれに、パッケージの利用可能状態に関する明示的な記述が含まれています。完全なパッケージ合成には、`synthesis_ready`パッケージと、`synth workspace`を使用して承認されたクレームIDに対して人間（または共同作業者）が作成する必要があります。
-- いかなるレビューアモデルも推奨するものではありません。v0.11.0には、デフォルトで`trusted_baseline`レビューアプロファイルは含まれていません。校正記録は、推奨を意味するものではありません。既存のv0.6.0の校正記録は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパスでは再基準化されていません。詳細については、[レビューア校正ハンドブックのページ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
-- 凍結されたパッケージには、過去のアーティファクトが含まれています。v0.4以前の凍結されたパッケージには、`research_os_version: '0.1.0'`という記述が含まれています。これは、v0.4以前にハードコードされた定数によるものです。この修正はv0.4.0で導入されましたが、以前の凍結されたパッケージはLaw 15により変更できません（[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)を参照）。
-- npm上では、プロヴェナンス認証は行われていません。Sigstoreによるプロヴェナンス認証は、今後のリリースで実装予定です。v0.11.0のnpmパッケージは、package-shasumとGitHubのリリースコミットを使用して検証してください。
-- クラウドベースの最適化ではありません。v0.7.xの`local-first-vs-cloud-research/`にある製品の検証では、クラウドの読みやすさやオペレーターの負担軽減という利点が示されました。v0.11.0は、これらの点が克服されたことを主張するものではありません。
+- 新しいパッケージで、オペレーター単独での動作が検証されていません。v0.12.0では、v0.3で特定された問題（防御レベルでの単独動作が証明済み。ただし、検証範囲レベルでの単独動作はまだ未検証 – v0.3で獲得された原則）が修正されました。v0.4のオペレーター単独動作の検証は、別のセッションでこのnpmリリースに対して行われ、さらなる修正が見つかる可能性があります。v0.12.0は、v0.4の前提条件ですが、検証結果そのものではありません。
+- 内部テスト（dogfood）と、オペレーター単独動作の検証の3回の実行以外では、外部ユーザーによるテストは行われていません。6つのdogfood実験が完了しました。そのうち1つは自己参照型、5つは外部ドメイン（ComfyUI、XRPL、Godot、レビューア校正、決定論的レビューア）です。また、v0.1 / v0.2 / v0.3のオペレーター単独動作の検証で、17件の問題（R-001～R-005はv0.10.0で、R-007～R-011はv0.11.0で、R-012～R-017はv0.12.0で修正）が特定されました。大規模な外部オペレーターの使用は、今後の課題です。
+- 完全なパッケージ生成機能は搭載されていません。v0.12.0は、v0.9で導入されたセクション範囲 (`synth section`) および部分パッケージ範囲 (`synth pack --partial`) の機能を引き継いでいます。それぞれの機能には、パッケージの利用可能状態に関する明示的な情報が記載されています。完全なパッケージの生成には、`synthesis_ready` パッケージと、`synth workspace` を使用した、承認されたクレームIDに対する人間の（またはCowork）による記述が必要です。
+- 特定のレビューアモデルを推奨するものではありません。v0.12.0には、デフォルトで `trusted_baseline` レビューアプロファイルは含まれていません。校正記録は、推奨を意味するものではありません。既存のv0.6.0の校正記録は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパスで再基準化されていません。詳細については、[レビューア校正に関するハンドブックのページ](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) を参照してください。
+- 過去のアーティファクトが、フリーズされたパッケージに含まれている可能性があります。v0.4以前にフリーズされたパッケージには、`research_os_version: '0.1.0'` が設定されています。これは、v0.4以前にハードコードされた定数によるものです。この修正はv0.4.0で導入されましたが、以前にフリーズされたパッケージは、Law 15により変更できません（[`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) を参照）。
+- npm上でのプロベナンス認証は行われていません。Sigstoreによるプロベナンス認証は、今後のリリースで実装される予定です。v0.12.0のnpmパッケージは、package-shasumおよびGitHubのリリースコミットを使用して検証してください。
+- クラウドベースの利点を克服したわけではありません。v0.7.xの `local-first-vs-cloud-research/` にある製品の検証では、クラウドの読みやすさやオペレーターの負担軽減という利点が指摘されました。v0.12.0は、これらの点が克服されたことを主張するものではありません。
 
 ### 既知の制限事項
 
-v0.11.0には、以前のリリースから引き継がれた、オペレーターが認識する既知の制限事項が3つ含まれています。それぞれが[既知の制限事項のハンドブックページ](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)と[CHANGELOG.md](CHANGELOG.md)に記載されています。いずれもリリースをブロックするものではなく、すべてに復旧または軽減策が定義されています。
+v0.12.0には、以前のリリースから引き継がれた、オペレーターが認識する既知の制限事項が3つ含まれています。それぞれの制限事項は、[ハンドブックの既知の制限事項のページ](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) および [CHANGELOG.md](CHANGELOG.md) に記載されています。これらの制限事項は、リリースを妨げるものではなく、それぞれに、対応策または軽減策が定義されています。
 
-- **B-E-001 — v0.4以前の凍結パッケージのバージョン番号は、過去のアーティファクトです。** v0.3.3からv0.6.0までに公開された凍結パッケージには、`pack.manifest.json`と`pack/research.yaml`に`research_os_version: "0.1.0"`という記述が含まれています。これは、v0.4以前にハードコードされた定数によるものです。この修正はv0.4.0で導入されました（scaffoldは現在、ライブの`RESEARCH_OS_VERSION`をインポートします）。以前の凍結パッケージは、Law 15により変更できません。影響を受けるパッケージ内のJSONファイルには、それぞれの最新バージョンが記載されています。
-- **B-E-004 — npmのプロヴェナンス認証は、今後のリリースで実装予定です。** v0.11.0のnpm tarballは、package-shasumのみで検証できます。公開フローをCIワークフローに移行すると、sigstore OIDCとの競合が発生し、TranslateGemma 12Bのローカル実行との整合性が取れなくなります。この移行は、今後のリリースで計画されています。v0.11.0のnpmパッケージは、package-shasumとGitHubのリリースコミットを使用して検証してください。
-- **B-A-003 — インデクサのスキーマバージョンの移行は、文書化されていますが、強制されていません。** v0.11.0には、書き込み側の`SCHEMA_VERSION`という整数が含まれていますが、読み込み側の移行ツールはありません。文書化された`SCHEMA_VERSION`の変更があった場合、`.research-os/index.sqlite`を削除し、`research-os index build --all`を再実行してください。パッケージ自体には影響はありません。インデクサは、エビデンスとクレームの加速レイヤーです（Law 8）。再構築は冪等です。
+- **B-E-001 — v0.4以前の固定パッケージ版のバージョン番号は、過去の遺物です。** v0.3.3からv0.6.0までに公開された固定パッケージは、`pack.manifest.json`と`pack/research.yaml`に`research_os_version: "0.1.0"`が記述されています。これは、v0.4以前に設定されていた固定値によるものです。この問題はv0.4.0で修正されました（現在は`RESEARCH_OS_VERSION`の最新値を参照します）。v0.4以前の固定パッケージは、規定15に従い、変更できません。影響を受けるパッケージ内のJSONファイルには、それぞれの最新バージョンが記載されています。
+- **B-E-004 — npmのプロビナンス認証は、今後のリリースで実装されます。** v0.12.0のnpm tarballは、package-shasumのみで検証されます。公開フローをCIワークフローに移行する際、sigstore OIDCとの競合が発生し、公開前の翻訳プロセス（TranslateGemma 12Bはローカルで実行されます）との整合性が取れません。この移行は、今後のリリースで計画されています。v0.12.0のnpmパッケージは、package-shasumとGitHubのリリースコミットで検証してください。
+- **B-A-003 — インデクサのスキーマバージョンの移行は、ドキュメントに記載されていますが、強制ではありません。** v0.12.0には、書き込み側の`SCHEMA_VERSION`という整数値が含まれていますが、読み込み側の移行ツールはありません。ドキュメントに記載されている`SCHEMA_VERSION`の変更があった場合は、`.research-os/index.sqlite`を削除し、`research-os index build --all`を再度実行してください。パッケージ自体には影響はありません。インデクサは、証拠と主張を高速化するレイヤーであり（規定8）、再構築は冪等です。
 
-**v0.11.0では、`trusted_baseline`のレビュー担当者プロファイルは認められていません。** これは、意図的なセキュリティ設定であり、欠陥ではありません。 リポジトリ内のキャリブレーション記録（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）には、その証拠が記録されています。 信頼は、繰り返し行われる意図的なエラー再現テストによって得られるものであり、当然のことではありません。 これらの記録は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパス下では再評価されていません。
+v0.12.0では、`trusted_baseline`のレビュープロファイルは許可されていません。これは、意図的なセキュリティ設定であり、欠陥ではありません。リポジトリ内のキャリブレーション結果（`hermes-two-pass=failed`、`mistral-nemo-two-pass=conditional_pass`、`hermes-single-pass=comparison_only`、`hermes-two-pass-deterministic=failed`）は、その証拠を記録しています。信頼は、繰り返し行われる意図的な失敗の再現によって得られるものであり、当然のことではありません。これらの結果は、v0.8.0のMCPアーキテクチャ以前のものであり、MCPのパスで再評価されていません。
 
 ## v1.0 へのロードマップ
 

@@ -130,6 +130,28 @@ After a successful apply, re-run the audit to verify the findings have shifted t
 research-os source-card audit --pack /path/to/pack
 ```
 
+A populated reference for the override JSON shape ships in the npm tarball at `examples/source-card-override.example.json` (v0.12.0+ R-016) — two realistic entries cover the common shapes (effective_source_type-only override AND clear_severities use).
+
+### `--rebuild-cards` flag (v0.12.0+ R-013)
+
+By default `--apply` writes only to the override ledger; persisted source-card JSON keeps its raw `source_type` / `publisher` values. The effective view (`getEffectiveSourceType`, `getEffectivePublisher`) applies the override layer at read time. Most code paths use the effective view — but the heuristic reviewer reads raw `card.source_type` directly, so overrides applied without re-gather did not propagate into reviewer decisions until v0.12.0.
+
+The `--rebuild-cards` flag closes this gap:
+
+```bash
+research-os source-card audit --pack /path/to/pack --apply --from overrides.json --rebuild-cards
+research-os source-card audit --pack /path/to/pack --rebuild-cards            # rebuild from current ledger; no new --from
+```
+
+Behavior:
+
+- Routes each card through the SAME `buildCard()` function gather uses, with current overrides applied. No HTTP, no re-fetch — reconstructs `ExtractionResult` from persisted card fields + cached body at `evidence/raw/<src_id>.<ext>`.
+- After rebuild, raw `card.source_type` equals the effective value. The reviewer's raw-field read pattern sees the override-effective value with no reviewer code change.
+- Defense floor preserved: R-003 bot-check, R-005 word-count mismatch, R-009 identity guard all still fire during rebuild on the cached body. Severities captured in the rebuild ledger `before` AND `after` snapshots so any future silent-strip regression is visible.
+- Append-only ledger at `evidence/source-card-rebuilds.jsonl` with `changed_fields ∈ {source_type, publisher, severities}` + `rebuilt_by ∈ {operator, system}`.
+- Idempotent: re-running with no override change writes a ledger entry with `changed_fields=[]` and leaves card files byte-identical.
+- Frozen-pack refusal applies — `--rebuild-cards` refuses to mutate cards on a frozen pack.
+
 ---
 
 ## Full correction loop

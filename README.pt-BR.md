@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/version-0.11.0-blue" alt="version 0.11.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.0"><img src="https://img.shields.io/badge/version-0.12.0-blue" alt="version 0.12.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -182,85 +182,86 @@ Quando `--runs <n>` é usado, os relatórios de cada execução são gravados em
 
 **Perfis de revisor determinísticos** — utilize `review_profiles.<nome>.reviewer_options` em `research.yaml` para incluir os parâmetros de amostragem do Ollama, como `temperature` e `seed`, em cada instância de `OllamaInternReviewer` no fluxo de revisão de produção. O perfil `hermes-two-pass-deterministic` é fornecido como um exemplo integrado. Consulte [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) e a [página do manual de calibração do revisor](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## Nova versão v0.11.0 — Segunda versão de correção para o cenário de operação individual
+## Nova versão v0.12.0 — Lançamento de Recuperação de Cobertura
 
-A versão v0.11.0 corrige as condições de falha do cenário de operação individual da versão v0.2, identificadas em 15 de maio de 2026 (`operator_aloneness_dst_v0.2`, APROVADO COM CONDIÇÕES, mas não com autorização). Quatro melhorias foram implementadas: alinhamento do reparo de escopo/limites (R-007), verificação de relevância da URL no momento da descoberta (R-008), defesa contra contaminação de conteúdo de origem em camadas de extração e análise crítica (R-009 + R-011) e recuperação da visibilidade da causa de fallback do assistente (R-010). A versão v0.2 falhou na autorização porque três caminhos independentes de contaminação escaparam das defesas da versão v0.10.0 — o comando `repair-scope --auto` preencheu o campo `scope`, mas deixou o campo `not` nulo, fazendo com que a triagem reclassificasse as alegações como `needs_scope_repair`; o recurso `llm-heuristic` apresentou URLs irrelevantes da PMC como candidatos com alta confiança; e a cadeia de extração + análise crítica admitiu 11 alegações derivadas de artigos científicos sobre câncer com texto formatado. Apenas a função de "aceitação mínima" funcionou estruturalmente; a versão v0.11.0 corrige as lacunas existentes para que a versão v0.3 do cenário possa ser executada com novas operações.
+A versão v0.12.0 corrige as falhas identificadas em 2026-05-16 relacionadas à "solidão do operador" (gate `operator_aloneness_dst_v0.3`), que estavam pendentes (PASS_WITH_CONDITIONS, mas não com nível de autorização). Existem seis problemas identificados em quatro áreas: três correções arquiteturais que eliminam as lacunas de cobertura que impediam o avanço para a versão v0.4 (R-012, R-013, R-014), e três melhorias de usabilidade que aprimoram a interface do operador para as etapas do gate v0.4 (R-015, R-016, R-017). A versão v0.3 não falhou devido a regressões nas defesas; todas as cinco camadas de defesa da v0.11 funcionaram exatamente como projetado, produzindo uma síntese limpa e precisa, sem conteúdo incorreto silencioso, e o sistema permaneceu estável com base em evidências reais, embora limitadas. A falha ocorreu porque as mesmas defesas, funcionando corretamente, removeram a cobertura essencial da base de reivindicações aceitas. O princípio fundamental estabelecido na versão v0.3:
+
+> **A versão v0.11 tornou o sistema seguro o suficiente para evitar a síntese de informações incorretas silenciosas.**
+> **A versão v0.12 aumenta a capacidade de recuperação de cobertura sem enfraquecer essas defesas.**
+
+A tese: **defesas conservadoras podem impedir a síntese de informações incorretas silenciosas, mas também podem privar o sistema da cobertura necessária.** A versão v0.12 é a solução para a recuperação de cobertura. A base de defesas da versão v0.11 permanece inalterada; todas as camadas R-007 a R-011 continuam ativas. A versão v0.12 adiciona caminhos de recuperação seguros e verificados.
 
 ### O que você pode executar
 
 ```sh
-research-os claim repair-scope <section-id> [--auto | --interactive]
-                                              # now fills BOTH scope AND not when both are null (R-007)
-research-os discover run <section-id>          # now fetches URL <title> + relevance-checks vs query (R-008)
-research-os discover approve <section-id> --candidate <id>
-                                              # explicit override for topic_mismatch candidates (R-008)
-research-os source-card audit                  # new severity source_identity_mismatch (R-009)
-research-os recover pack                       # MD now surfaces fallback cause + timing (R-010)
+research-os claim rescue <section-id> [--llm | --operator]
+                                              # NEW: post-extraction rescue of frame-excluded
+                                              # source_content_mismatch claims with peer evidence (R-012)
+research-os source-card audit --apply --from <file> --rebuild-cards
+                                              # NEW: overrides materialize into persisted card raw JSON
+                                              # without re-fetching (closes C2+C3 architectural trap) (R-013)
+research-os recover pack --regenerate-action-graph
+                                              # NEW: re-runs advisor against current state when
+                                              # recovery artifact has gone stale (R-014)
+research-os claim extract <section-id> [--resume] [--progress]
+                                              # NEW: per-source resume + stderr progress lines (R-015)
 ```
 
-### Proteção de conteúdo de origem em três camadas
-
-A versão v0.11.0 completa a defesa contra contaminação de conteúdo de origem em três estágios independentes:
+### As três correções arquiteturais (base que impede o avanço para a versão v0.4)
 
 ```
-discover  →  R-008  fetches each URL's <title>, computes keyword overlap vs the discover query
-              ↓     topic_mismatch quarantined from `approve --top N`; override via `approve --candidate <id>`
-extract   →  R-009  compares emitted card.title against fetched HTML <title>
-              ↓     mismatch → source_identity_mismatch (HARD FAIL); override via clear_severities[]
-critic    →  R-011  computes source-content signature once per source; precheck vs claim asserts
-              ↓     mismatch → frame_excluded with reason source_content_mismatch (LLM critic short-circuited)
-accept-floor       → unchanged; remains the floor of safety, not the only designed defense
+extract critic  →  R-012  source_content_mismatch claims with ≥2 on-topic peers from same source
+                    ↓     become rescue-eligible; LLM critic rescues or operator decides via
+                    ↓     `claim rescue` CLI; append-only evidence/claim-frame-rescues.jsonl ledger
+                    ↓     witnesses every state change; original claim.scope/not NEVER rewritten
+source-card     →  R-013  audit --apply --rebuild-cards routes persisted cards through SAME
+                    ↓     buildCard() gather uses; raw card.source_type == effective post-rebuild;
+                    ↓     reviewer reads pass; no HTTP, no re-fetch; defense floor preserved
+                    ↓     (R-003/R-005/R-009 still fire during rebuild on cached bodies)
+recover advisor →  R-014  needs_repair_claims partitioned into scope_repair_blocked +
+                    ↓     source_repair_blocked; v0.3 regression replay (0 scope + 5 source) now
+                    ↓     recommends add_on_topic_sources (the actual unblock), NOT repair_claim_scope;
+                    ↓     --regenerate-action-graph with SHA-256 input_state_hash freshness detection
 ```
 
-Cada camada opera de forma independente; se uma for desativada (opção de exclusão do ambiente) ou substituída (substituição pelo operador), as outras duas continuam a proteger. `RESEARCH_OS_DISCOVER_RELEVANCE=0` desativa a função R-008; `RESEARCH_OS_FRAME_SOURCE_CONTENT=0` desativa a verificação inicial da função R-011.
-
-### Alinhamento do reparo de escopo
+### As três melhorias de usabilidade (melhorias na experiência do usuário ao passar pelo gate v0.4)
 
 ```
-gate blocked on accepted_claim_floor  →  recover  →  repair_claim_scope rank-1
-                                          ↓
-                                          claim repair-scope --auto
-                                          ↓        fills BOTH scope AND not (R-007)
-                                          ↓
-                                          claim triage re-runs cleanly; claims promote without
-                                                hand-editing claims.jsonl
+claim extract    →  R-015  always-on evidence/extract-completion.jsonl ledger (NEW persistent
+                    ↓     artifact); --resume skips ledger-completed sources (failed re-attempted);
+                    ↓     --progress emits per-source [extract N/M] stderr lines; canonical stdout
+                    ↓     unchanged; default behavior byte-identical except for the new ledger
+override docs    →  R-016  examples/source-card-override.example.json shipped in tarball with
+                    ↓     2 realistic entries (effective_source_type-only + clear_severities);
+                    ↓     converts C1 schema-discovery-by-runtime-error from operator-friction
+                    ↓     to TRIVIAL
+policy coverage  →  R-017  audits/missing-policy-sources.{json,md} informational pack-level audit;
+                    ↓     fires when policy keyword in research.yaml topic+decision AND zero
+                    ↓     docs sources; honors R-013 rebuild via getEffectiveSourceType;
+                    ↓     INFORMATIONAL ONLY — never affects verdict/freeze/pack-publish
 ```
-
-A versão v0.10, com a correção R-001, incluiu a interface de linha de comando (CLI); a função R-007 alinha a saída do reparo com a condição de triagem que causou o reparo. O registro somente de anexação em `evidence/claim-scope-repairs.jsonl` registra `applied_not` junto com `applied_scope`.
-
-### Recuperação da visibilidade da causa de fallback
-
-Quando o assistente de recuperação de IA volta para a recuperação determinística (tempo limite, erro de MCP ou rejeição do verificador duas vezes), a causa agora é exibida de forma proeminente em `recovery/blocked-section-recovery.md`. Um novo enum fechado `FALLBACK_CAUSES` (com 3 valores: `tier_timeout | mcp_error | retry_exhausted`) classifica o caminho; um tempo estruturado opcional `prose_error.timing_ms = { elapsed_ms, budget_ms }` é preenchido quando `ollama-intern-mcp` emite `elapsed=NNNNms budget=NNNNms`. O arquivo MD agora exibe (para o caso da versão v0.2):
-
-```
-### Why the AI advisor fell back
-
-**Cause:** AI advisor timed out (TIER_TIMEOUT) — elapsed 15012ms over 15000ms budget.
-
-The recovery guidance below was generated deterministically from pack law
-rather than the AI advisor. The fallback recovery action and pack-law
-forbiddings are unchanged.
-```
-
-A lógica de seleção de recuperação não foi alterada; isso é para clareza do operador, não para bloquear o operador.
 
 ### Limite legal
 
-O processo de reparo é aditivo. As restrições são mantidas: `accepted_claim_floor` permanece inalterável; o assistente de recuperação ainda se recusa a recomendar `apply_waiver` para falhas inalteráveis. O enum fechado `FailureShape` não foi alterado (ainda possui nove valores). `RECOVERY_ACTIONS` permanece inalterado com 8 valores — nenhuma nova ação do assistente; a função R-007 amplia uma ação existente (`repair_claim_scope`), e a função R-010 adiciona apenas metadados por meio de um enum separado `FALLBACK_CAUSES` em `prose_error`. O isolamento por gravidade nunca promove automaticamente além do gateway de auditoria sem a substituição explícita do operador (o campo `clear_severities[]` registra a decisão do operador, que só pode ser anexada).
+As restrições do sistema permanecem válidas. O `accepted_claim_floor` continua inalterável. O enum `FailureShape`, que define os tipos de falha, permanece com seus nove valores. O enum `RECOVERY_ACTIONS` permanece com seus 8 valores; não há novas ações para o sistema de aconselhamento; a heurística de forma distinta de R-014 amplia o roteamento das ações existentes. O modelo de prompt para o sistema de aconselhamento de recuperação não foi alterado (os novos campos `EvidenceState` podem ser observados em arquivos JSON persistidos, mas NÃO são exibidos no prompt). As regras do verificador de recuperação permanecem inalteradas. A arquitetura do MCP não foi alterada; `ollama-intern-mcp@^2.4.0` continua em uso; não houve alterações na forma das chamadas do MCP durante a extração. O aviso de R-017 é informativo e NÃO afeta a decisão do gate, o recebimento de falhas ou a publicação do sistema. Todas as defesas das versões v0.10 e v0.11 foram preservadas; a base de defesas é a base, e a versão v0.12 é construída sobre ela.
 
-A regressão do "pacote" congelado é byte a byte idêntica às versões de referência v0.3.3 para todos os quatro "pacotes" congelados — esta é a sétima versão consecutiva em que isso ocorre.
+A versão compilada do sistema é byte a byte idêntica às versões de referência v0.3.3 para todos os quatro pacotes congelados — **décimo quinto lançamento consecutivo** em que isso ocorre (v0.4 → v0.5 → v0.6 → v0.7 → v0.8 → v0.9 → v0.10 → v0.11 → v0.12).
 
-### O que a versão v0.11.0 NÃO afirma
+### O que a versão v0.12.0 NÃO afirma
 
-- Prontidão para a versão v1.
-- Decisão sobre o "gate" de operação autônoma da versão v0.2. A versão v0.2 é executada em uma sessão separada, usando o pacote npm `@mcptoolshop/research-os@0.10.0`.
-- Trabalho sobre a doutrina de admissibilidade. A aprovação para a versão v0.2 está condicionada à aprovação no teste.
-- Uma vitória sobre as ferramentas de pesquisa baseadas em nuvem.
-- Um modelo completo e calibrado para revisores.
+- Estar pronta para a versão v1.
+- Ter resolvido o problema da "solidão do operador" para o gate v0.4. Os testes para a versão v0.4 são executados contra o pacote npm `@mcptoolshop/research-os@0.12.0` em uma sessão separada.
+- Ter validado a "Fatia de Admissibilidade" 1. Essa etapa está bloqueada na versão v0.4 (PASS), e o princípio fundamental da versão v0.3 (defesa comprovada contra "solidão do operador", mas ainda não a cobertura) permanece como o teste bloqueador.
+- Ter superado as ferramentas de pesquisa baseadas em nuvem.
+- Ter um modelo completo e calibrado para revisores.
 
-A versão v0.11.0 é um pré-requisito para a versão v0.3 do cenário de operação individual, não uma prova.
+A versão v0.12.0 é um pré-requisito para a versão v0.4 do gate de "solidão do operador", não a prova de que ela foi alcançada.
 
-Consulte [`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md) e [CHANGELOG.md](CHANGELOG.md).
+Consulte o arquivo [CHANGELOG.md](CHANGELOG.md) e o exemplo de substituição da interface do operador em [`examples/source-card-override.example.json`](examples/source-card-override.example.json).
+
+## Versão anterior: v0.11.0 — Segundo lançamento para correção da "solidão do operador"
+
+A versão v0.11.0 corrigiu as condições de falha do gate de "solidão do operador" da versão v0.2: alinhamento do escopo/limite (R-007), verificação de relevância da URL no momento da descoberta (R-008), defesa contra contaminação do conteúdo da fonte em camadas de extração e de análise crítica (R-009 + R-011), e visibilidade do motivo de fallback do sistema de aconselhamento (R-010). A camada de proteção de conteúdo da fonte (R-008 na admissão + R-009 na extração + R-011 na análise crítica) é implementada aqui. Consulte [`docs/release-notes/v0.11.0.md`](docs/release-notes/v0.11.0.md).
 
 ## Versão anterior: v0.10.0 — Lançamento de correção para operação individual
 
@@ -322,25 +323,25 @@ A versão 0.8.0 reconectou o research-os ao seu substrato local de LLM declarado
 
 **Experimento 1 da versão 1 (durabilidade do fluxo de trabalho ComfyUI)** — FINALIZADO em 09 de maio de 2026. Todas as 8 seções em Terminal A, pacote congelado, arquivo disponível. Consulte [`docs/experiment-1-proof.md`](docs/experiment-1-proof.md) e [`docs/roadmap.md`](docs/roadmap.md).
 
-### O que o research-os não é (e o que a versão v0.11.0 não pretende ser)
+### O que o "research-os" não é (e o que a versão v0.12.0 NÃO afirma ser)
 
-- Não comprovado que o sistema funciona de forma independente, sem a necessidade de um operador, em pacotes novos. A versão v0.11.0 corrige as condições de falha do "gate" v0.2; a versão v0.3 do "gate" de operação independente será testada em uma sessão separada e pode revelar outras correções. A versão v0.11.0 é um pré-requisito para a versão v0.3, e não uma prova de sua funcionalidade.
-- Não testado em larga escala por usuários externos, além dos testes internos e das duas execuções do "gate" de operação independente. Seis experimentos internos foram concluídos — um de referência própria, cinco em domínios externos (ComfyUI, XRPL, Godot, calibração de revisores, revisão determinística) — além das execuções do "gate" de operação independente das versões v0.1 e v0.2, que revelaram 11 problemas identificados (R-001 a R-005 foram corrigidos na versão v0.10.0, R-007 a R-011 foram corrigidos na versão v0.11.0). O uso do sistema por operadores em larga escala ainda é um trabalho futuro.
-- Não é um gerador completo de pacotes. A versão v0.11.0 herda as funcionalidades de escopo de seção (`synth section`) e de escopo de pacote parcial (`synth pack --partial`) da versão v0.9, cada uma com uma declaração explícita de prontidão para a criação de pacotes. A criação de pacotes completos ainda requer um pacote com a propriedade `synthesis_ready` e a criação de conteúdo por um usuário (ou um colaborador) com base nos IDs de reclamações aceitos, utilizando o comando `synth workspace`.
-- Não é uma validação de nenhum modelo de revisor. A versão v0.11.0 não inclui, por padrão, um perfil de revisor "trusted_baseline"; os recibos de calibração são evidências, não validações. Os recibos de calibração existentes da versão v0.6.0 são anteriores à arquitetura MCP da versão v0.8.0 e não foram reavaliados sob o caminho MCP. Consulte a página do manual de calibração de revisores: [https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
-- Não está livre de artefatos históricos em pacotes congelados. Pacotes congelados anteriores à versão v0.4 contêm `research_os_version: '0.1.0'` devido a uma constante de estrutura codificada em versões anteriores à v0.4; a correção foi implementada na versão v0.4.0, mas pacotes congelados anteriores são imutáveis de acordo com a Lei 15 (veja [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
-- Não possui autenticação de origem no npm. A autenticação de origem do Sigstore será implementada em uma versão futura; verifique os pacotes npm da versão v0.11.0 usando o package-shasum e o commit da versão no GitHub.
-- Não representa uma melhoria em relação a soluções baseadas em nuvem. O estudo comparativo entre soluções locais e baseadas em nuvem (local-first-vs-cloud-research/) da versão v0.7.x identificou as vantagens da nuvem em termos de legibilidade e carga de trabalho do operador; a versão v0.11.0 não afirma que essas vantagens foram superadas.
+- Não comprovado o funcionamento independente do operador em novas instalações. A versão v0.12.0 resolve as questões identificadas na fase v0.3 (o funcionamento independente do operador foi COMPROVADO; o funcionamento independente em termos de cobertura ainda NÃO – a melhoria implementada na versão v0.3); a fase v0.4 do teste de funcionamento independente do operador será executada em uma sessão separada e poderá revelar outras correções. A versão v0.12.0 é um pré-requisito para a versão v0.4, e não uma prova de funcionalidade.
+- Não testado em larga escala por usuários externos, além dos testes internos e das três fases de teste de funcionamento independente do operador. Seis experimentos internos foram concluídos – um de referência, cinco externos (ComfyUI, XRPL, Godot, calibração do revisor, revisor determinístico) – além das fases de teste de funcionamento independente do operador nas versões v0.1, v0.2 e v0.3, que revelaram 17 problemas identificados (R-001 a R-005 resolvidos na versão v0.10.0, R-007 a R-011 resolvidos na versão v0.11.0, R-012 a R-017 resolvidos na versão v0.12.0). O uso do operador em larga escala ainda é um trabalho futuro.
+- Não é um gerador completo de pacotes. A versão v0.12.0 herda as funcionalidades de escopo de seção (`synth section`) e de escopo de pacote parcial (`synth pack --partial`) da versão v0.9, cada uma com uma declaração explícita de prontidão do pacote. A geração completa de pacotes ainda requer um pacote com a marcação `synthesis_ready` e a criação manual (ou colaborativa) com base nos IDs de reclamação aceitos, utilizando o ambiente `synth workspace`.
+- Não é uma validação de nenhum modelo de revisor. A versão v0.12.0 não inclui, por padrão, um perfil de revisor `trusted_baseline`; os recibos de calibração são evidências, não validações. Os recibos de calibração existentes da versão v0.6.0 foram criados antes da arquitetura MCP v0.8.0 e não foram reavaliados sob o caminho MCP. Consulte a página do manual de calibração do revisor: [https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+- Não está livre de artefatos históricos em pacotes congelados. Os pacotes congelados anteriores à versão v0.4 contêm `research_os_version: '0.1.0'` devido a uma constante de inicialização codificada na versão anterior à v0.4; a correção foi implementada na versão v0.4.0, mas os pacotes congelados anteriores são imutáveis de acordo com a Lei 15 (veja [`handbook/known-limitations`](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/)).
+- Não possui autenticação de origem no npm. A autenticação de origem Sigstore será implementada em uma versão futura; verifique os pacotes npm da versão v0.12.0 usando o package-shasum e o commit da versão no GitHub.
+- Não representa uma vantagem em relação à nuvem. O estudo comparativo `local-first-vs-cloud-research/` da versão v0.7.x identificou as vantagens da nuvem em termos de legibilidade e carga de trabalho do operador; a versão v0.12.0 não afirma que essas vantagens foram superadas.
 
 ### Limitações conhecidas
 
-A versão v0.11.0 é distribuída com três limitações conhecidas, visíveis aos operadores, que foram mantidas de versões anteriores. Cada uma delas está documentada na página de limitações conhecidas do manual: [https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/](https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/) e no arquivo [CHANGELOG.md](CHANGELOG.md). Nenhuma delas impede a distribuição; todas têm um caminho definido de recuperação ou mitigação.
+A versão v0.12.0 é distribuída com três limitações conhecidas, visíveis ao operador, que foram mantidas de versões anteriores. Cada uma delas está documentada na página de limitações conhecidas do manual: [https://mcp-tool-shop-org.github.io/research-os/handbook/known-limitations/] e no arquivo [CHANGELOG.md](CHANGELOG.md). Nenhuma delas impede a distribuição; todas possuem um caminho definido para recuperação ou mitigação.
 
-- **B-E-001 — A versão do pacote congelado anterior à v0.4 é um artefato histórico.** Pacotes congelados publicados entre as versões v0.3.3 e v0.6.0 contêm `research_os_version: "0.1.0"` nos arquivos `pack.manifest.json` e `pack/research.yaml` devido a uma constante de estrutura codificada em versões anteriores à v0.4. A correção foi implementada na versão v0.4.0 (a estrutura agora importa a versão `RESEARCH_OS_VERSION` atual); pacotes congelados anteriores são imutáveis de acordo com a Lei 15. Os arquivos JSON dentro dos pacotes afetados já contêm suas versões correspondentes.
-- **B-E-004 — A autenticação de origem no npm será implementada em uma versão futura.** A versão v0.11.0 verifica os pacotes tarball do npm apenas por meio do package-shasum. A migração do fluxo de publicação para um fluxo de trabalho de CI com o OIDC do Sigstore conflita com a disciplina de "traduzir antes de publicar" (TranslateGemma 12B é executado localmente); a migração está planejada para uma versão futura. Verifique os pacotes npm da versão v0.11.0 usando o package-shasum e o commit da versão no GitHub.
-- **B-A-003 — A migração do esquema de versão do indexador é documentada, mas não imposta.** A versão v0.11.0 inclui um inteiro `SCHEMA_VERSION` para escrita, mas não possui um executor de migração para leitura. Ao atualizar a versão do `SCHEMA_VERSION` conforme documentado, exclua o arquivo `.research-os/index.sqlite` e execute o comando `research-os index build --all`. O próprio pacote não é afetado — o indexador é uma camada de aceleração sobre evidências e reclamações (Lei 8); a reconstrução é idempotente.
+- **B-E-001 — A marcação de versão "frozen-pack" pré-v0.4 é um artefato histórico.** Os pacotes "frozen" publicados nas versões v0.3.3 a v0.6.0 contêm `research_os_version: "0.1.0"` em `pack.manifest.json` e `pack/research.yaml` devido a uma constante fixa (hardcoded) anterior à versão v0.4. A correção foi implementada na versão v0.4.0 (o "scaffold" agora importa a versão ativa de `RESEARCH_OS_VERSION`); os pacotes "frozen" mais antigos são imutáveis de acordo com a Lei 15. Os arquivos JSON de auditoria dentro dos pacotes afetados já contêm suas versões correspondentes.
+- **B-E-004 — A autenticação de "provenance" do npm será implementada em uma versão futura.** O arquivo "tarball" do npm v0.12.0 verifica apenas através de "package-shasum". A migração do fluxo de publicação para um fluxo de trabalho de CI com o OIDC do Sigstore conflita com a disciplina de "traduzir antes de publicar" (o TranslateGemma 12B é executado localmente); a migração está planejada para uma versão futura. Verifique os pacotes npm v0.12.0 através de "package-shasum" e do commit da versão no GitHub.
+- **B-A-003 — A migração do esquema de versão do indexador está documentada, mas não é obrigatória.** A versão v0.12.0 inclui um inteiro `SCHEMA_VERSION` para escrita, mas não possui um executável para migração de leitura. Ao atualizar a versão documentada do `SCHEMA_VERSION`, exclua o arquivo `.research-os/index.sqlite` e execute novamente `research-os index build --all`. O próprio pacote não é afetado; o indexador é uma camada de aceleração sobre evidências + declarações (Lei 8); a reconstrução é idempotente.
 
-**No perfil de revisor "trusted_baseline" é permitido na versão 0.11.0.** Isso é uma escolha deliberada em relação à confiança, e não uma falha: os registros de calibração no repositório (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) documentam as evidências. A confiança é conquistada através de testes repetidos que simulam falhas, e não é presumida. Esses registros são anteriores à arquitetura MCP da versão 0.8.0 e não foram reavaliados sob o caminho MCP.
+**Não é permitido nenhum perfil de revisor de "trusted_baseline" na versão v0.12.0.** Isso é uma postura de confiança intencional, não uma lacuna: os recibos de calibração no repositório (`hermes-two-pass=failed`, `mistral-nemo-two-pass=conditional_pass`, `hermes-single-pass=comparison_only`, `hermes-two-pass-deterministic=failed`) registram as evidências. A confiança é conquistada através de testes repetidos de recuperação de falhas simuladas, e não é presumida. Esses recibos são anteriores à arquitetura MCP v0.8.0 e não foram reavaliados sob o caminho MCP.
 
 ## Roteiro para a versão 1.0
 
