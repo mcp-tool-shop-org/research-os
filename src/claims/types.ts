@@ -37,11 +37,14 @@ export interface DraftClaim {
   // emits critic_unavailable — see CRITIC_EXCLUSION_LABELS in
   // src/claims/critic/prompt.ts for the three model-output labels.
   frame_excluded?: boolean;
+  // v0.11 Slice 3 (R-011) — source_content_mismatch added for the
+  // deterministic precheck firing path in MCPClaimExtractor's critic loop.
   frame_exclusion_reason?:
     | 'off_topic'
     | 'background_only'
     | 'source_chrome'
-    | 'critic_unavailable';
+    | 'critic_unavailable'
+    | 'source_content_mismatch';
   frame_exclusion_rationale?: string;
 }
 
@@ -68,6 +71,12 @@ export interface CriticTally {
   background_only: number;
   source_chrome: number;
   critic_call_failed: number;
+  // v0.11 Slice 3 (R-011) — count of claims caught by the deterministic
+  // source-content precheck before the LLM critic was invoked. Surfacing
+  // this separately from off_topic lets operators see how often the
+  // deterministic layer is firing vs. the LLM layer. Optional for
+  // back-compat with pre-v0.11 callers that destructure CriticTally.
+  source_content_mismatch?: number;
 }
 
 export type ClaimExtractionResult =
@@ -98,6 +107,12 @@ export interface ClaimExtractionInput {
   // per-call `model` parameter (v2.3.0 contract). undefined means "let the MCP
   // server pick its default"; the heuristic extractor ignores it.
   effectiveModel?: string;
+  // v0.11 Slice 3 (R-011) — full fetched body text used to compute the
+  // source-content topical signature for the frame-critic precheck.
+  // Optional for back-compat (heuristic extractor + pre-v0.11 callers
+  // omit it; the MCP extractor's R-011 precheck degrades gracefully to
+  // "no signal, no precheck" when absent).
+  sourceRawText?: string | null;
 }
 
 export interface ClaimExtractorAdapter {

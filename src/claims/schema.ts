@@ -61,8 +61,17 @@ export const ClaimSchema = z.object({
   // admit it — admitting on critic failure lets off-topic content leak in
   // labelled "on-topic" purely because the critic crashed.
   frame_excluded: z.boolean().optional().default(false),
+  // v0.11 Slice 3 (R-011) — extends the enum with source_content_mismatch
+  // for the deterministic precheck firing path. See FRAME_EXCLUSION_REASONS
+  // in src/claims/critic/prompt.ts for the canonical source of truth.
   frame_exclusion_reason: z
-    .enum(['off_topic', 'background_only', 'source_chrome', 'critic_unavailable'])
+    .enum([
+      'off_topic',
+      'background_only',
+      'source_chrome',
+      'critic_unavailable',
+      'source_content_mismatch',
+    ])
     .optional(),
   frame_exclusion_rationale: z.string().optional(),
 });

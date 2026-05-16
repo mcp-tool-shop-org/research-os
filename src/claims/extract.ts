@@ -428,6 +428,12 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       excerpts: ledger.excerpts,
       framePurpose,
       effectiveModel,
+      // v0.11 Slice 3 (R-011) — pass the fetched body text so the MCP
+      // extractor can compute the source-content topical signature once
+      // per source. Heuristic extractor ignores this field; the MCP
+      // extractor short-circuits the LLM critic call on signature
+      // mismatch. Optional null when no raw text is available.
+      sourceRawText: rawText,
     });
 
     if (!result.ok) {

@@ -33,6 +33,11 @@ import type {
 } from '../types.js';
 import { runCritic, type CriticCallToolClient } from '../critic/mcp-critic.js';
 import { isExclusionLabel } from '../critic/prompt.js';
+import {
+  checkClaimSourceContentMatch,
+  computeSourceContentSignature,
+  DEFAULT_FRAME_SOURCE_CONTENT_THRESHOLD,
+} from '../critic/source-content.js';
 
 // Phase 1b-b diagnostic finding (2026-05-12): under 5_000 the cosmology
 // off-topic source on the dev-rtx5080 workhorse profile (8K context) pages
@@ -348,7 +353,21 @@ Source-card not: ${card.not ?? 'null'}`;
       background_only: 0,
       source_chrome: 0,
       critic_call_failed: 0,
+      source_content_mismatch: 0,
     };
+    // v0.11 Slice 3 (R-011) — source-content topical signature, computed
+    // once per source (not per claim). The signature is the Set of unique
+    // significant tokens in the fetched body text (R-008's tokenizer +
+    // stripping). The per-draft precheck runs before the LLM critic call;
+    // a sub-threshold overlap with claim asserts short-circuits the LLM
+    // call and marks frame_excluded=true with reason=source_content_mismatch.
+    // Opt out via RESEARCH_OS_FRAME_SOURCE_CONTENT=0 (mirrors R-008's
+    // RESEARCH_OS_DISCOVER_RELEVANCE opt-out).
+    const r011Enabled = process.env.RESEARCH_OS_FRAME_SOURCE_CONTENT !== '0';
+    const sourceSignature =
+      r011Enabled && typeof input.sourceRawText === 'string'
+        ? computeSourceContentSignature(input.sourceRawText)
+        : new Set<string>();
     try {
       const client = (await handle.connect()) as unknown as CallToolClient;
       for (let i = 0; i < windows.length; i += 1) {
@@ -418,6 +437,28 @@ Source-card not: ${card.not ?? 'null'}`;
         if (input.framePurpose !== undefined && input.framePurpose.trim().length > 0) {
           const criticClient = client as unknown as CriticCallToolClient;
           for (const draft of page.drafts) {
+            // v0.11 Slice 3 (R-011) — deterministic source-content precheck.
+            // Fires when the claim's asserts vocabulary has below-threshold
+            // overlap with the source body's topical signature. Skips the
+            // LLM critic call (the precheck has already decided). Requires
+            // a non-empty source signature; empty signature → fall through
+            // to the LLM critic (graceful degradation, no over-block).
+            if (sourceSignature.size > 0) {
+              const precheck = checkClaimSourceContentMatch({
+                claimAsserts: draft.asserts,
+                sourceSignature,
+                threshold: DEFAULT_FRAME_SOURCE_CONTENT_THRESHOLD,
+              });
+              if (precheck.mismatch) {
+                criticTally.source_content_mismatch =
+                  (criticTally.source_content_mismatch ?? 0) + 1;
+                draft.frame_excluded = true;
+                draft.frame_exclusion_reason = 'source_content_mismatch';
+                draft.frame_exclusion_rationale =
+                  `Claim asserts share only ${Math.round(precheck.overlapScore * 100)}% of vocabulary with the source body (threshold ${Math.round(precheck.threshold * 100)}%); source content does not topically support this claim.`;
+                continue;
+              }
+            }
             const critic = await runCritic(criticClient, {
               sectionPurpose: input.framePurpose,
               claimAsserts: draft.asserts,

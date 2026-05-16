@@ -80,10 +80,22 @@ export const ExtractionRatioThresholdsConfigSchema = z
   })
   .strict();
 
+// v0.11 Slice 3 (R-009) — per-pack override for the source-card identity
+// guard threshold. Single knob: the keyword-overlap floor between emitted
+// card.title and fetched HTML <title>. Below this fraction the severity
+// fires. Same scale as R-008's discover-layer threshold for cross-layer
+// vocabulary consistency.
+export const IdentityMismatchThresholdsConfigSchema = z
+  .object({
+    min_overlap_threshold: z.number().min(0).max(1).optional(),
+  })
+  .strict();
+
 export const SeverityThresholdsConfigSchema = z
   .object({
     bot_check: BotCheckThresholdsConfigSchema.optional(),
     extraction_word_count_ratio: ExtractionRatioThresholdsConfigSchema.optional(),
+    identity_mismatch: IdentityMismatchThresholdsConfigSchema.optional(),
   })
   .strict();
 

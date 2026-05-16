@@ -75,17 +75,29 @@ export function isExclusionLabel(label: string): label is CriticExclusionLabel {
 }
 
 // Schema-persistence enum for ClaimSchema.frame_exclusion_reason. Carries the
-// THREE critic-model labels PLUS the system-state critic_unavailable. The
-// extractor stamps critic_unavailable when the critic call fails (any of:
+// THREE critic-model labels PLUS the system-state critic_unavailable PLUS
+// (v0.11 Slice 3 — R-011) the deterministic source-content guard reason
+// source_content_mismatch.
+//
+// The extractor stamps critic_unavailable when the critic call fails (any of:
 // MCP transport error, parse error, invalid label, empty rationale, timeout).
 // Admitting on critic failure would let off-topic content leak in mislabelled
 // "on-topic" purely because the critic crashed — the safe default when
 // topicality cannot be determined is to EXCLUDE.
+//
+// source_content_mismatch is set by the R-011 deterministic precheck before
+// the LLM critic call: the claim's asserts vocabulary has below-threshold
+// overlap with the source body's topical signature, so the claim is not
+// substantively grounded in its source even if the asserts text reads as
+// on-topic. The LLM critic call is short-circuited (the precheck has
+// already decided). The model never emits source_content_mismatch; this is
+// a system-state label like critic_unavailable.
 export const FRAME_EXCLUSION_REASONS = [
   'off_topic',
   'background_only',
   'source_chrome',
   'critic_unavailable',
+  'source_content_mismatch',
 ] as const;
 
 export type FrameExclusionReason = (typeof FRAME_EXCLUSION_REASONS)[number];

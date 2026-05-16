@@ -84,17 +84,22 @@ describe('CRITIC_PROMPT_TEMPLATE (drift prevention)', () => {
     expect(isExclusionLabel('critic_unavailable')).toBe(false);
   });
 
-  it('exposes the FOUR schema-persistence reasons in FRAME_EXCLUSION_REASONS (model labels PLUS critic_unavailable)', () => {
+  it('exposes the FIVE schema-persistence reasons in FRAME_EXCLUSION_REASONS (model labels PLUS critic_unavailable PLUS source_content_mismatch)', () => {
     // FRAME_EXCLUSION_REASONS is the wider enum the schema uses to persist
-    // ClaimSchema.frame_exclusion_reason. It includes critic_unavailable
-    // (a system-state value) on top of the three model-output labels.
+    // ClaimSchema.frame_exclusion_reason. It includes the three model
+    // labels plus two system-state values:
+    //   - critic_unavailable (v0.8.0 phase 1b-b): set on critic-call failure
+    //   - source_content_mismatch (v0.11 Slice 3 — R-011): set when the
+    //     deterministic precheck fires before the LLM critic call.
+    // The model never emits the system-state values.
     expect(FRAME_EXCLUSION_REASONS).toEqual([
       'off_topic',
       'background_only',
       'source_chrome',
       'critic_unavailable',
+      'source_content_mismatch',
     ]);
-    expect(FRAME_EXCLUSION_REASONS).toHaveLength(4);
+    expect(FRAME_EXCLUSION_REASONS).toHaveLength(5);
   });
 
   it('the critic prompt template does NOT advertise critic_unavailable as a label option to the model', () => {

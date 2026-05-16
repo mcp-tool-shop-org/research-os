@@ -52,6 +52,7 @@ import { RESEARCH_OS_VERSION } from '../index.js';
 export type FindingKind =
   | 'bot_check_or_captcha_detected'
   | 'extraction_suspect_word_count_mismatch'
+  | 'source_identity_mismatch'
   | 'github_ui_html'
   | 'classifier_flagged'
   | 'source_type_mismatch'
@@ -87,6 +88,8 @@ export interface AuditTotals {
   bot_check_or_captcha_detected: number;
   /** v0.10 Slice 3 — count of cards whose effective kind is extraction_suspect_word_count_mismatch. */
   extraction_suspect_word_count_mismatch: number;
+  /** v0.11 Slice 3 — count of cards whose effective kind is source_identity_mismatch. */
+  source_identity_mismatch: number;
   no_action: number;
 }
 
@@ -177,10 +180,18 @@ async function loadSeverityThresholds(packPath: string): Promise<SeverityThresho
 /**
  * Assign exactly one finding kind per the advisor-locked precedence order.
  *
- * v0.10 Slice 3 precedence (highest first):
+ * v0.10 Slice 3 / v0.11 Slice 3 precedence (highest first):
  *   bot_check_or_captcha_detected → extraction_suspect_word_count_mismatch
- *   → github_ui_html → classifier_flagged → source_type_mismatch
- *   → publisher_mismatch → publisher_missing → override_applied → no_action
+ *   → source_identity_mismatch → github_ui_html → classifier_flagged
+ *   → source_type_mismatch → publisher_mismatch → publisher_missing
+ *   → override_applied → no_action
+ *
+ * source_identity_mismatch is the v0.11 Slice 3 (R-009) extractor-identity
+ * guard — placed third because the two upstream signals are about the
+ * fetched body (bot-check) and the extracted card mass (word-count) — both
+ * upstream of identity comparison. Within the severity band the precedence
+ * is informational only (each individual severity is counted independently
+ * in totals; kind is the dominant headline).
  *
  * source_type_mismatch guards against rule_hint === 'no-rule-match' to avoid
  * false positives on extractor-typed cards (e.g. arxiv.org typed 'primary' by
@@ -197,6 +208,10 @@ function determineFinding(
   }
   if (effectiveSeverities.some((f) => f.severity === 'extraction_suspect_word_count_mismatch')) {
     return 'extraction_suspect_word_count_mismatch';
+  }
+  // v0.11 Slice 3 (R-009) — source-card identity guard.
+  if (effectiveSeverities.some((f) => f.severity === 'source_identity_mismatch')) {
+    return 'source_identity_mismatch';
   }
 
   const classification = classifySourceType({ url: card.url });
@@ -244,6 +259,7 @@ function buildMarkdown(report: AuditReport): string {
     `| Cards with overrides | ${t.cards_with_overrides} |`,
     `| Bot-check / CAPTCHA detected | ${t.bot_check_or_captcha_detected} |`,
     `| Extraction word-count mismatch | ${t.extraction_suspect_word_count_mismatch} |`,
+    `| Source-identity mismatch (R-009) | ${t.source_identity_mismatch} |`,
     `| Source-type mismatches | ${t.source_type_mismatches} |`,
     `| Publisher missing | ${t.publisher_missing} |`,
     `| GitHub UI HTML candidates | ${t.github_ui_html} |`,
@@ -319,6 +335,7 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
     classifier_flagged_other: 0,
     bot_check_or_captcha_detected: 0,
     extraction_suspect_word_count_mismatch: 0,
+    source_identity_mismatch: 0,
     no_action: 0,
   };
 
@@ -350,15 +367,18 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
 
     const kind = determineFinding(card, overrides, effectiveSeverities);
 
-    // v0.10 Slice 3 — severity totals count each severity independently,
-    // not the dominant `kind`. A card whose effective severities include
-    // both bot_check_or_captcha_detected AND extraction_suspect_word_count_mismatch
+    // v0.10 Slice 3 / v0.11 Slice 3 — severity totals count each severity
+    // independently, not the dominant `kind`. A card whose effective
+    // severities include any combination of bot_check_or_captcha_detected,
+    // extraction_suspect_word_count_mismatch, and source_identity_mismatch
     // contributes 1 to each total (and surfaces in findings[].severities).
     for (const s of effectiveSeverities) {
       if (s.severity === 'bot_check_or_captcha_detected') {
         totals.bot_check_or_captcha_detected++;
       } else if (s.severity === 'extraction_suspect_word_count_mismatch') {
         totals.extraction_suspect_word_count_mismatch++;
+      } else if (s.severity === 'source_identity_mismatch') {
+        totals.source_identity_mismatch++;
       }
     }
 
@@ -369,6 +389,7 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
       case 'classifier_flagged':   totals.classifier_flagged_other++; break;
       case 'bot_check_or_captcha_detected':
       case 'extraction_suspect_word_count_mismatch':
+      case 'source_identity_mismatch':
         // Severity totals already incremented above per-severity.
         break;
       case 'override_applied':     // informational — falls into no_action bucket

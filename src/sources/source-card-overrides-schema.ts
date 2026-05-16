@@ -12,6 +12,11 @@
  * can clear a source-card quarantine signal when they have out-of-band
  * evidence the fetch was legitimate. The refine relaxes to: at least one
  * of new_source_type, new_publisher, or clear_severities must be present.
+ *
+ * v0.11 Slice 3 (R-009): extends the SourceSeveritySchema enum with
+ * `source_identity_mismatch` so operators can clear extractor-identity
+ * confabulations using the same override mechanism as bot-check and
+ * extraction-ratio severities.
  */
 import { z } from 'zod';
 import { SourceTypeSchema } from './schema.js';
@@ -19,6 +24,7 @@ import { SourceTypeSchema } from './schema.js';
 export const SourceSeveritySchema = z.enum([
   'bot_check_or_captcha_detected',
   'extraction_suspect_word_count_mismatch',
+  'source_identity_mismatch',
 ]);
 
 export const SourceCardOverrideSchema = z

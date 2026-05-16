@@ -1,8 +1,8 @@
 /**
- * Source-card severity detection — v0.10 Slice 3 (R-003 + R-005).
+ * Source-card severity detection — v0.10 Slice 3 (R-003 + R-005), v0.11 Slice 3 (R-009).
  *
- * Pure function. No I/O. Detects two severities from a SourceCard + fetched
- * body context:
+ * Pure function. No I/O. Detects up to three severities from a SourceCard +
+ * fetched body context:
  *
  *   - bot_check_or_captcha_detected (HARD FAIL — R-003)
  *     Bot-check / CAPTCHA / Incapsula challenge pages confabulated into
@@ -14,6 +14,18 @@
  *     Extraction text size vastly exceeds fetched body size — the kind of
  *     pattern that produces hallucinated content from thin sources.
  *
+ *   - source_identity_mismatch (HARD FAIL — R-009)
+ *     The emitted card.title disagrees with the fetched HTML <title> tag.
+ *     Catches LLM source-card extractor confabulations where the extractor
+ *     invented an identity that doesn't match the page it was actually
+ *     given. v0.2 originating case: PubMed page for Barnes & Wagner 2009
+ *     ("Changing to daylight saving time…") emitted as
+ *     "Effects of intrathecal clonidine on morphine-induced analgesia and
+ *     respiratory depression in rats." Detection reuses R-008's
+ *     deterministic keyword-overlap helper for vocabulary alignment with
+ *     the discover-layer relevance check; pages with no extractable
+ *     <title> degrade gracefully (no signal, no over-block).
+ *
  * Detection is compound: marker substring alone is NOT sufficient for R-003
  * (false-positive guard for legitimate CAPTCHA research). Each finding's
  * `reasons[]` names every signal that fired so the audit output is auditable.
@@ -24,15 +36,21 @@
  */
 import * as cheerio from 'cheerio';
 
+import {
+  computeKeywordOverlap,
+  tokenizeForRelevance,
+} from '../discover/relevance.js';
 import type { SourceCard } from './schema.js';
 
 export type SourceSeverity =
   | 'bot_check_or_captcha_detected'
-  | 'extraction_suspect_word_count_mismatch';
+  | 'extraction_suspect_word_count_mismatch'
+  | 'source_identity_mismatch';
 
 export const SOURCE_SEVERITIES = [
   'bot_check_or_captcha_detected',
   'extraction_suspect_word_count_mismatch',
+  'source_identity_mismatch',
 ] as const;
 
 export interface SeverityFinding {
@@ -64,9 +82,20 @@ export interface ExtractionRatioThresholds {
   minRatio: number;
 }
 
+export interface IdentityMismatchThresholds {
+  /**
+   * R-009 keyword-overlap floor between emitted card.title and fetched HTML
+   * <title>. Below this fraction → source_identity_mismatch fires. Matches
+   * R-008's discover-layer default so the vocabulary of "low overlap is a
+   * mismatch" is consistent across defense layers.
+   */
+  minOverlapThreshold: number;
+}
+
 export interface SeverityThresholds {
   botCheck: BotCheckThresholds;
   extractionRatio: ExtractionRatioThresholds;
+  identityMismatch: IdentityMismatchThresholds;
 }
 
 export const DEFAULT_SEVERITY_THRESHOLDS: SeverityThresholds = {
@@ -89,6 +118,13 @@ export const DEFAULT_SEVERITY_THRESHOLDS: SeverityThresholds = {
     minExtractedWords: 800,
     minRatio: 4,
   },
+  identityMismatch: {
+    // Mirrors src/discover/relevance.ts DEFAULT_RELEVANCE_THRESHOLD.
+    // At ≤7 title tokens this requires ≥2 to match across emitted and
+    // fetched titles; the v0.2 rats/clonidine vs. workplace-injuries
+    // case has 0 overlap and trips cleanly.
+    minOverlapThreshold: 0.2,
+  },
 };
 
 /**
@@ -110,6 +146,9 @@ export interface SeverityThresholdsConfigInput {
     min_extracted_words?: number;
     min_ratio?: number;
   };
+  identity_mismatch?: {
+    min_overlap_threshold?: number;
+  };
 }
 
 /**
@@ -123,6 +162,7 @@ export function resolveSeverityThresholds(
   const d = DEFAULT_SEVERITY_THRESHOLDS;
   const bc = config?.bot_check;
   const er = config?.extraction_word_count_ratio;
+  const im = config?.identity_mismatch;
   return {
     botCheck: {
       maxBodyWordsWithMarker: bc?.max_body_words_with_marker ?? d.botCheck.maxBodyWordsWithMarker,
@@ -138,6 +178,10 @@ export function resolveSeverityThresholds(
       maxSourceWords: er?.max_source_words ?? d.extractionRatio.maxSourceWords,
       minExtractedWords: er?.min_extracted_words ?? d.extractionRatio.minExtractedWords,
       minRatio: er?.min_ratio ?? d.extractionRatio.minRatio,
+    },
+    identityMismatch: {
+      minOverlapThreshold:
+        im?.min_overlap_threshold ?? d.identityMismatch.minOverlapThreshold,
     },
   };
 }
@@ -207,6 +251,56 @@ function findMarkerHits(rawText: string): string[] {
     if (lower.includes(m.needle)) hits.push(`marker:${m.key}`);
   }
   return hits;
+}
+
+/**
+ * Decode the small set of HTML entities R-008's discover-layer title
+ * fetcher recognises. Kept local so severities.ts does not depend on
+ * relevance.ts's private constant — but uses the same vocabulary for
+ * cross-layer consistency. Numeric entities (&#NNN;) decoded too.
+ */
+const TITLE_HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&apos;': "'",
+  '&#39;': "'",
+  '&nbsp;': ' ',
+};
+
+function decodeTitleEntities(text: string): string {
+  let out = text;
+  for (const [ent, ch] of Object.entries(TITLE_HTML_ENTITIES)) {
+    out = out.split(ent).join(ch);
+  }
+  out = out.replace(/&#(\d+);/g, (_m, n) => {
+    const code = Number(n);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : _m;
+  });
+  return out;
+}
+
+// Match the first <title>…</title> block. The /s flag (dotall) lets the
+// pattern span multi-line title declarations such as PMC's pretty-printed
+// HTML: `<title>\n  Geographical variations…\n</title>`.
+const TITLE_TAG_REGEX = /<title[^>]*>([\s\S]*?)<\/title>/i;
+
+/**
+ * Extract the first <title>…</title> block from a fetched HTML body.
+ * Returns the decoded, whitespace-collapsed title, or null when no title
+ * is present / body is null/empty. Pure function — used by R-009 detection.
+ *
+ * Mirrors the parsing shape of src/discover/relevance.ts#fetchUrlTitle so
+ * the discover-layer R-008 defense and the audit/extract-layer R-009
+ * defense behave consistently on identical bytes.
+ */
+export function extractHtmlTitle(rawText: string | null | undefined): string | null {
+  if (!rawText || rawText.length === 0) return null;
+  const match = TITLE_TAG_REGEX.exec(rawText);
+  if (!match || !match[1]) return null;
+  const title = decodeTitleEntities(match[1]).replace(/\s+/g, ' ').trim();
+  return title.length > 0 ? title : null;
 }
 
 /**
@@ -310,6 +404,54 @@ export function detectSeverities(input: {
 
     if (reasons.length > 0) {
       findings.push({ severity: 'bot_check_or_captcha_detected', reasons });
+    }
+  }
+
+  // R-009 — source-card identity guard. Compare emitted card.title against
+  // the fetched HTML <title>. If both sides have extractable tokens and
+  // the keyword overlap is below threshold, the extractor confabulated an
+  // identity that doesn't match the page it was given (v0.2 originating
+  // shape: PubMed page is Barnes & Wagner 2009, emitted title is the
+  // unrelated rats/clonidine paper).
+  //
+  // Asymmetric guards (NO signal → no fire) keep the defense resilient:
+  //   - rawText null → no <title> to compare against → skip
+  //   - fetched <title> absent / non-HTML body → graceful skip (mirrors
+  //     R-008's `unverified` semantics; the defense does not over-block
+  //     on pages that legitimately omit <title>)
+  //   - either side tokenizes to zero significant tokens → skip (no
+  //     comparable signal)
+  if (input.rawText !== null) {
+    const fetchedTitle = extractHtmlTitle(input.rawText);
+    if (fetchedTitle !== null) {
+      const cardTitle = (input.card.title ?? '').trim();
+      const cardTokens = tokenizeForRelevance(cardTitle);
+      const fetchedTokens = tokenizeForRelevance(fetchedTitle);
+      if (cardTokens.length > 0 && fetchedTokens.length > 0) {
+        // Symmetric overlap: query side is the emitted card title (R-009
+        // is "do the emitted tokens appear in the fetched ones?"), so we
+        // reuse computeKeywordOverlap with card.title as the "query" and
+        // fetched <title> as the "title" being checked against.
+        const overlap = computeKeywordOverlap(fetchedTitle, cardTitle);
+        const threshold = thresholds.identityMismatch.minOverlapThreshold;
+        if (overlap.overlapScore < threshold) {
+          // Truncate fetched title for the reasons[] entry so the audit
+          // output stays scannable even on pathological 1KB-long <title>
+          // values that some CMSes emit.
+          const truncated =
+            fetchedTitle.length > 200 ? fetchedTitle.slice(0, 197) + '…' : fetchedTitle;
+          findings.push({
+            severity: 'source_identity_mismatch',
+            reasons: [
+              `overlap_score=${Math.round(overlap.overlapScore * 100) / 100}`,
+              `threshold=${threshold}`,
+              `card_title_tokens=${cardTokens.length}`,
+              `fetched_title_tokens=${fetchedTokens.length}`,
+              `fetched_title="${truncated}"`,
+            ],
+          });
+        }
+      }
     }
   }
 

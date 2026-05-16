@@ -450,6 +450,10 @@ describe('Critic routing — label → draft state', () => {
       background_only: 1,
       source_chrome: 1,
       critic_call_failed: 0,
+      // v0.11 Slice 3 (R-011) — new counter for the deterministic
+      // source-content precheck. Zero in this test because no
+      // sourceRawText was supplied (the precheck degrades gracefully).
+      source_content_mismatch: 0,
     });
   });
 });

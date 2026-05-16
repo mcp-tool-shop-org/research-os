@@ -235,7 +235,8 @@ describe('runSourceCardAudit — JSON report shape', () => {
     expect(typeof report.research_os_version).toBe('string');
 
     // Totals keys — exhaustive. v0.10 Slice 3 adds bot-check and
-    // extraction-suspect severity counters.
+    // extraction-suspect severity counters; v0.11 Slice 3 (R-009) adds
+    // source_identity_mismatch.
     expect(Object.keys(report.totals).sort()).toEqual(
       [
         'bot_check_or_captcha_detected',
@@ -246,6 +247,7 @@ describe('runSourceCardAudit — JSON report shape', () => {
         'github_ui_html',
         'no_action',
         'publisher_missing',
+        'source_identity_mismatch',
         'source_type_mismatches',
       ].sort(),
     );
