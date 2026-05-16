@@ -163,6 +163,7 @@ In addition to the 7 finding kinds (which classify what's wrong with a source ca
 |----------|--------|---------|
 | `bot_check_or_captcha_detected` | HARD FAIL — quarantine from claim extraction | Compound: marker (`captcha` / `incapsula` / `cloudflare challenge` / `please verify you are human` / `robot check` / `_Incapsula_Resource` / `access denied`) paired with body-shape evidence (≤100 prose words by default). Independent signals: <2KB body with >50% `<script>` density; substantial scripts with ≤50 prose words after stripping; HTTP 200 + response time ≤100ms + body <2KB. |
 | `extraction_suspect_word_count_mismatch` | WARN AND QUARANTINE | Fetched body word count ≤200 AND extracted card text ≥800 words AND ratio ≥4. |
+| `source_identity_mismatch` (v0.11.0+) | HARD FAIL — quarantine from claim extraction | Extractor-emitted `card.title` disagrees with HTML `<title>` parsed from fetched body. Keyword overlap below threshold (default 0.2) fires. Reuses the discover-layer R-008 overlap helper (`tokenizeForRelevance` + `computeKeywordOverlap`) so threshold semantics are consistent across layers. Triggered by the v0.2 "rats and clonidine"/Barnes & Wagner confabulation case (overlap = 0). |
 
 Quarantine excludes the source from claim extraction. Source cards are still written normally so the operator can inspect the fetched body and the extracted card side-by-side.
 
@@ -182,6 +183,8 @@ audit:
       min_extracted_words: 800
       max_body_words: 200
       min_ratio: 4
+    identity_mismatch:                  # v0.11.0+ R-009
+      min_overlap_threshold: 0.2
 ```
 
 Defaults are starting points, not load-bearing. Raise `max_body_words_with_marker` if legitimate brief content trips R-003; raise `min_script_density_ratio` if heavy-JS-but-legitimate pages trip; lower `min_ratio` if confabulation happens at 2-3× ratios.
@@ -195,6 +198,16 @@ The v0.4 source-card-overrides ledger schema gains a third optional field. At le
   "source_id": "src_aabbccddeeff",
   "reason": "Source is a legitimate CAPTCHA-research paper; markers appear in body prose, not in challenge content.",
   "clear_severities": ["bot_check_or_captcha_detected"]
+}
+```
+
+To clear the v0.11.0 `source_identity_mismatch` severity (e.g., when the page intentionally serves a generic title via a CMS placeholder while the body is legitimate), name it in `clear_severities`:
+
+```json
+{
+  "source_id": "src_aabbccddeeff",
+  "reason": "Title element is a CMS placeholder; body content matches the cited paper title.",
+  "clear_severities": ["source_identity_mismatch"]
 }
 ```
 

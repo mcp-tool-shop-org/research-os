@@ -62,6 +62,27 @@ research-os discover reject 01-landscape --id <id>
 research-os discover export 01-landscape    # write urls.approved.txt
 ```
 
+**Relevance check (v0.11.0+ R-008).** `discover run` now fetches each candidate URL's HTML `<title>` (bounded: 64KB body, 5s timeout, 4-way concurrency) and computes keyword overlap against the discover query. Each candidate gains a `relevance` block on the ledger record:
+
+```json
+{
+  "status": "verified" | "unverified" | "topic_mismatch",
+  "fetched_title": "...",
+  "query_keywords": ["..."],
+  "matched_keywords": ["..."],
+  "overlap_score": 0.43,
+  "threshold": 0.2,
+  "error": null,
+  "checked_at": "..."
+}
+```
+
+Default overlap threshold `0.2`. The CLI report renders a Relevance column and a warning banner with override hint when `topic_mismatch` candidates are present.
+
+**Quarantine + override.** `discover approve <section> --top N` structurally excludes `topic_mismatch` candidates. `unverified` (network/fetch failure) is graceful — not quarantined. Operator override: `discover approve <section> --candidate <id>` admits a flagged candidate explicitly; the relevance verdict stays on the ledger record for audit. Mirrors R-003's `clear_severities[]` "name to clear" semantics — no new override-ledger file.
+
+**Env opt-out.** `RESEARCH_OS_DISCOVER_RELEVANCE=0` disables the check for offline/air-gapped workflows or environments where the prior v0.10 behavior is preferred.
+
 ---
 
 ### `research-os claim extract <section>`
@@ -88,9 +109,9 @@ research-os claim audit-density 01-landscape   # read-only density diagnostic
 
 ---
 
-### `research-os claim repair-scope <section>` (v0.10.0+)
+### `research-os claim repair-scope <section>` (v0.10.0+; v0.11.0 boundary alignment)
 
-Repair claims whose `scope` field arrived `null` from extraction. Append-only ledger at `evidence/claim-scope-repairs.jsonl`; canonical `claims.jsonl` rows carry the latest `applied_scope`.
+Repair claims whose `scope` field arrived `null` from extraction. Append-only ledger at `evidence/claim-scope-repairs.jsonl`; canonical `claims.jsonl` rows carry the latest `applied_scope` (and, in v0.11.0+, the latest `applied_not` for substantive claims).
 
 ```bash
 research-os claim repair-scope 01-landscape                 # interactive (default)
@@ -99,6 +120,17 @@ research-os claim repair-scope 01-landscape --interactive   # explicit interacti
 ```
 
 Interactive mode (default) prompts on each proposal with `accept` / `edit` / `skip` / `quit`. `--auto` applies a templated heuristic — `"per <publisher> <source_type>, on <section_purpose>"` — without prompting. Graceful degradation when publisher or source_type is unknown.
+
+**v0.11.0+ boundary alignment (R-007).** When BOTH `scope` AND `not` are null on a substantive claim at repair time, the engine now populates a templated boundary alongside the scope template:
+
+```
+not generalizing outside <publisher>'s <source_type> context
+  → not generalizing outside <publisher>'s findings           (publisher only)
+  → not generalizing outside <source_type>                    (source_type only)
+  → not generalizing outside the <section_purpose_short> scope (graceful fallback)
+```
+
+Asymmetric (`scope=null, not=set`) claims keep their operator-authored boundary unchanged — R-007 does NOT widen into the reverse-asymmetric case. The ledger records `proposed_not` and `applied_not` alongside the scope fields; interactive mode shows `Proposed not:` and prompts for `new not (blank to keep proposed)` only when boundary repair applies. This closes the v0.2 stuck-loop where `claim triage` re-classified `--auto`-repaired claims as `needs_scope_repair` because triage requires both fields populated.
 
 Running repair-scope twice on the same claim preserves both records (Law 15 append-only). Skip-with-reason writes a ledger record with `applied_scope=null, operator_confirmed=false`.
 

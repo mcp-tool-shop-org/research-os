@@ -207,6 +207,42 @@ receipt is the mechanism working, not a bug.
 
 ---
 
+## Recover advisor — deterministic-fallback visibility (v0.11.0+)
+
+**Symptom.** `recovery/blocked-section-recovery.md` shows `**Advisor path:** Deterministic fallback (AI advisor exhausted)` on one or more sections; the recommended action is rendered from the action graph rather than the AI advisor.
+
+**Cause.** The recovery advisor's AI call failed twice (timeout, MCP error, or verifier rejection on both attempts) and the engine fell back to deterministic rendering of the top-ranked allowed action. The fallback action is still pack-law-correct — it just lacks the AI's contrastive framing.
+
+**Where to read the cause.** v0.11.0 surfaces the cause in the operator-facing markdown under each fallback section:
+
+```
+### Why the AI advisor fell back
+
+**Cause:** AI advisor timed out (TIER_TIMEOUT) — elapsed 15012ms over 15000ms budget.
+
+The recovery guidance below was generated deterministically from pack law
+rather than the AI advisor. The fallback recovery action and pack-law
+forbiddings are unchanged.
+
+Raw error and timing are preserved at `prose_error.last_rejection_reason`
+(and `prose_error.timing_ms` when parseable) in
+`recovery/blocked-section-recovery.json` for full inspection.
+```
+
+The top callout extends with a per-cause summary (e.g., `Deterministic fallback applied to: 2 section(s) (AI advisor exhausted) — 2 timeout`).
+
+**The 3 fallback causes (closed enum).**
+
+| `fallback_cause` | Meaning | Common remedy |
+|---|---|---|
+| `tier_timeout` | MCP error containing the literal `TIER_TIMEOUT` marker (advisor exceeded the ollama-intern-mcp tier budget). | Switch `INTERN_PROFILE` to a deeper-tier profile, reduce input size, ensure the model is resident (`ollama ps`). |
+| `mcp_error` | Other MCP-layer failure (network, parse, schema). | Inspect `prose_error.last_rejection_reason` JSON for the literal error string; restart the MCP server if stale. |
+| `retry_exhausted` | Verifier rejected both advisor attempts (no MCP error). | Inspect `prose_error.last_rejection_reason` for the verifier rejection reason; the deterministic fallback action is still pack-law-correct. |
+
+**Recover.** Deterministic fallback advice is usable as-is; the action graph's top-ranked allowed action is still the smallest reversible move under pack law. If the AI's contrastive framing would help, address the cause (e.g., extend tier timeout, restart MCP server) and re-run `research-os recover pack`. The fallback selection logic itself is unchanged from v0.9 — R-010 is surface-only visibility.
+
+---
+
 ## Freeze — refusal with stable `reason_code`
 
 **Symptom.** `research-os freeze` exits 2 and writes
