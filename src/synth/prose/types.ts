@@ -226,6 +226,17 @@ export interface UnusedClaimDisclosure {
   role_rationale: string;
 }
 
+// R-020: a recovery action surfaced inline in the no_answer_cluster failure
+// body. Mirrors the action-graph's AllowedAction shape (action_id + why +
+// command_hint) but is a separate type so the prose layer doesn't import
+// the recover layer's types directly. section-run.ts decorates the bare
+// ProseNoAnswerClusterError with these before writing artifacts.
+export interface NoAnswerClusterRecoveryAction {
+  action_id: string;
+  why: string;
+  command_hint: string;
+}
+
 // Structured error for the no-answer-cluster failure mode (returned when no claim earns role=answer).
 export interface ProseNoAnswerClusterError {
   code: 'no_answer_cluster';
@@ -234,6 +245,12 @@ export interface ProseNoAnswerClusterError {
   unused_count: number;
   section_purpose: string;
   unused_claims: UnusedClaimDisclosure[];
+  // R-020: populated by section-run.ts after runProseSynthesis returns the
+  // bare error. Inline-actionable recovery hints derived from the recover
+  // action graph's `prose_error_no_answer_cluster` allowed actions. Optional
+  // so unit tests of runProseSynthesis can still assert against bare errors
+  // without depending on the decoration step.
+  recovery_actions?: NoAnswerClusterRecoveryAction[];
 }
 
 export type DraftResult =

@@ -162,6 +162,15 @@ export function renderSectionSynthesisMarkdown(
 }
 
 // Render the no-answer-cluster failure marker for section-synthesis.md.
+//
+// R-020 — when err.recovery_actions is populated (always populated when this
+// marker is invoked from section-run.ts post-R-020; remains optional in the
+// type so unit tests of the bare error shape don't need to fake the
+// decoration), a "## Recovery actions" block is emitted before the unused
+// claims block, listing each action's why + command_hint. This satisfies
+// the R-020.LIVE.3 "fail cleanly with recovery path" doctrine: the failure
+// body itself names what the operator can do, not "consult section-brief.md
+// and consider sourcing."
 export function renderNoAnswerClusterMarker(
   err: ProseNoAnswerClusterError,
   sectionPurpose: string,
@@ -170,13 +179,30 @@ export function renderNoAnswerClusterMarker(
   lines.push('> **Status:** generation_failed');
   lines.push('> **Error code:** no_answer_cluster');
   lines.push('>');
-  lines.push('> No accepted claim directly answers the section purpose. The planner declined to');
-  lines.push('> produce off-topic prose. This is the correct outcome — consult `section-brief.md`');
-  lines.push('> for the full evidence index and consider sourcing on-topic evidence.');
+  lines.push('> No accepted claim was assigned the answer role. The planner declined to');
+  lines.push('> produce off-topic prose. See the "Recovery actions" block below for');
+  lines.push('> actionable next steps, or consult `section-brief.md` for the evidence index.');
   lines.push('');
   lines.push(`**Section purpose:** ${sectionPurpose}`);
   lines.push(`**Accepted claims:** ${err.accepted_claim_count} (${err.unused_count} assigned unused)`);
   lines.push('');
+  if (err.recovery_actions !== undefined && err.recovery_actions.length > 0) {
+    lines.push('## Recovery actions');
+    lines.push('');
+    lines.push('The planner left the answer slot empty. The following actions typically resolve this:');
+    lines.push('');
+    for (let i = 0; i < err.recovery_actions.length; i++) {
+      const a = err.recovery_actions[i];
+      lines.push(`### ${i + 1}. \`${a.action_id}\``);
+      lines.push('');
+      lines.push(a.why);
+      lines.push('');
+      lines.push('```');
+      lines.push(a.command_hint);
+      lines.push('```');
+      lines.push('');
+    }
+  }
   if (err.unused_claims.length > 0) {
     lines.push('## Unused accepted claims');
     lines.push('');

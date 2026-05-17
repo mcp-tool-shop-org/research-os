@@ -25,6 +25,39 @@ import type {
   SectionDiagnosis,
 } from './types.js';
 
+// R-020 — recovery actions for prose_error_no_answer_cluster, factored out so
+// the same (action_id, why) pairs are surfaced both inline in the no-answer
+// failure body (via src/synth/section-run.ts) AND from buildActionGraph below.
+// Single source of truth — the two paths cannot drift.
+const PROSE_NO_ANSWER_CLUSTER_ACTIONS: Array<{
+  action_id: RecoveryActionId;
+  why: string;
+}> = [
+  {
+    action_id: 'narrow_section_purpose',
+    why: 'Gate passed but no accepted claim directly answers the section purpose; tightening the purpose to what the evidence actually supports often resolves this.',
+  },
+  {
+    action_id: 'add_on_topic_sources',
+    why: 'Alternatively, add sources whose claims directly answer the current section purpose.',
+  },
+];
+
+// R-020 — returns the inline recovery actions surfaced in the
+// no_answer_cluster failure body. Decorated with command_hint via the same
+// helper buildActionGraph uses for AllowedAction.command_hint, so the
+// CLI-visible commands line up across surfaces. Imported by
+// src/synth/section-run.ts where the failure artifact is written.
+export function getNoAnswerClusterRecoveryActions(
+  sectionId: string,
+): Array<{ action_id: string; why: string; command_hint: string }> {
+  return PROSE_NO_ANSWER_CLUSTER_ACTIONS.map((entry) => ({
+    action_id: entry.action_id,
+    why: entry.why,
+    command_hint: commandHint(entry.action_id, sectionId, 'synthesis'),
+  }));
+}
+
 // ── Pack-law forbiddings (closed table) ─────────────────────────────────────
 // These are permanent rules: for THIS failure shape, the LLM advisor MUST NOT
 // recommend the listed action_id. The why_forbidden text is what the advisor
@@ -314,16 +347,11 @@ export function buildActionGraph(diagnosis: SectionDiagnosis): LawfulActionGraph
         ];
 
       case 'prose_error_no_answer_cluster':
-        return [
-          {
-            action_id: 'narrow_section_purpose',
-            why: 'Gate passed but no accepted claim directly answers the section purpose; tightening the purpose to what the evidence actually supports often resolves this.',
-          },
-          {
-            action_id: 'add_on_topic_sources',
-            why: 'Alternatively, add sources whose claims directly answer the current section purpose.',
-          },
-        ];
+        // R-020: source of truth for the (action_id, why) pairs lives in
+        // PROSE_NO_ANSWER_CLUSTER_ACTIONS at the top of this file so the
+        // inline failure body (section-run.ts) and the buildActionGraph
+        // path stay byte-identical. Spread to keep array semantics here.
+        return [...PROSE_NO_ANSWER_CLUSTER_ACTIONS];
 
       case 'prose_error_cross_section_missing':
         return [

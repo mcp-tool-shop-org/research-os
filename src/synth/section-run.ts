@@ -52,6 +52,10 @@ import type {
   SourceCardMeta,
   WaiverMeta,
 } from './prose/types.js';
+// R-020 — single source of truth for the no_answer_cluster recovery actions
+// lives in the recover action graph; this import lets the failure body be
+// decorated inline at the moment runProseSynthesis returns the bare error.
+import { getNoAnswerClusterRecoveryActions } from '../recover/action-graph.js';
 import type { SectionSynthesisOptions, SectionSynthesisSummary } from './types.js';
 
 type SectionState = ReturnType<typeof CoworkHandoffPayloadSchema.parse>['sections'][number];
@@ -491,6 +495,21 @@ export async function sectionSynthesis(
         proseError = proseResult.error;
         noAnswerCluster = proseResult.noAnswerCluster;
         if (noAnswerCluster) {
+          // R-020 — decorate the bare error with inline recovery actions so
+          // the JSON artifact + markdown render BOTH surface actionable
+          // commands at the point the failure is written, not only via a
+          // separate `research-os recover` invocation. Same source of truth
+          // as buildActionGraph's prose_error_no_answer_cluster case.
+          noAnswerCluster = {
+            ...noAnswerCluster,
+            recovery_actions: getNoAnswerClusterRecoveryActions(options.sectionId),
+          };
+          // R-020 — single-line stderr hint at the moment no_answer_cluster
+          // fires. Mirrors R-015's [extract] progress pattern; gives the
+          // operator immediate signal without parsing markdown.
+          process.stderr.write(
+            `[synth] no_answer_cluster — see section-synthesis.md "Recovery actions" block for actionable steps\n`,
+          );
           // Write structured error to JSON so operators can inspect the planner rationale.
           await writeFile(
             jsonPath,
