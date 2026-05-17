@@ -98,8 +98,23 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
     input.plannerTimeoutSource ?? 'default';
   const client = wrapClientWithTimeout(input.client, plannerTimeoutMs);
 
+  // R-019 — only propagate the override value into the MCP-side tier guardrail
+  // when the operator explicitly set one (source !== 'default'). On the
+  // default path we pass `undefined` so ollama-intern-mcp's per-tier profile
+  // timeouts govern byte-identically — pre-R-019 callers' wire calls are
+  // unchanged. The R-018 wrapper still wraps at DEFAULT_PLANNER_TIMEOUT_MS
+  // either way; that outer layer remains the structural hard rail.
+  const tierBudgetMsOverride =
+    plannerTimeoutSource === 'default' ? undefined : plannerTimeoutMs;
+
   // ── Step 1: Plan ────────────────────────────────────────────────────────
-  const plannerResult = await runPlanner(client, sectionPurpose, acceptedClaims, model);
+  const plannerResult = await runPlanner(
+    client,
+    sectionPurpose,
+    acceptedClaims,
+    model,
+    tierBudgetMsOverride,
+  );
   if (!plannerResult.ok) {
     return { ok: false, error: `planner failed: ${plannerResult.error}` };
   }
@@ -189,6 +204,7 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
         clusterClaims,
         clusterSourceCards,
         model,
+        tierBudgetMsOverride,
       );
 
       if (!draftResult.ok) {
@@ -213,6 +229,7 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
         draftResult.paragraph,
         clusterClaims,
         model,
+        tierBudgetMsOverride,
       );
 
       if (!verifyResult.ok) {

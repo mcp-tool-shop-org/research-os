@@ -47,6 +47,7 @@ export function buildDrafterToolArgs(
   claims: AcceptedClaimInput[],
   sourceCards: SourceCardMeta[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Record<string, unknown> {
   const args: Record<string, unknown> = {
     text: renderDrafterPrompt(sectionPurpose, role, claims, sourceCards),
@@ -54,6 +55,12 @@ export function buildDrafterToolArgs(
     hint: DRAFTER_HINT,
   };
   if (model !== undefined && model.trim().length > 0) args.model = model.trim();
+  // R-019 — forward the operator's planner-timeout budget into the MCP-side
+  // tier guardrail. Same semantics as planner.ts; drafter must carry the
+  // override too or TIER_TIMEOUT moves from planner stage to drafter stage.
+  if (tierBudgetMsOverride !== undefined) {
+    args.tier_budget_ms_override = tierBudgetMsOverride;
+  }
   return args;
 }
 
@@ -64,12 +71,13 @@ export async function runDrafter(
   claims: AcceptedClaimInput[],
   sourceCards: SourceCardMeta[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Promise<DraftResult> {
   if (claims.length === 0) {
     return { ok: false, error: 'empty cluster — no claims to draft from' };
   }
 
-  const toolArgs = buildDrafterToolArgs(sectionPurpose, role, claims, sourceCards, model);
+  const toolArgs = buildDrafterToolArgs(sectionPurpose, role, claims, sourceCards, model, tierBudgetMsOverride);
 
   let response: Awaited<ReturnType<ProseCallToolClient['callTool']>>;
   try {

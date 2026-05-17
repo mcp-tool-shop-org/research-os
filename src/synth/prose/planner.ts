@@ -60,6 +60,7 @@ export function buildPlannerToolArgs(
   sectionPurpose: string,
   claims: AcceptedClaimInput[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Record<string, unknown> {
   const args: Record<string, unknown> = {
     text: renderPlannerPrompt(sectionPurpose, claims),
@@ -67,6 +68,13 @@ export function buildPlannerToolArgs(
     hint: PLANNER_HINT,
   };
   if (model !== undefined && model.trim().length > 0) args.model = model.trim();
+  // R-019 — forward the operator's planner-timeout budget into the MCP-side
+  // tier guardrail so the inner runWithTimeoutAndFallback honors the
+  // operator's intent. Omitted on default-path runs (preserves byte-identical
+  // ollama-intern-mcp behavior for pre-R-019 callers).
+  if (tierBudgetMsOverride !== undefined) {
+    args.tier_budget_ms_override = tierBudgetMsOverride;
+  }
   return args;
 }
 
@@ -75,8 +83,9 @@ async function runPlannerChunk(
   sectionPurpose: string,
   chunk: AcceptedClaimInput[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Promise<{ ok: true; assignments: PlannerAssignment[] } | { ok: false; error: string }> {
-  const toolArgs = buildPlannerToolArgs(sectionPurpose, chunk, model);
+  const toolArgs = buildPlannerToolArgs(sectionPurpose, chunk, model, tierBudgetMsOverride);
 
   let response: Awaited<ReturnType<ProseCallToolClient['callTool']>>;
   try {
@@ -144,6 +153,7 @@ export async function runPlanner(
   sectionPurpose: string,
   claims: AcceptedClaimInput[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Promise<PlannerResult> {
   if (claims.length === 0) {
     return { ok: true, assignments: [] };
@@ -159,7 +169,7 @@ export async function runPlanner(
   const seenIds = new Set<string>();
 
   for (const chunk of chunks) {
-    const chunkResult = await runPlannerChunk(client, sectionPurpose, chunk, model);
+    const chunkResult = await runPlannerChunk(client, sectionPurpose, chunk, model, tierBudgetMsOverride);
     if (!chunkResult.ok) {
       return { ok: false, error: chunkResult.error };
     }

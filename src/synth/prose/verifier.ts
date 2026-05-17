@@ -51,6 +51,7 @@ export function buildVerifierToolArgs(
   paragraph: string,
   claims: AcceptedClaimInput[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Record<string, unknown> {
   const args: Record<string, unknown> = {
     text: renderVerifierPrompt(sectionPurpose, role, paragraph, claims),
@@ -58,6 +59,12 @@ export function buildVerifierToolArgs(
     hint: VERIFIER_HINT,
   };
   if (model !== undefined && model.trim().length > 0) args.model = model.trim();
+  // R-019 — forward the operator's planner-timeout budget into the MCP-side
+  // tier guardrail. Same semantics as planner.ts; verifier must carry the
+  // override too or TIER_TIMEOUT moves from drafter stage to verifier stage.
+  if (tierBudgetMsOverride !== undefined) {
+    args.tier_budget_ms_override = tierBudgetMsOverride;
+  }
   return args;
 }
 
@@ -68,8 +75,9 @@ export async function runVerifier(
   paragraph: string,
   claims: AcceptedClaimInput[],
   model?: string,
+  tierBudgetMsOverride?: number,
 ): Promise<VerifyResult> {
-  const toolArgs = buildVerifierToolArgs(sectionPurpose, role, paragraph, claims, model);
+  const toolArgs = buildVerifierToolArgs(sectionPurpose, role, paragraph, claims, model, tierBudgetMsOverride);
 
   let response: Awaited<ReturnType<ProseCallToolClient['callTool']>>;
   try {
