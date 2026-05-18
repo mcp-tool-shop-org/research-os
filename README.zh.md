@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.1"><img src="https://img.shields.io/badge/version-0.12.1-blue" alt="version 0.12.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,85 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 当使用`--runs <n>`参数时，每个运行的结果文件会被写入到`<profile>/runs/run-NNN.json`，并且会生成一个聚合结果文件（包含基于中位数的PASS/FAIL结果，以及重复失败检测），写入到`<profile>/seeded-v1.{json,md}`。聚合结果文件包含`receipt_kind: 'aggregate'`，用于区分单次运行的结果文件。单次运行模式（`--runs 1`或省略）会保留现有的直接写入行为。
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
+
+## 版本 0.13.0 的新功能：最终确认流程阻碍问题排查模块（R-019 + R-020，仅限 D 选项 + R-021）
+
+v0.13.0 版本修复了在对 `@mcptoolshop/research-os@0.12.1` 进行 v0.4 版本的重新测试后，由于流水线上的一个关键问题而被阻止的最终版本问题。这次修复通过路径 D（一个独立的、与路径 C 上的“命名补丁”不同的多重关键问题修复流程）完成，结果显示为“条件通过”，而非“授权级别”。
+
+该版本包含三个独立的最终版本关键问题修复，分别位于流水线的三个不同层级。这三个独立的“命名参数”共同解决了以下问题：解锁合成文本的最终版本功能，恢复“无答案集群”功能，以及启用“矛盾映射”的自动模式。
+
+来自 v0.10 / v0.11 / v0.12 / v0.12.1 版本的防御机制和覆盖范围恢复功能保持不变；没有进行任何“封闭枚举”的更改；也没有对现有功能进行破坏性修改。
+
+> **v0.4版本的重新运行结果表明，模拟测试可以验证底层架构的正确性，而实时回放则揭示了目标机制的错误。**
+> **v0.13版本解决了运行时控制方面的最终问题：R-019解决了内部MCP层级的预算问题；R-020实现了对“无答案集群”的诚实拒绝，并提供了恢复措施；R-021解决了“矛盾映射”自动模式的RPC层级问题。**
+
+v0.5版本的“独立操作员”功能在独立的会话中进行测试，版本为v0.13.0。 “可访问性切片1”的权限状态仍然是“**未授权**”，直到v0.5版本通过测试。
+
+### 您可以运行的内容
+
+```sh
+# R-019 — inner MCP tier-budget override now reaches the underlying control point
+#         (requires ollama-intern-mcp@>=2.6.0 for the override to land in the inner mechanism)
+research-os synth section <id> --planner-timeout-ms 30000
+RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000 research-os synth section <id>
+
+# R-021 — contradict-map auto-mode hang-timeout + heuristic fall-through
+research-os contradict map <id> --detector auto \
+  --auto-mode-pair-timeout-ms 90000 \
+  --auto-mode-fall-through-after-n-timeouts 5
+RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS=90000 \
+RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N=5 \
+  research-os contradict map <id> --detector auto
+```
+
+### 有什么新内容？
+
+**R-019 — 内部 MCP 层的预算客户端配置。** R-018 的 `--planner-timeout-ms <N>` 参数（以及 `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS` 环境变量）现在已扩展到规划器/草稿生成器/验证器，并最终通过 `ollama_extract.tier_budget_ms_override` 传递到 `runWithTimeoutAndFallback` 函数，该函数位于 `ollama-intern-mcp/src/guardrails/timeouts.ts:61`。 之前导致 v0.4 版本重跑时出现 `elapsed=15018ms budget=15000ms` 错误的内部、针对每个层的超时机制，现在会直接遵循操作员设定的预算。 R-018 的包装器仍然保留，作为一种外部的强制措施，以防止未决 Promise 导致的程序挂起（其他类型的错误可以通过专门的包装器捕获）。 需要 `ollama-intern-mcp@>=2.6.0` 版本；旧版本会静默地忽略新的 schema 字段（R-018 包装器仍然可以在其原始层正常工作，实现降级）。
+
+**R-020 (仅限 D 选项) — `no_answer_cluster` 错误恢复机制。** 当规划器拒绝将角色设置为 "answer" 的任何已接受的请求时，现在会在 `section-synthesis.json` 文件中的 `recovery_actions[]` 字段（包含 `narrow_section_purpose` 和 `add_on_topic_sources`）中显示恢复操作；在 `section-synthesis.md` 文件中会渲染一个 "## 恢复操作" 的 Markdown 块（包含 action_id 标题、解释文本以及用代码块包裹的命令提示）；还会显示一条单行 stderr 提示信息（`[synth] no_answer_cluster — 请参阅 section-synthesis.md 文件中的 "恢复操作" 块，以获取可执行步骤`）。 动作列表是唯一的数据来源，与动作图恢复路径共享；独立命令路径和内联错误信息路径之间不会出现偏差。 **R-020 的规划器提示调整（A 部分）曾尝试过，但已被撤销。** 第 1 轮迭代产生了错误的合成结果（LLM 在对抗性测试用例中，从正面效果的请求中生成了无效答案；验证器错误地将反向否定视为 "符合事实"）；第 2 轮迭代的严格限制未能阻止这种幻觉。 按照操作员的单轮迭代规则，提示信息和 3 个固定版本的测试文件已被撤销；`PROSE_PROMPT_VERSION` 保持在 `section-prose-v3`。 经验教训：即使结构上可以正常运行，合成的内容也可能存在错误；需要对对抗性测试用例进行手动文本检查，以发现否定、范围或谓词的错误。
+
+R-021：自动模式下的冲突检测功能，增加了超时机制、启发式降级策略以及进度显示。
+新增了 `--auto-mode-pair-timeout-ms <N>` 参数（默认为 90000 毫秒；之前是硬编码的 120 秒，但在 v0.4 版本中，通过测量 hermes3:8b 的性能，发现 6.2 秒到 8.8 秒的范围，因此默认为 90 秒，留有至少 81 秒的余量）。
+新增了 `--auto-mode-fall-through-after-n-timeouts <N>` 参数（默认为 5；连续失败的次数，超过此次数则触发启发式降级；成功的 `type:none` 分类会重置计数器）。
+匹配的环境变量。
+每次调用时，都会在标准输出中显示一条新的起始行（`auto-mode engaged: N candidate pairs; per-pair timeout=Xms; fall-through-after=Y`），始终可见，即使在非 TTY 环境下也能显示。
+强制触发的 stderr 降级事件会绕过 TTY 限制和 `--progress` 选项，因为操作人员需要看到模式切换。
+当阈值被触发时，`contradictions.md` 文件中会新增一个 `## Auto-mode fall-through` 的 Markdown 块。
+启发式算法只在未处理的对上重新运行（不会对已经由 LLM 完成分类的对进行重复分类）。
+
+### 架构说明
+
+R-019 跨越了 research-os 和 ollama-intern-mcp 的边界。
+research-os 在 `ollama_extract` 模式中传递了 `tier_budget_ms_override` 参数；ollama-intern-mcp v2.6.0 在内部安全机制中会处理该参数。
+相关的底层机制已经存在；v2.6.0 提供了客户端的入口；v0.13.0 提供了 research-os 端的客户端连接。
+R-018 的 Promise.race 包装器仍然保留，因为它能够防止一种独立的故障模式（未解决的 Promise 导致程序挂起；包装器可以捕获这些情况；而结构化的 `isError:true` 错误信息，如果超出内部预算范围，则属于 R-019 的处理范围）。
+
+R-021 仅适用于 research-os。
+冲突检测功能的自动模式不会经过 ollama-intern-mcp，而是直接调用 Ollama 的 HTTP `/api/chat` 接口。
+没有 MCP 传输；没有 `tier_budget_ms_override` 相关的底层机制；没有 R-018 的包装器。
+在 R-021 的启动协议中，四条硬性规则的检查发现了一个错误，这个错误在编写任何补丁代码之前就已经被检测到：启动协议中显示的是 "MCP RPC layer"，但在 A 阶段的读取过程中，这个信息被证明是错误的。
+
+### 安全底线保持稳定
+
+R-019 + R-020 (仅限 D) + R-021 都是操作人员可以调整的参数，而不是架构上的改变。
+从 R-002 到 R-018 的所有功能都保持不变。
+`accepted_claim_floor` 仍然是不可调整的。
+枚举类型的值没有改变（`FailureShape` 为 9；`RECOVERY_ACTIONS` 为 8；`REGENERATION_REASONS` 为 3；`PLANNER_TIMEOUT_SOURCES` 为 3；`POLICY_KEYWORDS` 为 8；`POLICY_RELEVANT_SOURCE_TYPES` 为 1）。
+AI 恢复建议的提示模板没有改变。
+MCP 架构以附加的方式进行扩展。
+R-010 中用于回退原因的正则表达式的形状保持不变。
+
+所有四个冻结包的回归测试结果与 v0.3.3 的基线版本完全一致，这是**连续第十八次**发布的版本。
+1542 个测试用例通过，1630 个测试用例通过（在三个模块中总共增加了 88 个通过的测试用例；4 个测试用例被跳过，因为它们依赖于运行环境的变量）。
+
+### v0.13.0 不声称具备以下功能：
+
+- v1 的可用性。
+- v0.5 版本的独立运行的判定结果。v0.5 版本在单独的会话中针对 `@mcptoolshop/research-os@0.13.0` 进行测试；v0.13.0 是最终版本的基础，而不是证明。
+- Admissibility Slice 1 的通过。该测试依赖于 v0.5 的通过结果。
+- 延迟到 v0.13.x 的候选版本（F-2：research-os 审计与提取的差异；F-3：协作处理的延迟问题；F-4：R-017 中 `POLICY_KEYWORDS` 的范围限制；A-1 + A-2：架构方面的发现，已整合到 v0.5 的测试框架准备中）。
+
+请参阅 [CHANGELOG.md](CHANGELOG.md) 以获取完整的发布说明。
 
 ## 新功能 v0.12.1 — 合成规划器超时设置（路径 C 补丁）
 

@@ -66,7 +66,7 @@ function runSynthSection(packPath: string, overrideMs: string): {
   try {
     const stdout = execFileSync(
       'node',
-      [cliPath, 'synth', 'section', '01-dst-transition-effects', '--pack-path', packPath],
+      [cliPath, 'synth', 'section', '01-dst-transition-effects', '--pack', packPath],
       {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],

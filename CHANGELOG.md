@@ -4,6 +4,90 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-17 — Finalization-Blocker Triage Arc (R-019 + R-020 D-only + R-021)
+
+v0.13.0 closes the v0.13 finalization-blocker triage arc opened after the v0.4 rerun against npm `@mcptoolshop/research-os@0.12.1` returned **PASS_WITH_CONDITIONS, NOT authorization-grade**, via Path D (multi-blocker triage arc, distinct from Path C named-patch). Three independent finalization blockers were identified at three different pipeline layers; this release ships three independent named knobs that, together, unblock synth prose finalization + no_answer_cluster recovery surface + contradict-map auto-mode. The defense floor and coverage-recovery surfaces from v0.10 / v0.11 / v0.12 / v0.12.1 remain intact; no closed-enum changes; no breaking surface changes.
+
+> **v0.4 rerun proves synthetic acceptance can validate plumbing while live replay falsifies the target mechanism.**
+> **v0.13 addresses finalization runtime control: R-019 unblocks the inner MCP tier-budget layer; R-020 surfaces honest no_answer_cluster refusal with recovery actions; R-021 unblocks the contradict-map auto-mode RPC layer.**
+
+The v0.5 operator-aloneness gate against published v0.13.0 fires in a separate session. Admissibility Slice 1 remains **NOT authorized** until v0.5 PASS.
+
+### Added
+
+#### R-019 — Inner MCP tier-budget client wire-up (Slice 1)
+
+- **Optional `tierBudgetMsOverride` parameter on planner / drafter / verifier toolArgs builders** (R-019, `src/synth/prose/{planner,drafter,verifier}.ts`). When the operator-supplied `--planner-timeout-ms <N>` (or `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=<N>` env var) sets a non-default source, the value flows into the `ollama_extract` MCP call as `tier_budget_ms_override` and reaches `runWithTimeoutAndFallback` at `ollama-intern-mcp/src/guardrails/timeouts.ts:61`. The inner per-tier timeout mechanism that produced the v0.4 rerun's `elapsed=15018ms budget=15000ms` failure now honors the operator's budget directly, instead of merely being wrapped by R-018's Promise.race.
+- **R-018 wrapper retained as outer hard-rail.** The wrapping `wrapClientWithTimeout` from R-018 still fires when the underlying `callTool` actually hangs (promise never resolves). R-019 closes the orthogonal failure mode where the underlying call RESOLVES with a structured `isError: true` payload but at an inner-tier budget the wrapper cannot override. Both defenses now operate at their respective layers.
+- **Requires `ollama-intern-mcp@2.6.0` or later** for the override to actually reach the inner mechanism. Pre-2.6.0 versions silently ignore the new schema field (R-018 wrapper still works). Graceful degradation.
+
+#### R-020 (D-only) — `no_answer_cluster` recovery surface (Slice 2)
+
+- **`recovery_actions[]` field on `ProseNoAnswerClusterError`** (R-020, `src/synth/prose/types.ts`) — optional array of `{action_id, why, command_hint}` populated by `section-run.ts` after `runProseSynthesis` returns the bare error. Operator sees actionable recovery hints inline on the failure shape, not a vague "consult section-brief.md."
+- **`getNoAnswerClusterRecoveryActions(section_id)` helper** (R-020, `src/recover/action-graph.ts`) — exported helper returning the `prose_error_no_answer_cluster` actions the action-graph already builds. Sources from a new top-of-file `PROSE_NO_ANSWER_CLUSTER_ACTIONS` constant that `buildActionGraph`'s case body now spreads. Single source of truth: no drift between recover/standalone-command path and the inline-failure-body path; both paths read the same constant; both paths build `command_hint` via the same `commandHint()` helper.
+- **`## Recovery actions` markdown block in `section-synthesis.md`** (R-020, `src/synth/prose/markdown.ts`) — when `recovery_actions[]` is present on the no_answer_cluster fire, the marker renders an `action_id` heading + `why` text + fenced `command_hint` code block. Renders BEFORE the unused-claims block. Body text rewords from v3's "consider sourcing on-topic evidence" to "see the Recovery actions block below for actionable next steps." Backward-compat preserved when recovery_actions absent (bare-error path from unit tests).
+- **Single-line stderr hint** (R-020, `src/synth/section-run.ts`) — `[synth] no_answer_cluster — see section-synthesis.md "Recovery actions" block for actionable steps` mirrors R-015's `[extract]` progress pattern. Surfaces on every fire.
+
+#### R-021 — Contradict-map auto-mode hang-timeout + heuristic fall-through + visible progress (Slice 3)
+
+- **`research-os contradict map <section> --auto-mode-pair-timeout-ms <N>`** (R-021) — per-pair hang-timeout for `contradict map --detector auto` calls. Default `90000` (90s; gate-measured warm hermes3:8b on v0.4 fixture: min 6.2s, median 8.4s, max 8.8s → 90s default has ≥81s headroom). Lowered from the pre-R-021 hardcoded 120s. Bounded `[100, 600000]` ms.
+- **`RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS=<N>` env var** (R-021) — equivalent override surface.
+- **`research-os contradict map <section> --auto-mode-fall-through-after-n-timeouts <N>`** (R-021) — consecutive-failure threshold for automatic heuristic fall-through. Default `5` (patient — ~7.5 min at 90s budget). Bounded `[1, 100]`. Failure classifications counting toward the threshold: timeout / http_error / parse_error / network_error. Successful `type:none` classifications RESET the counter (LLM working = not hung).
+- **`RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N=<N>` env var** (R-021) — equivalent override surface.
+- **Stdout start-of-run line** (R-021) — `auto-mode engaged: N candidate pairs; per-pair timeout=Xms; fall-through-after=Y` emitted on every `--detector auto` invocation. Always visible; survives non-TTY contexts (the v0.4 rerun's silent-hang failure mode required a single load-bearing stdout signal to be on every run).
+- **Forced-emit fall-through trigger** (R-021, stderr) — `auto-mode fall-through: N consecutive timeouts at pair K; switching to heuristic for remaining M pairs` emitted whenever the threshold trips. Bypasses TTY-gating / `--progress` controls because operator MUST see the mode-switch event.
+- **`## Auto-mode fall-through` markdown block in `contradictions.md`** (R-021, when triggered) — named reason (`consecutive_timeouts`), per-pair timeout budget, consecutive timeouts before fall-through, triggered-at-pair index, pairs attempted by auto-mode, pairs classified by heuristic after fall-through, operator-facing hints.
+- **`HeuristicContradictionDetector.detectSpecificPairs(claims, pairs)` method** (R-021, `src/contradictions/detectors/heuristic.ts`) — re-runs heuristic on the unprocessed-by-auto-mode pairs only. No duplicate re-classification of pairs LLM already completed.
+
+### Changed
+
+- **`runProseSynthesis` orchestrator threading** (R-019, `src/synth/prose/run.ts`) — derives `tierBudgetMsOverride` from `plannerTimeoutMs` when `plannerTimeoutSource !== 'default'`; threads to all three stage runners. Default path passes `undefined` → server sees no `tier_budget_ms_override` field → profile defaults govern. Pre-R-019 callers byte-identical.
+- **`renderNoAnswerClusterMarker` body text reworded** (R-020, `src/synth/prose/markdown.ts`) — points operator to "Recovery actions" block instead of v3's gestural "consider sourcing on-topic evidence." Backward-compat preserved when block absent.
+- **`OllamaInternContradictionDetector.detect()` rewritten** (R-021, `src/contradictions/detectors/ollama-intern.ts`) — pre-R-021 implementation had per-pair AbortController at 120s + throttled TTY-gated progress; v0.13.0 ships per-pair timeout at 90s default + consecutive-failure counter + immediate-stderr per-pair failure emit + forced-emit fall-through trigger + new `unprocessedPairs[]` collection returned for heuristic re-run. Direct fetch to `${OLLAMA_HOST}/api/chat` unchanged at the transport layer.
+
+### Reverted
+
+- **R-020 A-half (planner prompt tune)** — `PROSE_PROMPT_VERSION` stays at `section-prose-v3`. Iter-1 of the prompt tune produced silent-wrong synthesis (LLM fabricated null-effect answers from positive-effect claims on adversarial fixtures; verifier blessed the inversion as `faithful`). Iter-2's HARD GUARDRAIL + contrastive example did not override the hallucination; the realistic v0.4 case also degraded (answer paragraph flagged `unsupported_connective`). Per operator's one-iteration rule, `src/synth/prose/prompt.ts` + 3 v3-pinned test files reverted to v0.13-slice1-r019 tip. **The doctrine ratchet earned (load-bearing for future prompt-tune patches):** structural live replay (role=answer present, verifier_decision=faithful, no transport errors) is necessary but not sufficient — manual prose inspection on adversarial fixtures is required to catch negation / scope / predicate inversion. Captured as the R-020 corollary in `memory/feedback_synthetic_vs_live_acceptance.md`.
+
+### Architectural note (logged for downstream consumers)
+
+R-019's mechanism crosses the research-os ↔ ollama-intern-mcp boundary. Research-os passes `tier_budget_ms_override` in the `ollama_extract` schema; ollama-intern-mcp v2.6.0 honors it at `src/guardrails/timeouts.ts:61` by populating `runWithTimeoutAndFallback`'s `timeoutOverrideMs` map. The plumbing was already there; v2.6.0 supplied the client-side entry point; v0.13.0 supplies the research-os-side client wire-up. The R-018 Promise.race wrapper retained as outer hard-rail because it guards against a different failure mode (the resolved-`isError:true` shape that wrappers cannot catch is research-os's R-019 corollary, distinct from the unresolved-promise hang R-018 was built for).
+
+R-021 is research-os-only. The kickoff's "MCP RPC layer" framing was falsified by Phase A read phase: contradict-map auto-mode does NOT route through ollama-intern-mcp — it calls Ollama HTTP `/api/chat` directly with its own AbortController. No MCP transport in chain; no `tier_budget_ms_override` plumbing; no R-018 wrapper. R-019's surfaces are trivially preserved. The four-hard-laws kickoff protocol caught the misframe before any patch code was written.
+
+### Preserved
+
+- **`pack freeze` semantics unchanged.** R-019 fires only during live synth prose; R-020 D-only surfaces on a no_answer_cluster failure body; R-021 fires only during contradict-map. None of the three touches the freeze pipeline. 4-pack regression byte-identical against v0.3.3 baselines — **eighteenth consecutive release** where this holds.
+- **`pack publish` semantics unchanged.** No new publish gates.
+- **All v0.10 + v0.11 + v0.12 + v0.12.1 defenses preserved.** R-002 through R-018 surfaces all untouched.
+- **`accepted_claim_floor` remains unwaiveable.** No recover / advisor / verifier rule changes.
+- **AI advisor prompt template untouched.** No `recover/prompt.ts` changes.
+- **R-010 fallback-cause regex shape preserved.** Server-side `TIER_TIMEOUT` (post-R-019 path) and R-018 wrapper-timeout (default path) both still match `/elapsed=(\d+)ms/` + `/budget=(\d+)ms/`.
+- **Closed enums unchanged.** `FailureShape` (9), `RECOVERY_ACTIONS` (8), `REGENERATION_REASONS` (3), `PLANNER_TIMEOUT_SOURCES` (3), `POLICY_KEYWORDS` (8), `POLICY_RELEVANT_SOURCE_TYPES` (1) unchanged. R-020 adds a new local interface `NoAnswerClusterRecoveryAction` (not a closed enum).
+- **MCP architecture (existing tool call shape) extended additively.** `tier_budget_ms_override` field is optional; pre-R-019 callers byte-identical.
+
+### Not shipped (deferred to v0.13.x+ or v0.14)
+
+- R-020 A-half (planner prompt tune to reduce no_answer_cluster rate) — reverted per above; not on the roadmap unless a follow-up earns a different architectural approach.
+- F-2 R-009 audit/extract divergence on Cohen ScienceDirect card — v0.13.x candidate
+- F-3 cowork-handoff staleness after review — v0.13.x candidate
+- F-4 R-017 POLICY_KEYWORDS too narrow — v0.13.x candidate
+- A-1 README + RUN_CHECKLIST architect-facing context split — folded into v0.5 gate-scaffolding prep, not product scope
+- A-2 Memory-gate hook collision with kickoff hard boundary — v0.5 gate-scaffolding scope
+
+### Test counts and regression
+
+- **vitest:** 1542 (v0.12.1) → 1630 (v0.13.0); +88 across the three slices; 4 skipped (the live-replay tests gated on rig env vars: R-019 LIVE.1, R-020 LIVE.1, R-020 LIVE.1b, R-021 LIVE.1)
+- **4-pack regression:** eighteenth consecutive byte-identical run against v0.3.3 baselines (`comfyui-workflow-durability` / `godot-export-runtime-durability` / `research-os-self-dogfood` / `xrpl-creator-token-durability`)
+- **typecheck + lint:** clean
+- **Cross-repo smoke gate:** R-019 LIVE replay against published `ollama-intern-mcp@2.6.0` PASSED — `planner_timeout_ms=30000`, `planner_timeout_overridden_by=env_var`, inner `budget=15000ms` shape does NOT fire. The v0.4 rerun's MISTARGETED-PATCH failure mode is closed by v2.6.0 + v0.13.0 together.
+
+### Operator upgrade note
+
+The v0.13.0 release is non-breaking for pre-v0.13.0 callers. The three new operator surfaces (R-019's `tierBudgetMsOverride` propagation, R-020's `recovery_actions[]` field, R-021's auto-mode timeout / fall-through controls) are all additive. Existing scripts and CI pipelines continue to work unchanged.
+
+For the R-019 override to actually reach the inner MCP-side tier-budget control point, `ollama-intern-mcp` must be at version 2.6.0 or later. With older ollama-intern-mcp versions, the new schema field is silently ignored (R-018's Promise.race wrapper still works at its original layer). The coordinated release ships `ollama-intern-mcp@2.6.0` first; research-os v0.13.0 second.
+
 ## [0.12.1] - 2026-05-16 — Synth Planner Timeout Override (Path C Patch)
 
 v0.12.1 is a single-repair patch on top of v0.12.0. It ships R-018 only — a research-os-side wrapper timeout on synth prose MCP `callTool` calls, controlled by an operator-discoverable CLI flag and env var with default behavior preserved byte-identical to v0.12.0.

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.1"><img src="https://img.shields.io/badge/version-0.12.1-blue" alt="version 0.12.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -188,6 +188,61 @@ Quando si utilizza l'opzione `--runs <n>`, le ricevute per ogni esecuzione vengo
 `research.yaml` per includere i parametri di campionamento di Ollama come `temperature`, `seed` e altri in ogni istanza di `OllamaInternReviewer` nel percorso di revisione di produzione. Il profilo `hermes-two-pass-deterministic` viene fornito come esempio predefinito. Consultare
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) e la
 [pagina del manuale sulla calibrazione dei revisori](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
+## Nuovo in v0.13.0 — Finalizzazione: Sistema di triage per blocchi (R-019 + R-020 solo percorso D + R-021)
+
+La versione v0.13.0 chiude il sistema di triage per blocchi di finalizzazione (v0.13) avviato dopo il test di ripetizione della versione v0.4 contro `@mcptoolshop/research-os@0.12.1`, che ha restituito **PASS_WITH_CONDITIONS, non autorizzazione**, tramite il percorso D (sistema di triage per blocchi multipli, distinto dal percorso C con patch specifiche). Tre blocchi di finalizzazione indipendenti a tre livelli diversi del processo; tre parametri indipendenti che, insieme, sbloccano la finalizzazione della sintesi testuale, il ripristino del cluster "no_answer" e la modalità automatica della mappa di contraddizioni. I livelli di sicurezza e le superfici di ripristino della versione v0.10 / v0.11 / v0.12 / v0.12.1 rimangono invariati; non ci sono modifiche alle enumerazioni chiuse; non ci sono modifiche alle superfici che potrebbero causare interruzioni.
+
+> **Il test di ripetizione della versione v0.4 dimostra che l'accettazione sintetica può validare il funzionamento interno, mentre la riproduzione in tempo reale falsifica il meccanismo di destinazione.**
+> **La versione v0.13 risolve il controllo dell'esecuzione della finalizzazione: R-019 sblocca il livello di budget interno dell'MCP; R-020 espone il rifiuto "no_answer_cluster" con azioni di ripristino; R-021 sblocca il livello RPC della modalità automatica della mappa di contraddizioni.**
+
+Il meccanismo di isolamento dell'operatore (v0.5) viene attivato separatamente sulla versione v0.13.0 pubblicata. La sezione di ammissibilità 1 rimane **non autorizzata** fino alla versione v0.5.
+
+### Cosa è possibile eseguire
+
+```sh
+# R-019 — inner MCP tier-budget override now reaches the underlying control point
+#         (requires ollama-intern-mcp@>=2.6.0 for the override to land in the inner mechanism)
+research-os synth section <id> --planner-timeout-ms 30000
+RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000 research-os synth section <id>
+
+# R-021 — contradict-map auto-mode hang-timeout + heuristic fall-through
+research-os contradict map <id> --detector auto \
+  --auto-mode-pair-timeout-ms 90000 \
+  --auto-mode-fall-through-after-n-timeouts 5
+RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS=90000 \
+RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N=5 \
+  research-os contradict map <id> --detector auto
+```
+
+### Novità
+
+**R-019 — Collegamento interno del client per il budget dei livelli dell'MCP.** Il flag `--planner-timeout-ms <N>` (e la variabile d'ambiente `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS`) ora viene trasmesso dal pianificatore al verificatore, raggiungendo `ollama_extract.tier_budget_ms_override` e quindi `runWithTimeoutAndFallback` in `ollama-intern-mcp/src/guardrails/timeouts.ts:61`. Il meccanismo interno di timeout per livello, che ha causato l'errore `elapsed=15018ms budget=15000ms` nel test di ripetizione della versione v0.4, ora rispetta direttamente il budget impostato dall'operatore. Il wrapper R-018 viene mantenuto come protezione aggiuntiva contro i blocchi dovuti a promesse non risolte (i wrapper per i diversi tipi di errore possono effettivamente intercettarli). Richiede `ollama-intern-mcp@>=2.6.0`; le versioni precedenti ignorano silenziosamente il nuovo campo dello schema (il wrapper R-018 continua a funzionare al suo livello originale, garantendo una transizione graduale).
+
+**R-020 (solo percorso D) — Superficie di ripristino del cluster "no_answer".** Quando il pianificatore rifiuta di assegnare il ruolo "answer" a qualsiasi affermazione accettata, l'errore ora visualizza in linea l'array `recovery_actions[]` (`narrow_section_purpose` + `add_on_topic_sources`) in `section-synthesis.json`, un blocco Markdown `## Recovery actions` renderizzato in `section-synthesis.md` (con l'intestazione `action_id` + il testo "perché" + il blocco di codice `command_hint` racchiuso), e un suggerimento in riga di errore standard (`[synth] no_answer_cluster — vedere il blocco "Recovery actions" in section-synthesis.md per le azioni correttive`). L'elenco delle azioni è una fonte di verità condivisa con il percorso di ripristino del grafo delle azioni; non ci sono discrepanze tra il comando autonomo e il corpo dell'errore. **La messa a punto del prompt del pianificatore (A-half) di R-020 è stata tentata e annullata** — l'iterazione 1 ha prodotto una sintesi errata e silenziosa (l'LLM ha creato risposte "null-effect" da affermazioni con effetti positivi su dati di test avversari; il verificatore ha accettato la negazione invertita come "corretta"); l'HARD GUARDRAIL dell'iterazione 2 non ha sovrascritto l'allucinazione. In base alla regola di una sola iterazione dell'operatore, il prompt e i 3 file di test fissati alla versione v3 sono stati ripristinati; `PROSE_PROMPT_VERSION` rimane a `section-prose-v3`. La dottrina acquisita: la riproduzione in tempo reale strutturale può superare i test, mentre il contenuto sintetizzato è errato e silenzioso; è necessaria un'ispezione manuale della sintassi su dati di test avversari per rilevare inversioni di negazione, ambito o predicato.
+
+R-021 — Aggiunta della modalità automatica per la mappatura delle contraddizioni, con timeout, meccanismo di fallback euristico e indicazione dello stato di avanzamento. Nuova opzione `--auto-mode-pair-timeout-ms <N>` (valore predefinito: 90000; ridotto rispetto al valore predefinito precedente di 120 secondi, dopo la misurazione del tempo di riscaldamento di hermes3:8b su v0.4, dove il tempo minimo era di 6,2 secondi, il valore medio era di 8,4 secondi e il massimo era di 8,8 secondi → il valore predefinito di 90 secondi offre un margine di sicurezza di almeno 81 secondi). Nuova opzione `--auto-mode-fall-through-after-n-timeouts <N>` (valore predefinito: 5; soglia di errori consecutivi per il fallback euristico automatico; le classificazioni riuscite con `type:none` resettano il contatore). Sono state aggiunte variabili d'ambiente corrispondenti. Viene emessa una nuova riga di inizio dell'output standard (`auto-mode engaged: N candidate pairs; per-pair timeout=Xms; fall-through-after=Y`) ad ogni esecuzione, rendendola sempre visibile e compatibile con contesti non TTY. L'evento di attivazione del fallback, che viene emesso in caso di errore, ignora il controllo TTY e l'opzione `--progress` perché l'operatore deve visualizzare il cambio di modalità. È stato aggiunto un nuovo blocco markdown `## Auto-mode fall-through` in `contradictions.md` quando viene superata la soglia. Le esecuzioni euristiche vengono ripetute solo sulle coppie non elaborate (nessuna riclassificazione duplicata delle coppie LLM già completate).
+
+### Nota sull'architettura
+
+R-019 supera il confine tra research-os e ollama-intern-mcp. Research-os passa il parametro `tier_budget_ms_override` nello schema `ollama_extract`; ollama-intern-mcp v2.6.0 lo riconosce al livello interno. L'infrastruttura necessaria era già presente; v2.6.0 fornisce il punto di accesso lato client; v0.13.0 fornisce la configurazione lato client per research-os. La funzione `Promise.race` di R-018 è stata mantenuta perché protegge da un tipo di errore diverso (sospensioni dovute a promesse non risolte; i wrapper possono intercettare tali errori; i payload strutturati con `isError:true` in un budget interno che il wrapper non può raggiungere rientrano nell'ambito di R-019).
+
+R-021 è valido solo per research-os. La modalità automatica per la mappatura delle contraddizioni NON passa attraverso ollama-intern-mcp; chiama direttamente l'API HTTP di Ollama `/api/chat`. Non è presente alcun trasporto MCP nella catena; non è presente la configurazione `tier_budget_ms_override`; non è presente il wrapper di R-018. Il protocollo di avvio delle "quattro leggi fondamentali" ha rilevato un errore di formattazione nell'avvio di R-021 prima che venisse scritto qualsiasi codice di patch: l'avvio indicava "livello RPC MCP"; la fase di lettura di fase A ha falsificato questa informazione.
+
+### Livello di sicurezza preservato
+
+R-019 + R-020 (solo D) + R-021 sono aggiunte di opzioni per l'operatore, non modifiche architetturali. Tutte le funzionalità da R-002 a R-018 sono state mantenute. Il valore `accepted_claim_floor` rimane non modificabile. Gli enum esistenti non sono stati modificati (`FailureShape` a 9; `RECOVERY_ACTIONS` a 8; `REGENERATION_REASONS` a 3; `PLANNER_TIMEOUT_SOURCES` a 3; `POLICY_KEYWORDS` a 8; `POLICY_RELEVANT_SOURCE_TYPES` a 1). Il modello di prompt per il consulente di ripristino dell'IA è rimasto invariato. L'architettura MCP è stata estesa in modo incrementale. La forma regex per la causa di fallback di R-010 è stata preservata.
+
+I pacchetti "frozen" hanno una dimensione byte identica rispetto alle baseline di v0.3.3 per tutti e quattro i pacchetti "frozen" — **diciottesima release consecutiva** in cui ciò è vero. 1542 → 1630 test vitest superati (+88 in totale, 4 saltati — i test di replay in tempo reale sono soggetti alle variabili d'ambiente dell'ambiente di test).
+
+### Cosa v0.13.0 NON dichiara:
+
+- Pronta per la versione 1.
+- Verdetto di "operatore-alone" per la versione 0.5. La versione 0.5 viene eseguita su `@mcptoolshop/research-os@0.13.0` in una sessione separata; la versione 0.13.0 è un prerequisito per la finalizzazione, non una prova.
+- Ammissibilità, Slice 1. Richiede il superamento del test v0.5.
+- Candidati v0.13.x differiti (F-2 divergenza audit↔extract; F-3 obsolescenza della consegna di lavoro; F-4 ristrettezza di `POLICY_KEYWORDS` di R-017; A-1 + A-2 risultati lato architetto integrati nella preparazione della struttura di gate v0.5).
+
+Consultare il file [CHANGELOG.md](CHANGELOG.md) per l'elenco completo delle modifiche.
 
 ## Nuovo in v0.12.1: Override del timeout del pianificatore (patch Path C)
 

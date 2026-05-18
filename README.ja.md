@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.12.1"><img src="https://img.shields.io/badge/version-0.12.1-blue" alt="version 0.12.1"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,81 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 `--runs <n>`オプションを使用すると、各実行の記録が`<profile>/runs/run-NNN.json`に書き込まれ、集計された記録（中央値に基づいた項目と、再発するエラーの検出を含む）が`<profile>/seeded-v1.{json,md}`に書き込まれます。集計された記録には、`receipt_kind: 'aggregate'`という情報が含まれており、これにより単一実行の記録と区別できます。単一実行モード（`--runs 1`または省略）では、既存の直接書き込みの動作が維持されます。
 
 **再現性のあるレビュー担当者プロファイル** — `research.yaml`の`review_profiles.<name>.reviewer_options`を使用して、`temperature`、`seed`、およびその他のOllamaのサンプリングパラメータを、本番環境のレビュープロセスにおけるすべての`OllamaInternReviewer`の構築に適用します。`hermes-two-pass-deterministic`プロファイルは、組み込みのサンプルとして提供されています。詳細は[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)と、[レビュー担当者キャリブレーションハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
+
+## v0.13.0の新機能 — 最終化ブロック解除トライアル（R-019 + R-020 (Dのみ) + R-021）
+
+v0.13.0では、v0.4の再実行後に開始された、最終化ブロック解除トライアルが完了しました。このトライアルは、`@mcptoolshop/research-os@0.12.1`に対する再実行の結果、**条件付きで合格（PASS_WITH_CONDITIONS）**となり、認証レベルには達しませんでした。このトライアルは、Path D（マルチブロック解除トライアル、Path Cのネームドパッチとは異なる）で行われました。3つの独立した最終化ブロック解除機能が、3つの異なるパイプライン層で動作します。また、3つの独立した設定項目が連携し、合成テキストの最終化、`no_answer_cluster`の復旧、および矛盾マップの自動モードをブロック解除します。v0.10 / v0.11 / v0.12 / v0.12.1で導入された防御機能と、カバレッジ復旧機能は維持されており、非推奨の列挙型変更や、既存の機能に影響を与える変更はありません。
+
+> **v0.4の再実行では、合成された結果がシステムの動作を検証できることを示しましたが、実際の再実行では、ターゲットの仕組みが誤っていることが判明しました。**
+> **v0.13では、最終化時の実行制御に焦点を当てています。R-019は、内部MCPのティア予算層をブロック解除します。R-020は、`no_answer_cluster`の復旧機能を実装し、問題発生時の対応策を提供します。R-021は、矛盾マップの自動モードRPC層をブロック解除します。**
+
+v0.5のオペレーター連携機能は、別のセッションで公開されたv0.13.0に対して実行されます。Admissibility Slice 1は、v0.5で合格するまで**未認証**の状態です。
+
+### 実行可能なもの
+
+```sh
+# R-019 — inner MCP tier-budget override now reaches the underlying control point
+#         (requires ollama-intern-mcp@>=2.6.0 for the override to land in the inner mechanism)
+research-os synth section <id> --planner-timeout-ms 30000
+RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000 research-os synth section <id>
+
+# R-021 — contradict-map auto-mode hang-timeout + heuristic fall-through
+research-os contradict map <id> --detector auto \
+  --auto-mode-pair-timeout-ms 90000 \
+  --auto-mode-fall-through-after-n-timeouts 5
+RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS=90000 \
+RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N=5 \
+  research-os contradict map <id> --detector auto
+```
+
+### 新機能
+
+**R-019 — 内部MCPのティア予算クライアントの接続。** R-018で導入された`--planner-timeout-ms <N>`フラグ（および`RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS`環境変数）が、プランナー/ドラフター/バリファイアを介して`ollama_extract.tier_budget_ms_override`に伝播し、`ollama-intern-mcp/src/guardrails/timeouts.ts:61`の`runWithTimeoutAndFallback`に到達します。v0.4の再実行で発生した`elapsed=15018ms budget=15000ms`というエラーを引き起こしていた、内部のティアごとのタイムアウト機構が、オペレーターの予算を直接反映するように変更されました。R-018のラッパーは、未解決のプロミスによるハングに対する安全策として維持されます（別の種類の障害を検出できる場合があります）。`ollama-intern-mcp@>=2.6.0`が必要です。古いバージョンでは、新しいスキーマフィールドを無視します（R-018のラッパーは、元の層で引き続き動作します）。
+
+**R-020 (Dのみ) — `no_answer_cluster`の復旧機能。** プランナーが、どの肯定的な要求に対しても`role=answer`を割り当てられない場合、エラーが発生すると、`section-synthesis.json`にインラインで`recovery_actions[]`（`narrow_section_purpose` + `add_on_topic_sources`）が表示されます。また、`section-synthesis.md`に、アクションIDのヘッダー、理由の説明、および実行可能なコマンドのヒントを含むMarkdownブロック（`## Recovery actions`）が表示され、さらに、`stderr`に1行のヒント（`[synth] no_answer_cluster — see section-synthesis.md "Recovery actions" block for actionable steps`）が表示されます。アクションリストは、アクショングラフの復旧パスと共有される単一の情報源です。スタンドアロンコマンドとインラインエラーメッセージの間で、情報が一致するように設計されています。**R-020のプランナープロンプトの調整（A-half）は試行されましたが、ロールバックされました。** iter-1では、LLMが、敵対的なデータセットに対して、肯定的な効果を持つ要求から、実際には効果がない回答を生成しました（バリファイアは、この否定を「正しい」と判断しました）。iter-2では、ハードガードレールがこの誤りを修正できませんでした。オペレーターの1イテレーションルールに従い、プロンプトと3つのv3に固定されたテストファイルをロールバックしました。`PROSE_PROMPT_VERSION`は、`section-prose-v3`のままです。この結果、以下の教訓が得られました。構造的な実際の再実行は合格する可能性がありますが、合成されたコンテンツが誤っている可能性があります。敵対的なデータセットに対して、手動でテキストを検査することで、否定、範囲、述語の誤りを検出する必要があります。
+
+R-021: contradict-mapの自動モードにおけるハングタイムの調整、ヒューリスティックによるフォールバック機能の追加、および進行状況の可視化。
+新しいオプション `--auto-mode-pair-timeout-ms <N>` (デフォルト値: 90000ms。以前は120秒という固定値でしたが、v0.4のテスト環境（hermes3:8b）で、最小6.2秒、中央値8.4秒、最大8.8秒という結果から、90秒というデフォルト値に変更され、余裕が81秒あります)。
+新しいオプション `--auto-mode-fall-through-after-n-timeouts <N>` (デフォルト値: 5。自動ヒューリスティックによるフォールバックを行うための、連続的な失敗の閾値。`type:none` の分類が成功すると、このカウンタがリセットされます)。
+対応する環境変数も追加。
+新しい標準出力の開始行 (`auto-mode engaged: N candidate pairs; per-pair timeout=Xms; fall-through-after=Y`) が、すべての実行時に表示されます。常に可視であり、TTY環境以外でも表示されます。
+強制的に標準エラー出力にフォールバックトリガーイベントを出力することで、TTY環境の制限や `--progress` オプションの影響を受けずに、モードの切り替えをオペレーターに通知します。
+`contradictions.md` ファイルに、閾値を超えた場合に表示される新しい `## Auto-mode fall-through` というマークダウンブロックを追加しました。
+ヒューリスティックの再実行は、未処理のペアに対してのみ行われます（既にLLMによって処理済みのペアの再分類は行われません）。
+
+### アーキテクチャに関する注意
+
+R-019 は、research-os と ollama-intern-mcp の境界を越えます。
+research-os は、`ollama_extract` スキーマで `tier_budget_ms_override` を受け渡します。ollama-intern-mcp v2.6.0 は、内部のガードレールでこれを有効にします。
+必要なインフラは既に存在しており、v2.6.0 がクライアント側のエントリーポイントを提供し、v0.13.0 が research-os 側のクライアント側の設定を行います。
+R-018 の Promise.race ラッパーは、別の種類の障害（未解決プロミスのハング）に対する対策として保持されます。ラッパーはこれらの問題を検出し、構造化された `isError:true` のエラーペイロードを内部の予算を超えない範囲で通知しますが、R-019 の範囲はこれらとは異なります。
+
+R-021 は、research-os のみで動作します。
+contradict-map の自動モードは、ollama-intern-mcp を経由しません。Ollama の HTTP `/api/chat` エンドポイントを直接呼び出します。
+MCP のトランスポートは使用されず、`tier_budget_ms_override` の設定も適用されません。また、R-018 のラッパーも使用されません。
+four-hard-laws の起動プロトコルにおいて、R-021 の起動時に、パッチコードが書かれる前に、フレームの誤りが見つかりました。起動メッセージで「MCP RPC layer」と表示されていましたが、Phase A の読み込みフェーズでそれが誤りであることが判明しました。
+
+### 防御機能は維持されています
+
+R-019 + R-020 (D-only) + R-021 は、アーキテクチャの変更ではなく、オペレーター向けの機能追加です。
+R-002 から R-018 までの変更点はすべてそのまま引き継がれています。
+`accepted_claim_floor` は変更できません。
+既存の enum も変更されていません (`FailureShape` は 9、`RECOVERY_ACTIONS` は 8、`REGENERATION_REASONS` は 3、`PLANNER_TIMEOUT_SOURCES` は 3、`POLICY_KEYWORDS` は 8、`POLICY_RELEVANT_SOURCE_TYPES` は 1)。
+AI 回復アドバイザーのプロンプルトemplate は変更されていません。
+MCP のアーキテクチャは、追加的に拡張されています。
+R-010 で定義されたフォールバック原因の正規表現の形状は維持されています。
+
+すべての 4 つのフローズンパックについて、v0.3.3 のベースラインと比較して、バイト単位で完全に同一です。**18 回目の連続リリース**で、この状態が維持されています。
+vitest の合格数は 1542 から 1630 に増加 (+88。3 つのテストで 4 件がスキップされました)。
+
+### v0.13.0 が主張しないこと
+
+- v1 の対応。
+- v0.5 のオペレーターによる検証。v0.5 は `@mcptoolshop/research-os@0.13.0` に対して別のセッションで実行されます。v0.13.0 は最終的な検証のための前提条件であり、それ自体が証明ではありません。
+- Admissibility Slice 1 の対応。v0.5 で PASS していることが前提です。
+- 延期された v0.13.x の候補（F-2: R-009 の監査と抽出の乖離、F-3: cowork-handoff の陳腐化、F-4: R-017 の POLICY_KEYWORDS の範囲の狭さ、A-1 + A-2: アーキテクト側の調査結果を v0.5 のゲートの準備に組み込み）。
+
+詳細については、[CHANGELOG.md](CHANGELOG.md)を参照してください。
 
 ## v0.12.1の新機能：シンセプランナーのタイムアウトオーバーライド（Path Cパッチ）
 
