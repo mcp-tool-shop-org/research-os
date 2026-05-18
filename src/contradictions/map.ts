@@ -14,6 +14,7 @@ import { HeuristicContradictionDetector } from './detectors/heuristic.js';
 import { OllamaInternContradictionDetector } from './detectors/ollama-intern.js';
 import { renderMarkdownView } from './markdown.js';
 import type {
+  AutoModeFallThroughInfo,
   ContradictionDetector,
   ContradictionDetectorName,
   MapOptions,
@@ -105,6 +106,28 @@ function buildContradiction(args: {
 
 const VALID_DETECTOR_MODES = ['auto', 'heuristic', 'ollama-intern'] as const;
 
+// R-021 — assemble the OllamaContradictionConfig with the auto-mode-specific
+// timeout + fall-through threshold from MapOptions threaded in.
+//
+// Backward-compat: when `options.autoModePairTimeoutMs` is undefined, the
+// detector falls back to `ollamaConfig.timeoutMs` if set, else its built-in
+// default (DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS). The same is true for
+// fallThroughAfterN.
+function buildOllamaConfig(options: MapOptions): {
+  host?: string;
+  model?: string;
+  timeoutMs?: number;
+  fallThroughAfterN?: number;
+  fetchImpl?: typeof fetch;
+} {
+  const base = options.ollamaConfig ?? {};
+  return {
+    ...base,
+    timeoutMs: options.autoModePairTimeoutMs ?? base.timeoutMs,
+    fallThroughAfterN: options.autoModeFallThroughAfterNTimeouts,
+  };
+}
+
 async function resolveDetector(options: MapOptions): Promise<{
   detector: ContradictionDetector;
   announcement: string;
@@ -127,7 +150,7 @@ async function resolveDetector(options: MapOptions): Promise<{
   }
 
   if (mode === 'ollama-intern') {
-    const d = new OllamaInternContradictionDetector(options.ollamaConfig ?? {});
+    const d = new OllamaInternContradictionDetector(buildOllamaConfig(options));
     if (!(await d.available())) {
       // C1-011: ollama-intern not running is a state failure (not a CLI
       // arg validation failure). Closest existing code is INTAKE_VALIDATION
@@ -150,7 +173,7 @@ async function resolveDetector(options: MapOptions): Promise<{
   const detectors =
     options.detectors ??
     [
-      new OllamaInternContradictionDetector(options.ollamaConfig ?? {}),
+      new OllamaInternContradictionDetector(buildOllamaConfig(options)),
       new HeuristicContradictionDetector(),
     ];
   const detector = await pickContradictionDetector(detectors);
@@ -239,6 +262,8 @@ export async function map(options: MapOptions): Promise<MapSummary> {
   summary.detectionMethod = detectionResult.method;
   summary.pairsCompared = (candidateClaims.length * (candidateClaims.length - 1)) / 2;
 
+  // R-021 — write LLM detector's drafts first (so the per-contradiction
+  // detector field reflects the actual classifier that produced each entry).
   for (const paired of detectionResult.drafts) {
     const c = buildContradiction({
       paired,
@@ -257,12 +282,74 @@ export async function map(options: MapOptions): Promise<MapSummary> {
     summary.contradictionIds.push(c.contradiction_id);
   }
 
+  // R-021 — if the LLM detector engaged fall-through, run the heuristic on
+  // ONLY the unprocessed pairs. The heuristic detector exposes a
+  // `detectSpecificPairs` method for exactly this case. Contradictions
+  // produced here carry detector='heuristic' and a distinct contradiction_id
+  // suffix (DETECTOR_ID_PART), so they cannot duplicate any LLM-produced
+  // entry on a different pair.
+  let autoModeFallThrough: AutoModeFallThroughInfo | undefined;
+  if (detectionResult.fallThrough && detectionResult.unprocessedPairs) {
+    const autoClassifiedPairs =
+      (detectionResult.unprocessedPairs.length === 0
+        ? summary.pairsCompared
+        : (candidateClaims.length * (candidateClaims.length - 1)) / 2 -
+          detectionResult.unprocessedPairs.length) -
+      // Subtract the pair the trigger fired ON (counted as auto-classified
+      // attempt — it timed out, so 0 drafts came from it, but it WAS the
+      // pair the LLM attempted last).
+      0;
+    void autoClassifiedPairs; // see autoModeFallThrough fields below
+
+    const heuristic = new HeuristicContradictionDetector();
+    const heuristicResult = await heuristic.detectSpecificPairs(
+      candidateClaims,
+      detectionResult.unprocessedPairs,
+    );
+
+    if (heuristicResult.ok) {
+      for (const paired of heuristicResult.drafts) {
+        const c = buildContradiction({
+          paired,
+          sectionId: options.sectionId,
+          detector: 'heuristic',
+          detectionMethod: heuristicResult.method,
+        });
+        if (existingIds.has(c.contradiction_id)) {
+          summary.contradictionsDeduped += 1;
+          continue;
+        }
+        await appendFile(ledgerPath, JSON.stringify(c) + '\n', 'utf8');
+        existingIds.add(c.contradiction_id);
+        existingContradictions.push(c);
+        summary.contradictionsAdded += 1;
+        summary.contradictionIds.push(c.contradiction_id);
+      }
+    }
+
+    // Compose the summary fall-through info. autoClassifiedPairs =
+    // triggeredAtPairIndex (1-based pair index at which the Nth timeout
+    // fired; equivalent to "the LLM attempted this many pairs before
+    // bailing"). heuristicClassifiedPairs = unprocessedPairs.length.
+    autoModeFallThrough = {
+      triggeredAtPairIndex: detectionResult.fallThrough.triggeredAtPairIndex,
+      consecutiveTimeouts: detectionResult.fallThrough.consecutiveTimeouts,
+      perPairTimeoutMs: detectionResult.fallThrough.perPairTimeoutMs,
+      reason: 'consecutive_timeouts',
+      remainingPairsHandledBy: 'heuristic',
+      autoClassifiedPairs: detectionResult.fallThrough.triggeredAtPairIndex,
+      heuristicClassifiedPairs: detectionResult.unprocessedPairs.length,
+    };
+    summary.autoModeFallThrough = autoModeFallThrough;
+  }
+
   const md = renderMarkdownView({
     sectionId: options.sectionId,
     candidateClaims: candidateClaims.length,
     contradictions: existingContradictions,
     detector: detector.name,
     detectionMethod: detectionResult.method,
+    autoModeFallThrough,
   });
   await writeFile(mdPath, md, 'utf8');
 

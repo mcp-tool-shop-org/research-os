@@ -24,6 +24,14 @@ import {
   rescueClaimByOperator,
 } from './claims/rescue-ledger.js';
 import { map as contradictMap, resolve as contradictResolve } from './contradictions/index.js';
+import {
+  DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS,
+  DEFAULT_AUTO_MODE_FALL_THROUGH_AFTER_N,
+  MIN_AUTO_MODE_PAIR_TIMEOUT_MS,
+  MAX_AUTO_MODE_PAIR_TIMEOUT_MS,
+  MIN_AUTO_MODE_FALL_THROUGH_AFTER_N,
+  MAX_AUTO_MODE_FALL_THROUGH_AFTER_N,
+} from './contradictions/types.js';
 import { gate as runGate } from './gates/index.js';
 import {
   DEFAULT_PROFILE,
@@ -107,6 +115,120 @@ export function parseIntArg(label: string): (value: string) => number {
  * negatives, zero, unit-suffixed strings, non-numerics, and values above
  * MAX_PLANNER_TIMEOUT_MS.
  */
+// R-021 — shared validator for the integer-millisecond CLI flags introduced
+// for contradict-map auto-mode. Mirrors R-018's parsePlannerTimeoutMsArg in
+// shape (validate, throw InvalidArgumentError with operator-readable surface
+// name + bounds + offending value).
+export function parseAutoModePairTimeoutMsArg(value: string): number {
+  const r = validateAutoModePairTimeoutValue(value, 'cli_flag');
+  if (!r.ok) {
+    throw new InvalidArgumentError(r.error);
+  }
+  return r.value;
+}
+
+export function parseAutoModeFallThroughAfterNArg(value: string): number {
+  const r = validateAutoModeFallThroughValue(value, 'cli_flag');
+  if (!r.ok) {
+    throw new InvalidArgumentError(r.error);
+  }
+  return r.value;
+}
+
+type ValidationResult = { ok: true; value: number } | { ok: false; error: string };
+
+function validateAutoModePairTimeoutValue(
+  raw: string | undefined,
+  source: 'cli_flag' | 'env_var',
+): ValidationResult {
+  const surface =
+    source === 'cli_flag' ? '--auto-mode-pair-timeout-ms' : 'RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS';
+  if (raw === undefined || raw === '') {
+    return { ok: false, error: `${surface}: value is required` };
+  }
+  if (!/^\d+$/.test(raw.trim())) {
+    return {
+      ok: false,
+      error:
+        `${surface}: invalid value "${raw}" — must be an integer number of ` +
+        `milliseconds (no unit suffix; e.g. 90000, not "90s")`,
+    };
+  }
+  const n = parseInt(raw, 10);
+  if (n < MIN_AUTO_MODE_PAIR_TIMEOUT_MS || n > MAX_AUTO_MODE_PAIR_TIMEOUT_MS) {
+    return {
+      ok: false,
+      error:
+        `${surface}: invalid value ${n} — must be between ${MIN_AUTO_MODE_PAIR_TIMEOUT_MS} ` +
+        `and ${MAX_AUTO_MODE_PAIR_TIMEOUT_MS} ms`,
+    };
+  }
+  return { ok: true, value: n };
+}
+
+function validateAutoModeFallThroughValue(
+  raw: string | undefined,
+  source: 'cli_flag' | 'env_var',
+): ValidationResult {
+  const surface =
+    source === 'cli_flag'
+      ? '--auto-mode-fall-through-after-n-timeouts'
+      : 'RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N';
+  if (raw === undefined || raw === '') {
+    return { ok: false, error: `${surface}: value is required` };
+  }
+  if (!/^\d+$/.test(raw.trim())) {
+    return {
+      ok: false,
+      error: `${surface}: invalid value "${raw}" — must be a positive integer`,
+    };
+  }
+  const n = parseInt(raw, 10);
+  if (n < MIN_AUTO_MODE_FALL_THROUGH_AFTER_N || n > MAX_AUTO_MODE_FALL_THROUGH_AFTER_N) {
+    return {
+      ok: false,
+      error:
+        `${surface}: invalid value ${n} — must be between ${MIN_AUTO_MODE_FALL_THROUGH_AFTER_N} ` +
+        `and ${MAX_AUTO_MODE_FALL_THROUGH_AFTER_N}`,
+    };
+  }
+  return { ok: true, value: n };
+}
+
+// CLI > env > default precedence resolver for the contradict-map auto-mode
+// settings. Returns the resolved values or a validation error when an env var
+// is malformed (operator must see the error on a failed shell expansion).
+function resolveAutoModeSettings(args: {
+  cliPairTimeoutMs: number | undefined;
+  cliFallThroughAfterN: number | undefined;
+}): { ok: true; pairTimeoutMs: number; fallThroughAfterN: number } | { ok: false; error: string } {
+  let pairTimeoutMs = args.cliPairTimeoutMs;
+  if (pairTimeoutMs === undefined) {
+    const env = process.env.RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS;
+    if (env && env !== '') {
+      const r = validateAutoModePairTimeoutValue(env, 'env_var');
+      if (!r.ok) return { ok: false, error: r.error };
+      pairTimeoutMs = r.value;
+    } else {
+      pairTimeoutMs = DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS;
+    }
+  }
+
+  let fallThroughAfterN = args.cliFallThroughAfterN;
+  if (fallThroughAfterN === undefined) {
+    const env = process.env.RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N;
+    if (env && env !== '') {
+      const r = validateAutoModeFallThroughValue(env, 'env_var');
+      if (!r.ok) return { ok: false, error: r.error };
+      fallThroughAfterN = r.value;
+    } else {
+      fallThroughAfterN = DEFAULT_AUTO_MODE_FALL_THROUGH_AFTER_N;
+    }
+  }
+
+  return { ok: true, pairTimeoutMs, fallThroughAfterN };
+}
+
 export function parsePlannerTimeoutMsArg(value: string): number {
   const r = validatePlannerTimeoutValue(value, 'cli_flag');
   if (!r.ok) {
@@ -896,16 +1018,42 @@ contradictCmd
       .choices(['auto', 'heuristic', 'ollama-intern'])
       .default('auto'),
   )
+  .option(
+    '--auto-mode-pair-timeout-ms <ms>',
+    `R-021: per-pair LLM classification timeout in milliseconds for auto / ollama-intern modes. Default ${DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS}, range [${MIN_AUTO_MODE_PAIR_TIMEOUT_MS}, ${MAX_AUTO_MODE_PAIR_TIMEOUT_MS}]. Env-var equivalent: RESEARCH_OS_CONTRADICT_AUTO_PAIR_TIMEOUT_MS. CLI flag wins when both are set. No effect with --detector heuristic.`,
+    parseAutoModePairTimeoutMsArg,
+  )
+  .option(
+    '--auto-mode-fall-through-after-n-timeouts <n>',
+    `R-021: after this many consecutive per-pair failures (timeout/HTTP error/parse error) the LLM detector falls through to the heuristic detector for the remaining pairs. Default ${DEFAULT_AUTO_MODE_FALL_THROUGH_AFTER_N}, range [${MIN_AUTO_MODE_FALL_THROUGH_AFTER_N}, ${MAX_AUTO_MODE_FALL_THROUGH_AFTER_N}]. Env-var equivalent: RESEARCH_OS_CONTRADICT_AUTO_FALL_THROUGH_AFTER_N. No effect with --detector heuristic.`,
+    parseAutoModeFallThroughAfterNArg,
+  )
   .option('--no-progress', 'Suppress per-iteration progress output to stderr')
   .option('--progress', 'Force per-iteration progress output even when not on a TTY (debug aid)')
   .action(async (section: string, opts) => {
     try {
       applyProgressFlags();
+
+      // R-021 — resolve auto-mode settings (CLI > env > default). Validation
+      // failures from env-var parsing exit non-zero so the operator sees the
+      // bad env var rather than silently proceeding with defaults.
+      const autoModeResolved = resolveAutoModeSettings({
+        cliPairTimeoutMs: opts.autoModePairTimeoutMs as number | undefined,
+        cliFallThroughAfterN: opts.autoModeFallThroughAfterNTimeouts as number | undefined,
+      });
+      if (!autoModeResolved.ok) {
+        process.stderr.write(`research-os: ${autoModeResolved.error}\n`);
+        process.exitCode = 2;
+        return;
+      }
+
       const result = await contradictMap({
         sectionId: section,
         packPath: opts.pack,
         triagedOnly: opts.triagedOnly,
         detectorMode: opts.detector,
+        autoModePairTimeoutMs: autoModeResolved.pairTimeoutMs,
+        autoModeFallThroughAfterNTimeouts: autoModeResolved.fallThroughAfterN,
       });
       process.stdout.write(`${result.detectorAnnouncement}\n`);
       process.stdout.write(`contradiction map complete\n`);
@@ -916,6 +1064,12 @@ contradictCmd
       process.stdout.write(`  pairs compared:          ${result.pairsCompared}\n`);
       process.stdout.write(`  contradictions added:    ${result.contradictionsAdded}\n`);
       process.stdout.write(`  contradictions deduped:  ${result.contradictionsDeduped}\n`);
+      if (result.autoModeFallThrough) {
+        const f = result.autoModeFallThrough;
+        process.stdout.write(`  auto-mode fall-through:  ${f.consecutiveTimeouts} consecutive timeouts at pair ${f.triggeredAtPairIndex}; per-pair timeout=${f.perPairTimeoutMs}ms\n`);
+        process.stdout.write(`    auto-classified pairs: ${f.autoClassifiedPairs}\n`);
+        process.stdout.write(`    heuristic-classified:  ${f.heuristicClassifiedPairs}\n`);
+      }
       if (result.detectorError) {
         process.stdout.write(`\ndetector error: ${result.detectorError}\n`);
       }

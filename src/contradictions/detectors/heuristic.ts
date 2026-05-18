@@ -77,4 +77,25 @@ export class HeuristicContradictionDetector implements ContradictionDetector {
     }
     return { ok: true, drafts, method: 'heuristic_similarity_negation' };
   }
+
+  // R-021 — invoked by map.ts when the LLM detector engaged fall-through. The
+  // orchestrator passes the SAME claims array used by the LLM detector and the
+  // list of pair indices the LLM did NOT process (everything from the
+  // fall-through trigger forward). Running heuristic on only this subset
+  // avoids producing duplicate contradictions with different detector IDs on
+  // pairs the LLM already classified cleanly.
+  async detectSpecificPairs(
+    claims: Claim[],
+    pairs: Array<[number, number]>,
+  ): Promise<DetectionResult> {
+    const drafts: PairedDraft[] = [];
+    for (const [i, j] of pairs) {
+      const a = claims[i];
+      const b = claims[j];
+      if (!a || !b) continue;
+      const draft = compare(a, b);
+      if (draft) drafts.push({ claim_a: a, claim_b: b, draft });
+    }
+    return { ok: true, drafts, method: 'heuristic_similarity_negation' };
+  }
 }

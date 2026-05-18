@@ -1,6 +1,10 @@
 import { normalizeOllamaHost } from '../../sources/extractors/ollama-intern.js';
 import { emitProgress } from '../../util/progress.js';
 import type { Claim } from '../../claims/schema.js';
+import {
+  DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS,
+  DEFAULT_AUTO_MODE_FALL_THROUGH_AFTER_N,
+} from '../types.js';
 import type {
   ContradictionDetector,
   ContradictionType,
@@ -13,7 +17,6 @@ import type {
 
 const DEFAULT_HOST = 'http://localhost:11434';
 const DEFAULT_MODEL = 'hermes3:8b';
-const DEFAULT_TIMEOUT_MS = 120_000;
 
 const SYSTEM_PROMPT = `You are detecting tension between two atomic claims from a research pack.
 
@@ -73,10 +76,29 @@ function asString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
 }
 
+// R-021 — per-pair classification outcome.
+//
+// The original code returned `DraftContradiction | null` and the loop could
+// not distinguish "LLM said no contradiction" (a successful classification)
+// from "the call timed out / errored" (a failure). The fall-through trigger
+// needs that distinction — consecutive type-none responses are NOT a hang
+// signal; consecutive timeouts/HTTP errors/parse errors ARE.
+type ClassifyOutcome =
+  | { kind: 'draft'; draft: DraftContradiction; elapsedMs: number }
+  | { kind: 'none'; elapsedMs: number }
+  | { kind: 'timeout'; elapsedMs: number }
+  | { kind: 'http_error'; status: number; elapsedMs: number }
+  | { kind: 'parse_error'; elapsedMs: number }
+  | { kind: 'network_error'; message: string; elapsedMs: number };
+
 export interface OllamaContradictionConfig {
   host?: string;
   model?: string;
+  // Per-pair classification timeout in ms. R-021 default = 90_000.
   timeoutMs?: number;
+  // Consecutive-failure threshold that triggers fall-through to heuristic.
+  // R-021 default = 5.
+  fallThroughAfterN?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -84,13 +106,17 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
   readonly name = 'ollama-intern' as const;
   private readonly host: string;
   readonly model: string;
-  private readonly timeoutMs: number;
+  // Public for assertion convenience in synthetic tests. Treat as read-only
+  // outside the class.
+  readonly timeoutMs: number;
+  readonly fallThroughAfterN: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(config: OllamaContradictionConfig = {}) {
     this.host = normalizeOllamaHost(config.host ?? process.env.OLLAMA_HOST ?? DEFAULT_HOST);
     this.model = config.model ?? process.env.OLLAMA_INTERN_MODEL ?? DEFAULT_MODEL;
-    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_AUTO_MODE_PAIR_TIMEOUT_MS;
+    this.fallThroughAfterN = config.fallThroughAfterN ?? DEFAULT_AUTO_MODE_FALL_THROUGH_AFTER_N;
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
   }
 
@@ -123,11 +149,15 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
     ].join('\n');
   }
 
-  private async classifyPair(a: Claim, b: Claim): Promise<DraftContradiction | null> {
+  // R-021 — returns a structured outcome instead of `DraftContradiction | null`.
+  // The detect() loop uses the outcome's `kind` to decide whether to reset or
+  // increment the consecutive-failure counter.
+  private async classifyPair(a: Claim, b: Claim): Promise<ClassifyOutcome> {
     const userMsg = [this.formatClaim('A', a), '', this.formatClaim('B', b)].join('\n');
 
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), this.timeoutMs);
+    const startMs = Date.now();
     let body: ChatResponse;
     try {
       const res = await this.fetchImpl(`${this.host}/api/chat`, {
@@ -148,45 +178,68 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
           ],
         }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        clearTimeout(t);
+        return { kind: 'http_error', status: res.status, elapsedMs: Date.now() - startMs };
+      }
       body = (await res.json()) as ChatResponse;
-    } catch {
-      return null;
+    } catch (err) {
+      clearTimeout(t);
+      const elapsed = Date.now() - startMs;
+      // AbortError → timeout. Anything else → network error.
+      const name = (err as { name?: string })?.name ?? '';
+      if (name === 'AbortError') {
+        return { kind: 'timeout', elapsedMs: elapsed };
+      }
+      return {
+        kind: 'network_error',
+        message: (err as { message?: string })?.message ?? String(err),
+        elapsedMs: elapsed,
+      };
     } finally {
       clearTimeout(t);
     }
 
+    const elapsed = Date.now() - startMs;
     const text = body.message?.content ?? body.response ?? '';
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(text) as Record<string, unknown>;
     } catch {
-      return null;
+      return { kind: 'parse_error', elapsedMs: elapsed };
     }
 
     // JSON.parse('null') / '[]' / '"string"' all yield valid JSON that is not
-    // a usable object. Treat anything non-object as a soft failure.
+    // a usable object. Treat anything non-object as a soft parse failure.
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return null;
+      return { kind: 'parse_error', elapsedMs: elapsed };
     }
 
-    if (parsed.type === 'none' || !parsed.type) return null;
+    if (parsed.type === 'none' || !parsed.type) {
+      return { kind: 'none', elapsedMs: elapsed };
+    }
 
     const type = asEnum<ContradictionType>(parsed.type, VALID_TYPES, 'direct_conflict');
-    if (!VALID_TYPES.includes(parsed.type as ContradictionType)) return null;
+    if (!VALID_TYPES.includes(parsed.type as ContradictionType)) {
+      return { kind: 'parse_error', elapsedMs: elapsed };
+    }
 
     return {
-      type,
-      summary: asString(parsed.summary, '(no summary)'),
-      scope_analysis: asString(parsed.scope_analysis, ''),
-      overlap_assessment: asEnum<OverlapAssessment>(
-        parsed.overlap_assessment,
-        VALID_OVERLAPS,
-        'unknown',
-      ),
-      severity: asEnum<Severity>(parsed.severity, VALID_SEVERITIES, 'low'),
-      confidence: asEnum<ValidConfidence>(parsed.confidence, VALID_CONFIDENCES, 'low'),
-      evidence: asString(parsed.evidence, ''),
+      kind: 'draft',
+      elapsedMs: elapsed,
+      draft: {
+        type,
+        summary: asString(parsed.summary, '(no summary)'),
+        scope_analysis: asString(parsed.scope_analysis, ''),
+        overlap_assessment: asEnum<OverlapAssessment>(
+          parsed.overlap_assessment,
+          VALID_OVERLAPS,
+          'unknown',
+        ),
+        severity: asEnum<Severity>(parsed.severity, VALID_SEVERITIES, 'low'),
+        confidence: asEnum<ValidConfidence>(parsed.confidence, VALID_CONFIDENCES, 'low'),
+        evidence: asString(parsed.evidence, ''),
+      },
     };
   }
 
@@ -198,23 +251,105 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
     // deterministic. Pairs failing the prefilter contribute nothing to the
     // final ledger; the model never sees them.
     const candidatePairs = candidateContradictionPairs(claims);
+
+    // R-021 — visible "auto-mode engaged" start line on STDOUT.
+    //
+    // STDOUT (not stderr) because operator visibility was the dominant
+    // complaint in the v0.4 rerun: the operator's session piped or redirected
+    // stderr, so the existing TTY-gated progress emitter went unseen for 45
+    // min. STDOUT is not TTY-gated, survives pipes, and gives the operator a
+    // single load-bearing line at start naming the budget and fall-through
+    // policy.
+    //
+    // Format frozen at Phase B: "auto-mode engaged: N candidate pairs;
+    // per-pair timeout=Xms; fall-through-after=Y\n"
+    process.stdout.write(
+      `auto-mode engaged: ${candidatePairs.length} candidate pairs; ` +
+        `per-pair timeout=${this.timeoutMs}ms; ` +
+        `fall-through-after=${this.fallThroughAfterN}\n`,
+    );
+
     const drafts: PairedDraft[] = [];
-    // C2-008: throttled per-pair progress. Emit at most every 5 pairs OR
-    // every 10s (whichever first). Without the throttle dense sections
-    // (435 pairs at 10s/pair) would flood stderr with one line per LLM call;
-    // without the time floor sparse sections would only print every 5*10s.
+
+    // C2-008: throttled per-pair progress (R-015-style). Emit at most every 5
+    // pairs OR every 10s (whichever first). Without the throttle dense sections
+    // (435 pairs at 10s/pair) would flood stderr; without the time floor
+    // sparse sections would only print every 5*10s.
     const PAIR_INTERVAL = 5;
     const TIME_INTERVAL_MS = 10_000;
     const totalPairs = candidatePairs.length;
     let lastEmittedPair = 0;
     let lastEmittedAt = Date.now();
     let pairIndex = 0;
+
+    // R-021 — consecutive-failure tracking for fall-through trigger. A
+    // "failure" is timeout / http_error / parse_error / network_error.
+    // Successful classifications (`draft`, `none`) reset the counter — even
+    // an honest "no contradiction" from the model proves the call path is
+    // working.
+    let consecutiveFailures = 0;
+    let fallThroughTriggered: {
+      triggeredAtPairIndex: number;
+      consecutiveTimeouts: number;
+      perPairTimeoutMs: number;
+      reason: 'consecutive_timeouts';
+    } | null = null;
+    let unprocessedFromIndex = -1; // 0-based index into candidatePairs
+
     for (const [i, j] of candidatePairs) {
       pairIndex += 1;
       const a = claims[i]!;
       const b = claims[j]!;
-      const draft = await this.classifyPair(a, b);
-      if (draft) drafts.push({ claim_a: a, claim_b: b, draft });
+      const outcome = await this.classifyPair(a, b);
+
+      if (outcome.kind === 'draft') {
+        drafts.push({ claim_a: a, claim_b: b, draft: outcome.draft });
+        consecutiveFailures = 0;
+      } else if (outcome.kind === 'none') {
+        consecutiveFailures = 0;
+      } else {
+        // Any other outcome is a failure for fall-through purposes.
+        consecutiveFailures += 1;
+
+        // Per-timeout / per-failure stderr emit — bypasses the throttle so
+        // the operator sees the failure signal AS IT HAPPENS, not 4 pairs
+        // later. Honors TTY/--progress contract via emitProgress.
+        if (outcome.kind === 'timeout') {
+          emitProgress(
+            `auto-mode pair ${pairIndex}/${totalPairs} timed out at ${outcome.elapsedMs}ms`,
+          );
+        } else {
+          emitProgress(
+            `auto-mode pair ${pairIndex}/${totalPairs} failed (${outcome.kind}` +
+              (outcome.kind === 'http_error' ? ` ${outcome.status}` : '') +
+              `) after ${outcome.elapsedMs}ms`,
+          );
+        }
+
+        if (consecutiveFailures >= this.fallThroughAfterN) {
+          fallThroughTriggered = {
+            triggeredAtPairIndex: pairIndex,
+            consecutiveTimeouts: consecutiveFailures,
+            perPairTimeoutMs: this.timeoutMs,
+            reason: 'consecutive_timeouts',
+          };
+          unprocessedFromIndex = pairIndex; // candidatePairs index of the NEXT pair
+          // Fall-through trigger is a load-bearing operator-visibility event
+          // (silent mode-switching is worse than the fall-through itself).
+          // Always emit to stderr regardless of --no-progress / non-TTY —
+          // operators need this signal when their auto-mode bailed. The
+          // per-pair-timeout lines above remain TTY-gated (routine progress);
+          // the trigger event bypasses gating.
+          emitProgress(
+            `auto-mode fall-through: ${consecutiveFailures} consecutive timeouts at pair ` +
+              `${pairIndex}; switching to heuristic for remaining ` +
+              `${totalPairs - pairIndex} pairs`,
+            { forceProgress: true },
+          );
+          break;
+        }
+      }
+
       const now = Date.now();
       const pairsSince = pairIndex - lastEmittedPair;
       const msSince = now - lastEmittedAt;
@@ -225,14 +360,25 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
         lastEmittedAt = now;
       }
     }
-    return {
-      ok: true,
-      drafts,
-      method:
-        candidatePairs.length === (claims.length * (claims.length - 1)) / 2
-          ? 'ollama_intern_pairwise_classification'
-          : 'ollama_intern_prefiltered_pairwise_classification',
-    };
+
+    const method = fallThroughTriggered
+      ? 'ollama_intern_fell_through_to_heuristic'
+      : candidatePairs.length === (claims.length * (claims.length - 1)) / 2
+        ? 'ollama_intern_pairwise_classification'
+        : 'ollama_intern_prefiltered_pairwise_classification';
+
+    if (fallThroughTriggered && unprocessedFromIndex >= 0) {
+      const unprocessed = candidatePairs.slice(unprocessedFromIndex);
+      return {
+        ok: true,
+        drafts,
+        method,
+        fallThrough: fallThroughTriggered,
+        unprocessedPairs: unprocessed,
+      };
+    }
+
+    return { ok: true, drafts, method };
   }
 }
 
