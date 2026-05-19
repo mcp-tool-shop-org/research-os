@@ -89,9 +89,14 @@ async function runR012RescueStage(args: {
   sourceType: string | null;
   effectiveModel: string | undefined;
   criticTally: CriticTally;
+  // R-024 (v0.13.1) — per-call tier-budget override forwarded to
+  // runRescueCritic so the rescue-critic ollama_extract call honors the
+  // operator's budget. undefined preserves byte-identical pre-R-024 behavior.
+  tierBudgetMsOverride?: number;
 }): Promise<void> {
   const { client, drafts, sectionPurpose, sourceRawText, sourceTitle,
-    sourcePublisher, sourceType, effectiveModel, criticTally } = args;
+    sourcePublisher, sourceType, effectiveModel, criticTally,
+    tierBudgetMsOverride } = args;
 
   // Find rescue candidates: drafts excluded with source_content_mismatch.
   // Other exclusion reasons (off_topic, background_only, source_chrome,
@@ -154,6 +159,10 @@ async function runR012RescueStage(args: {
       sourceExcerpt: sourceRawText,
       peerAsserts,
       effectiveModel,
+      // R-024 (v0.13.1) — forward the operator's per-call tier-budget override
+      // to the rescue-critic ollama_extract call. Third of three extract-stage
+      // call sites; full-coverage tier-budget rule.
+      tierBudgetMsOverride,
     });
 
     if (!rescue.ok) {
@@ -368,6 +377,11 @@ export class MCPClaimExtractor implements ClaimExtractorAdapter {
       ledgerText: string;
       frame?: string;
       model?: string;
+      // R-024 (v0.13.1) — per-call tier-budget override forwarded to
+      // ollama-intern-mcp@>=2.6.0's tier_budget_ms_override field. undefined
+      // preserves byte-identical pre-R-024 behavior (toolArgs omits the
+      // field; profile defaults govern).
+      tierBudgetMsOverride?: number;
     },
   ): Promise<
     | { ok: true; drafts: DraftClaim[]; envelope: ExtractEnvelope }
@@ -392,6 +406,13 @@ EXCERPT LEDGER END`;
     }
     if (args.model !== undefined && args.model.trim().length > 0) {
       toolArgs.model = args.model;
+    }
+    // R-024 (v0.13.1) — forward the operator's per-call tier-budget override
+    // into the MCP-side per-tier guardrail (ollama-intern-mcp@>=2.6.0's
+    // runWithTimeoutAndFallback at src/guardrails/timeouts.ts:61). Omitted
+    // on default-path runs (preserves byte-identical pre-R-024 behavior).
+    if (args.tierBudgetMsOverride !== undefined) {
+      toolArgs.tier_budget_ms_override = args.tierBudgetMsOverride;
     }
 
     let response: Awaited<ReturnType<CallToolClient['callTool']>>;
@@ -526,6 +547,13 @@ Source-card not: ${card.not ?? 'null'}`;
           ledgerText,
           frame: input.framePurpose,
           model: input.effectiveModel,
+          // R-024 (v0.13.1) — forward the per-call tier-budget override to
+          // EVERY ollama_extract call (this per-window extract call AND the
+          // per-claim critic call below AND the rescue-critic call). The
+          // operator-aloneness invariant requires every LLM call at the
+          // extract stage to honor the operator's budget — otherwise the
+          // named 15s inner TIER_TIMEOUT reappears at the uncovered call site.
+          tierBudgetMsOverride: input.tierBudgetMsOverride,
         });
         if (!page.ok) {
           pageErrors.push(page.error);
@@ -614,6 +642,11 @@ Source-card not: ${card.not ?? 'null'}`;
               sourcePublisher: card.publisher,
               sourceType: card.source_type,
               effectiveModel: input.effectiveModel,
+              // R-024 (v0.13.1) — forward the operator's tier-budget override
+              // to the per-claim section-evidence critic (R-011). This is the
+              // second of three extract-stage ollama_extract call sites that
+              // can produce the same inner 15s TIER_TIMEOUT.
+              tierBudgetMsOverride: input.tierBudgetMsOverride,
             });
             if (!critic.ok) {
               criticTally.critic_call_failed += 1;
@@ -705,6 +738,11 @@ Source-card not: ${card.not ?? 'null'}`;
           sourceType: card.source_type,
           effectiveModel: input.effectiveModel,
           criticTally,
+          // R-024 (v0.13.1) — forward the operator's tier-budget override to
+          // the rescue stage so the per-rescue-candidate rescue critic
+          // (R-012) — the third of three extract-stage ollama_extract call
+          // sites — also honors the operator's budget.
+          tierBudgetMsOverride: input.tierBudgetMsOverride,
         });
       }
     } finally {

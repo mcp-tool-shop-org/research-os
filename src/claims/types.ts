@@ -5,6 +5,145 @@ import type {
   RescueEligibilityResult,
 } from './critic/rescue-eligibility.js';
 
+// ── R-024 (v0.13.1) — Extract tier-budget configuration ──────────────────────
+//
+// R-024 extends R-019's tier-budget authority (which reached synth prose only)
+// to the claim-extract stage by mirroring R-019's client wire-up. Every
+// `ollama_extract` MCP call made during `claim extract` (extractOnePage +
+// runCritic + runRescueCritic — the three call sites that can produce the same
+// inner ollama-intern-mcp TIER_TIMEOUT) now forwards an operator-controlled
+// `tier_budget_ms_override` value to ollama-intern-mcp@>=2.6.0.
+//
+// Default behavior preserved: when no override is set, the field is omitted
+// from toolArgs and ollama-intern-mcp's per-tier profile timeouts govern
+// byte-identically — pre-R-024 callers see zero change.
+//
+// Closes the v0.5 operator-aloneness gate's R-019-extract-stage-scope-gap
+// (3 of 8 sources in section 02 hit 15s instant-tier TIER_TIMEOUT with no
+// operator-facing override). Mirrors R-018's CLI flag / env-var pattern.
+
+/** Minimum accepted extract tier budget. Zero is rejected — zero-budget calls are useless. */
+export const MIN_EXTRACT_TIER_BUDGET_MS = 1;
+
+/**
+ * Upper safety rail for the extract tier-budget — 10 minutes. Mirrors R-018's
+ * MAX_PLANNER_TIMEOUT_MS rail to protect against typo runaway.
+ */
+export const MAX_EXTRACT_TIER_BUDGET_MS = 600_000;
+
+/**
+ * Closed-enum vocabulary for the source of an active extract tier-budget value.
+ * - `default`: neither CLI flag nor env var was set; ollama-intern-mcp's
+ *   per-tier profile timeouts govern (byte-identical to pre-R-024 behavior).
+ * - `cli_flag`: --tier-budget-ms supplied on `claim extract`.
+ * - `env_var`: RESEARCH_OS_EXTRACT_TIER_BUDGET_MS supplied in the environment.
+ *
+ * Precedence (CLI > env > default) is encoded in `resolveExtractTierBudget`.
+ * Kept as a NEW closed enum (semantically parallel to PLANNER_TIMEOUT_SOURCES
+ * in src/synth/prose/types.ts) rather than reusing R-018's enum, so the claims
+ * layer does not import from synth/prose.
+ */
+export const EXTRACT_TIER_BUDGET_SOURCES = ['default', 'cli_flag', 'env_var'] as const;
+export type ExtractTierBudgetSource = (typeof EXTRACT_TIER_BUDGET_SOURCES)[number];
+
+/** Discriminated-union result for the pure validator. */
+export type ExtractTierBudgetValidationResult =
+  | { ok: true; value: number }
+  | { ok: false; error: string };
+
+/** Discriminated-union result for the precedence resolver. */
+export type ExtractTierBudgetResolutionResult =
+  | { ok: true; value: number | undefined; source: ExtractTierBudgetSource }
+  | { ok: false; error: string };
+
+/**
+ * Validate a raw extract tier-budget value (from CLI flag or env var). The
+ * surface label is included verbatim in the error message so operators see
+ * which knob they got wrong. Accepts only base-10 integers; rejects negatives,
+ * zero, unit suffixes, and values above MAX_EXTRACT_TIER_BUDGET_MS.
+ *
+ * Pure — no side effects. Tested in isolation in
+ * test/r024-tier-budget-override.test.ts.
+ */
+export function validateExtractTierBudgetValue(
+  raw: string,
+  surface: Exclude<ExtractTierBudgetSource, 'default'>,
+): ExtractTierBudgetValidationResult {
+  const surfaceLabel =
+    surface === 'cli_flag' ? '--tier-budget-ms' : 'RESEARCH_OS_EXTRACT_TIER_BUDGET_MS';
+  if (!/^-?\d+$/.test(raw)) {
+    return {
+      ok: false,
+      error: `${surfaceLabel}: expected positive integer (milliseconds), got '${raw}'. Valid range: ${MIN_EXTRACT_TIER_BUDGET_MS}–${MAX_EXTRACT_TIER_BUDGET_MS}.`,
+    };
+  }
+  const n = parseInt(raw, 10);
+  if (n < MIN_EXTRACT_TIER_BUDGET_MS) {
+    return {
+      ok: false,
+      error: `${surfaceLabel}: value '${raw}' is below minimum (${MIN_EXTRACT_TIER_BUDGET_MS}ms). Zero and negative values are not accepted.`,
+    };
+  }
+  if (n > MAX_EXTRACT_TIER_BUDGET_MS) {
+    return {
+      ok: false,
+      error: `${surfaceLabel}: value '${raw}' exceeds the safety upper bound (${MAX_EXTRACT_TIER_BUDGET_MS}ms = 10 minutes). Operators rarely need more than 1–2 minutes; values this large are usually typos.`,
+    };
+  }
+  return { ok: true, value: n };
+}
+
+/**
+ * Resolve the active extract tier-budget value from CLI flag + env var sources
+ * with CLI > env > default precedence. Unlike R-018's planner timeout (which
+ * has a hard default of 15000ms because R-018 is an OUTER wrapper that always
+ * fires), R-024's resolver returns `value: undefined` on the default path —
+ * absence signals "let ollama-intern-mcp's profile defaults govern," which is
+ * byte-identical to pre-R-024 behavior.
+ *
+ * Empty-string env var is treated as unset (matches conventional shell
+ * behavior where `export FOO=` clears the variable's effective value).
+ */
+export function resolveExtractTierBudget(args: {
+  cliFlagMs: number | undefined;
+  envVar: string | undefined;
+}): ExtractTierBudgetResolutionResult {
+  if (args.cliFlagMs !== undefined) {
+    const check = validateExtractTierBudgetValue(String(args.cliFlagMs), 'cli_flag');
+    if (!check.ok) return check;
+    return { ok: true, value: check.value, source: 'cli_flag' };
+  }
+  if (args.envVar !== undefined && args.envVar !== '') {
+    const check = validateExtractTierBudgetValue(args.envVar, 'env_var');
+    if (!check.ok) return check;
+    return { ok: true, value: check.value, source: 'env_var' };
+  }
+  return { ok: true, value: undefined, source: 'default' };
+}
+
+/**
+ * Format a single-line, grep-friendly stderr summary of the active extract
+ * tier-budget configuration. Emitted by extract() in src/claims/extract.ts
+ * BEFORE the per-source loop begins so operators can `2>&1 | grep
+ * tier_budget_ms=` to see what budget was in effect for a given run.
+ *
+ * Shape: `[extract] tier_budget_ms=<N|default> source=<default|cli_flag|env_var>`
+ *
+ * The literal `default` token (when value is undefined) communicates that
+ * ollama-intern-mcp's per-tier profile timeouts govern, which is NOT a
+ * research-os-side single number. This matches the surface-promise: presence
+ * of a numeric value ⇒ operator opted in; literal `default` ⇒ profile
+ * defaults govern.
+ */
+export function formatExtractTierBudgetLogLine(
+  value: number | undefined,
+  source: ExtractTierBudgetSource,
+): string {
+  return `[extract] tier_budget_ms=${value ?? 'default'} source=${source}`;
+}
+
+// ── End R-024 ────────────────────────────────────────────────────────────────
+
 export type ClaimExtractor = 'heuristic' | 'ollama-intern';
 export type Confidence = 'low' | 'medium' | 'high';
 export type ReviewState =
@@ -153,6 +292,14 @@ export interface ClaimExtractionInput {
   // omit it; the MCP extractor's R-011 precheck degrades gracefully to
   // "no signal, no precheck" when absent).
   sourceRawText?: string | null;
+  // R-024 (v0.13.1) — per-call tier-budget override forwarded to
+  // ollama-intern-mcp@>=2.6.0 as `tier_budget_ms_override` on EVERY
+  // `ollama_extract` callTool invocation made during this source's extract
+  // (extractOnePage per window + runCritic per claim + runRescueCritic per
+  // rescue candidate). undefined preserves byte-identical pre-R-024 behavior
+  // (ollama-intern-mcp profile defaults govern). The heuristic extractor
+  // ignores this field.
+  tierBudgetMsOverride?: number;
 }
 
 export interface ClaimExtractorAdapter {
@@ -183,6 +330,15 @@ export interface ExtractClaimsOptions {
   // function; the orchestrator never imports process.stderr directly
   // through this path.
   progressStream?: (line: string) => void;
+  // R-024 (v0.13.1) — operator-supplied per-call tier-budget override
+  // forwarded to the MCP extractor's `tier_budget_ms_override` field on
+  // every `ollama_extract` call during this section's extract run.
+  // Resolved at the CLI surface (cli.ts) via resolveExtractTierBudget;
+  // undefined preserves byte-identical pre-R-024 behavior.
+  tierBudgetMs?: number;
+  // R-024 (v0.13.1) — origin of the active tier-budget value. Surfaces in
+  // the extract receipt as `tier_budget_overridden_by` when source !== 'default'.
+  tierBudgetSource?: ExtractTierBudgetSource;
 }
 
 export interface ExtractClaimsFailure {
@@ -236,6 +392,15 @@ export interface ExtractClaimsSummary {
   // processed for this section. Always present (zero counts when the
   // heuristic extractor ran, since heuristic never invokes the critic).
   criticTally: CriticTally;
+  // R-024 (v0.13.1) — active extract tier-budget in milliseconds. undefined
+  // when no override is in effect (ollama-intern-mcp profile defaults govern,
+  // byte-identical to pre-R-024 behavior). Surfaced in the extract receipt at
+  // `audits/<section>-claim-extract.json` as `tier_budget_ms`.
+  tierBudgetMs?: number;
+  // R-024 (v0.13.1) — origin of the active tier-budget value. Present only
+  // when the operator supplied an override; absent on default runs. Surfaced
+  // in the extract receipt as `tier_budget_overridden_by` when present.
+  tierBudgetOverriddenBy?: Exclude<ExtractTierBudgetSource, 'default'>;
 }
 
 export interface SourceFetchPair {

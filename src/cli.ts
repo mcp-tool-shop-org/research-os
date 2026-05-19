@@ -58,6 +58,11 @@ import {
   resolvePlannerTimeout,
   validatePlannerTimeoutValue,
 } from './synth/prose/types.js';
+import {
+  MAX_EXTRACT_TIER_BUDGET_MS,
+  resolveExtractTierBudget,
+  validateExtractTierBudgetValue,
+} from './claims/types.js';
 import { recoverPack } from './recover/index.js';
 import { audit as runAudit } from './audit/index.js';
 import { freeze as runFreeze } from './freeze/index.js';
@@ -231,6 +236,22 @@ function resolveAutoModeSettings(args: {
 
 export function parsePlannerTimeoutMsArg(value: string): number {
   const r = validatePlannerTimeoutValue(value, 'cli_flag');
+  if (!r.ok) {
+    throw new InvalidArgumentError(r.error);
+  }
+  return r.value;
+}
+
+/**
+ * R-024 (v0.13.1) — commander coercer for `--tier-budget-ms <ms>` on
+ * `claim extract`. Mirrors R-018's parsePlannerTimeoutMsArg in shape:
+ * delegates to the pure validator in src/claims/types.ts so the surface
+ * name + bounds appear verbatim in the error message. Rejects negatives,
+ * zero, unit-suffixed strings, non-numerics, and values above
+ * MAX_EXTRACT_TIER_BUDGET_MS.
+ */
+export function parseExtractTierBudgetMsArg(value: string): number {
+  const r = validateExtractTierBudgetValue(value, 'cli_flag');
   if (!r.ok) {
     throw new InvalidArgumentError(r.error);
   }
@@ -609,16 +630,35 @@ claimCmd
     '--progress',
     'Emit per-source [extract N/M] progress lines to stderr (R-015). stdout (canonical extract output) is unchanged.',
   )
+  .option(
+    '--tier-budget-ms <ms>',
+    `R-024: per-call tier-budget override in milliseconds forwarded to ollama-intern-mcp@>=2.6.0 as tier_budget_ms_override on EVERY ollama_extract call during this section's extract run (the per-window extractor + the per-claim frame critic + the per-rescue-candidate rescue critic). Upper bound ${MAX_EXTRACT_TIER_BUDGET_MS} (safety rail). Default: omitted — ollama-intern-mcp's per-tier profile timeouts govern (byte-identical to pre-R-024). Env-var equivalent: RESEARCH_OS_EXTRACT_TIER_BUDGET_MS. CLI flag wins when both are set.`,
+    parseExtractTierBudgetMsArg,
+  )
   .action(async (section: string, opts) => {
     try {
       const effectiveModel =
         (opts.model as string | undefined) ?? process.env.OLLAMA_INTERN_MODEL ?? undefined;
+      // R-024 — resolve the active extract tier-budget from CLI flag + env var
+      // (precedence: cli_flag > env_var > default). Default returns
+      // `value: undefined` ⇒ ollama-intern-mcp profile defaults govern.
+      const tierBudgetResolved = resolveExtractTierBudget({
+        cliFlagMs: opts.tierBudgetMs as number | undefined,
+        envVar: process.env.RESEARCH_OS_EXTRACT_TIER_BUDGET_MS,
+      });
+      if (!tierBudgetResolved.ok) {
+        process.stderr.write(`research-os: ${tierBudgetResolved.error}\n`);
+        process.exitCode = 2;
+        return;
+      }
       const result = await claimExtract({
         sectionId: section,
         packPath: opts.pack,
         effectiveModel,
         resume: Boolean(opts.resume),
         progress: Boolean(opts.progress),
+        tierBudgetMs: tierBudgetResolved.value,
+        tierBudgetSource: tierBudgetResolved.source,
       });
       process.stdout.write(`claim extraction complete\n`);
       process.stdout.write(`  section:                            ${result.sectionId}\n`);

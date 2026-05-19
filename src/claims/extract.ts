@@ -35,11 +35,13 @@ import {
 import { defaultClaimExtractors, pickClaimExtractor } from './extractors/index.js';
 import { appendRescueLedgerRecord } from './rescue-ledger.js';
 import { ClaimSchema, type Claim } from './schema.js';
-import type {
-  ClaimExtractor,
-  DraftClaim,
-  ExtractClaimsOptions,
-  ExtractClaimsSummary,
+import {
+  formatExtractTierBudgetLogLine,
+  type ClaimExtractor,
+  type DraftClaim,
+  type ExtractClaimsOptions,
+  type ExtractClaimsSummary,
+  type ExtractTierBudgetSource,
 } from './types.js';
 
 // One-time migration suffix applied to a pre-existing claims.jsonl on the
@@ -366,6 +368,30 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       ? options.effectiveModel.trim()
       : undefined;
 
+  // R-024 (v0.13.1) — resolve the active extract tier-budget from
+  // ExtractClaimsOptions. CLI surface (cli.ts) calls resolveExtractTierBudget(...)
+  // and forwards the already-resolved numeric value + source. When options
+  // omit both fields (legacy callers / unit tests), default to undefined /
+  // 'default' which preserves byte-identical pre-R-024 behavior (no
+  // tier_budget_ms_override on toolArgs; ollama-intern-mcp profile defaults
+  // govern).
+  const tierBudgetMs = options.tierBudgetMs;
+  const tierBudgetSource: ExtractTierBudgetSource = options.tierBudgetSource ?? 'default';
+  // R-024 — single-line, grep-friendly stderr summary of the active
+  // tier-budget configuration BEFORE the per-source loop begins. Operators
+  // can `2>&1 | grep tier_budget_ms=` to see what budget was in effect.
+  // Mirrors R-018's `[synth] planner_timeout_ms=…` pattern.
+  process.stderr.write(
+    `${formatExtractTierBudgetLogLine(tierBudgetMs, tierBudgetSource)} section=${options.sectionId}\n`,
+  );
+  // R-024 — propagate the override into the per-source ClaimExtractionInput
+  // only when the operator opted in (source !== 'default'). On the default
+  // path we pass undefined so MCPClaimExtractor omits tier_budget_ms_override
+  // from toolArgs — ollama-intern-mcp's per-tier profile timeouts govern
+  // byte-identically.
+  const tierBudgetMsOverride: number | undefined =
+    tierBudgetSource === 'default' ? undefined : tierBudgetMs;
+
   const claimsPath = join(packPath, 'sections', options.sectionId, 'claims.jsonl');
 
   // v0.8.0 Phase 1 migration: when an existing claims.jsonl is present we
@@ -411,6 +437,13 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
       source_chrome: 0,
       critic_call_failed: 0,
     },
+    // R-024 (v0.13.1) — active tier-budget metadata. tierBudgetMs is omitted
+    // (undefined) on default-path runs so the summary stays minimal; presence
+    // signals "operator opted in" with unambiguous semantics.
+    ...(tierBudgetMs !== undefined ? { tierBudgetMs } : {}),
+    ...(tierBudgetSource !== 'default'
+      ? { tierBudgetOverriddenBy: tierBudgetSource }
+      : {}),
   };
 
   // v0.12 Slice 4 (R-015) — partition source IDs into (resume-skipped,
@@ -520,6 +553,11 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
           // extractor short-circuits the LLM critic call on signature
           // mismatch. Optional null when no raw text is available.
           sourceRawText: rawText,
+          // R-024 (v0.13.1) — per-call tier-budget override forwarded to
+          // EVERY ollama_extract call inside the MCP extractor (extractOnePage
+          // + runCritic + runRescueCritic). undefined preserves byte-identical
+          // pre-R-024 behavior. The heuristic extractor ignores this field.
+          tierBudgetMsOverride,
         });
 
         if (!result.ok) {
@@ -724,6 +762,16 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
             ? 'extractor_http_error'
             : 'extractor_other',
     })),
+    // R-024 (v0.13.1) — active extract tier-budget for this run, surfaced in
+    // the receipt at `audits/<section>-claim-extract.json` so post-hoc audit
+    // consumers see what budget governed every ollama_extract call. snake_case
+    // keys match the receipt's existing field convention. Both fields are
+    // omitted on default-path runs (no operator override) so the receipt
+    // shape stays byte-identical to pre-R-024 default extracts.
+    ...(tierBudgetMs !== undefined ? { tier_budget_ms: tierBudgetMs } : {}),
+    ...(tierBudgetSource !== 'default'
+      ? { tier_budget_overridden_by: tierBudgetSource }
+      : {}),
   };
   const auditsDir = join(packPath, 'audits');
   await mkdir(auditsDir, { recursive: true });

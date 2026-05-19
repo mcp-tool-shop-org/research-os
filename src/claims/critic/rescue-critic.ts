@@ -84,6 +84,17 @@ export interface RescueCriticInput {
   peerAsserts: string[];
   /** Operator-selected model override, threaded into ollama_extract. */
   effectiveModel?: string;
+  /**
+   * R-024 (v0.13.1) — per-call tier-budget override forwarded to
+   * ollama-intern-mcp@>=2.6.0 as `tier_budget_ms_override` on this
+   * rescue-critic's ollama_extract call. The rescue critic is the third of
+   * three extract-stage ollama_extract call sites that share the same inner
+   * per-tier budget; covering only some of them would leave the named 15s
+   * TIER_TIMEOUT reproducible at the uncovered site. undefined preserves
+   * byte-identical pre-R-024 behavior (toolArgs omits the field; profile
+   * defaults govern).
+   */
+  tierBudgetMsOverride?: number;
 }
 
 export type RescueCriticResult =
@@ -270,6 +281,12 @@ export function buildRescueCriticToolArgs(
   };
   if (isPresent(input.effectiveModel)) {
     args.model = input.effectiveModel.trim();
+  }
+  // R-024 (v0.13.1) — forward the per-call tier-budget override to the
+  // MCP-side per-tier guardrail. Omitted on default-path runs (preserves
+  // byte-identical pre-R-024 behavior).
+  if (input.tierBudgetMsOverride !== undefined) {
+    args.tier_budget_ms_override = input.tierBudgetMsOverride;
   }
   return args;
 }
