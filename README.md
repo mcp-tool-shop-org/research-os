@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -203,7 +203,55 @@ into every `OllamaInternReviewer` construction in the production review path. Th
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) and the
 [reviewer calibration handbook page](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
 
-## New in v0.13.0 — Finalization-Blocker Triage Arc (R-019 + R-020 D-only + R-021)
+## New in v0.13.1 — R-024 Extract-Stage Tier-Budget Authority (Path C Patch)
+
+v0.13.1 is a single-repair patch on top of v0.13.0. It closes the v0.5 Track-C condition (R-019 wire-up scope gap at the claim extract stage) by extending R-019's tier-budget authority to every `ollama_extract` MCP call made during `claim extract` — the per-window extractor, the per-claim R-011 section-evidence critic, and the per-rescue-candidate R-012 rescue critic. Same architectural shape as R-019's synth-prose coverage. Single-repo patch (research-os only); ollama-intern-mcp@2.6.0's `tier_budget_ms_override` schema field is the unchanged server-side reach.
+
+The release exists because the v0.5 operator-aloneness gate against published `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0` returned **PASS_WITH_CONDITIONS, NOT authorization-grade** (`operator_aloneness_dst_v0.5`). All v0.13 surfaces (R-018 + R-019 + R-020 + R-021) fired live without bug; the defense floor preserved; honest refusal at named failures with documented recovery_actions. But 3 of 8 sources in section 02 (`02-safety-and-economic`) hit the inner 15000ms instant-tier TIER_TIMEOUT during extract with no operator-facing override. R-019 had shipped the analog override for synth prose in v0.13.0; v0.13.1 extends it to the extract stage.
+
+> **R-024 lands the full-coverage tier-budget rule: when extending a tier budget, the budget must reach every LLM call at that stage that can produce the same inner timeout. Partial coverage = mistargeted patch at the call-site-coverage layer.**
+> **R-024 also lands the live-replay test brittleness rule: when a live-replay acceptance test fails for harness reasons (timing, capture, fixture state) rather than mechanism reasons, fix the test harness — do NOT skip, downgrade, or substitute manual artifact inspection.**
+
+The v0.5 disposition is Path D (multi-track triage). v0.13.1 closes Track C. Track A closed in scaffolding (memory-gate hook path whitelist). Track B (source-discovery scaffolding) fires in a separate session after v0.13.1 publishes. v0.6 gate setup follows Track B. Admissibility Slice 1 remains **not authorized** until v0.6 PASS.
+
+### What you can run
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+Precedence: CLI flag > env var > default (omitted; ollama-intern-mcp profile defaults govern). Bounded `[1, 600000]` ms (10-minute upper safety rail). Invalid values fail clearly with a non-zero exit code naming the surface + offending value.
+
+### What's new
+
+**R-024 — extract-stage tier-budget authority across all 3 `ollama_extract` call sites.** The new `--tier-budget-ms <N>` flag on `claim extract` (and matching `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS` env var) forwards an operator-controlled per-call tier-budget override to `ollama-intern-mcp@>=2.6.0` as `tier_budget_ms_override` on EVERY `ollama_extract` callTool invocation during the extract run: `MCPClaimExtractor.extractOnePage` (the per-window extractor), `runCritic` (R-011 per-claim section-evidence critic, one call per draft per window), and `runRescueCritic` (R-012 per-rescue-candidate rescue critic on source_content_mismatch drafts). The active budget surfaces in stderr (`[extract] tier_budget_ms=N source=... section=<id>` emitted before the per-source loop), in extract receipt metadata (`tier_budget_ms` + `tier_budget_overridden_by` on `audits/<section>-claim-extract.json`), and in the closed enum `EXTRACT_TIER_BUDGET_SOURCES` (`['default', 'cli_flag', 'env_var']`). Default behavior is byte-identical to v0.13.0 (no flag, no env → profile defaults govern; receipt omits the new fields).
+
+### Architectural note
+
+R-024 mirrors R-019's architecture but at a different stage. R-019 wired the override through `runProseSynthesis` to planner + drafter + verifier (3 synth-prose `ollama_extract` call sites); R-024 wires it through `extract()` orchestrator → `MCPClaimExtractor.extract` → fan-out to extractOnePage + runCritic + runRescueCritic (3 extract-stage `ollama_extract` call sites). The full-coverage tier-budget rule is now a load-bearing doctrine: when extending a tier budget for an operator-facing surface, the Phase B report-back must enumerate every LLM call site at that stage that shares the same inner timeout. Partial coverage produces a MISTARGETED-PATCH at the call-site-coverage layer with the same self-falsifying signature as R-018's wrapper/inner-mechanism MISTARGETED-PATCH: receipt records the override AND the named timeout fires at an uncovered call site in the same artifact.
+
+ZERO ollama-intern-mcp changes. v2.6.0's `tier_budget_ms_override` schema field has been in place since R-019's coordinated release; v0.13.1 supplies the research-os-side extract-stage client wire-up.
+
+### Defense floor preserved
+
+R-024 is an operator-knob addition, not an architectural change. R-002 through R-021 surfaces all untouched. `accepted_claim_floor` remains unwaiveable. Closed enums unchanged (`FailureShape` at 9; `RECOVERY_ACTIONS` at 8; `REGENERATION_REASONS` at 3; `PLANNER_TIMEOUT_SOURCES` at 3; `POLICY_KEYWORDS` at 8; `POLICY_RELEVANT_SOURCE_TYPES` at 1). R-024 adds the new closed enum `EXTRACT_TIER_BUDGET_SOURCES` (3 values) without touching any existing enum. AI recovery advisor prompt template untouched. MCP architecture extended additively. R-010 fallback-cause regex shape preserved. R-015 extract `--resume / --progress` shape preserved (R-024 adds NEW stderr log line + NEW receipt fields; existing ledger format + skip behavior + emission shape unchanged).
+
+Frozen-pack regression byte-identical against v0.3.3 baselines for all four frozen packs — **nineteenth consecutive release** where this holds. 1630 → 1663 vitest passing (+33 R-024 synthetic acceptance + 1 always-on guard; 6 skipped — live-replay tests gated on rig env vars).
+
+### What v0.13.1 does NOT claim
+
+- v1 readiness.
+- v0.6 operator-aloneness gate verdict. v0.6 setup follows R-023 (source-discovery scaffolding); v0.13.1 is the prerequisite for Track-C closure, not the proof.
+- Admissibility Slice 1. Gated on v0.6 PASS.
+- Deferred v0.13.x candidates (F-2 R-009 audit↔extract divergence; F-3 cowork-handoff staleness; F-4 R-017 POLICY_KEYWORDS narrowness).
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release entry.
+
+## Previously: v0.13.0 — Finalization-Blocker Triage Arc (R-019 + R-020 D-only + R-021)
 
 v0.13.0 closes the v0.13 finalization-blocker triage arc opened after the v0.4 rerun against `@mcptoolshop/research-os@0.12.1` returned **PASS_WITH_CONDITIONS, not authorization-grade**, via Path D (multi-blocker triage arc, distinct from Path C named-patch). Three independent finalization blockers at three different pipeline layers; three independent named knobs that, together, unblock synth prose finalization + no_answer_cluster recovery surface + contradict-map auto-mode. The defense floor and coverage-recovery surfaces from v0.10 / v0.11 / v0.12 / v0.12.1 remain intact; no closed-enum changes; no breaking surface changes.
 

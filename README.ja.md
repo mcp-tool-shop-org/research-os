@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,54 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 `--runs <n>`オプションを使用すると、各実行の記録が`<profile>/runs/run-NNN.json`に書き込まれ、集計された記録（中央値に基づいた項目と、再発するエラーの検出を含む）が`<profile>/seeded-v1.{json,md}`に書き込まれます。集計された記録には、`receipt_kind: 'aggregate'`という情報が含まれており、これにより単一実行の記録と区別できます。単一実行モード（`--runs 1`または省略）では、既存の直接書き込みの動作が維持されます。
 
 **再現性のあるレビュー担当者プロファイル** — `research.yaml`の`review_profiles.<name>.reviewer_options`を使用して、`temperature`、`seed`、およびその他のOllamaのサンプリングパラメータを、本番環境のレビュープロセスにおけるすべての`OllamaInternReviewer`の構築に適用します。`hermes-two-pass-deterministic`プロファイルは、組み込みのサンプルとして提供されています。詳細は[`docs/experiment-6-proof.md`](docs/experiment-6-proof.md)と、[レビュー担当者キャリブレーションハンドブック](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/)を参照してください。
+
+## 新機能 v0.13.1 — R-024：抽出ステージにおけるティア・バジェット権限 (Path C パッチ)
+
+v0.13.1 は、v0.13.0 をベースとした単一の修正パッチです。v0.5 Track-C の条件 (R-019 による請求書抽出ステージにおけるワイヤリング範囲のギャップ) を、`claim extract` 中に行われるすべての `ollama_extract` MCP 呼び出しに対して、R-019 のティア・バジェット権限を拡張することで修正します。これは、ウィンドウごとの抽出器、請求書ごとの R-011 セクション・エビデンス・クリティック、および救出候補ごとの R-012 救出クリティックに適用されます。アーキテクチャは、R-019 のシンセティック・プローズのカバー範囲と同様です。シングルリポジトリのパッチ (research-os のみ)。`ollama-intern-mcp@2.6.0` の `tier_budget_ms_override` スキーマフィールドが、変更されていないサーバー側の設定です。
+
+このリリースは、v0.5 の「オペレーターの単独運用」の検証が、公開されている `@mcptoolshop/research-os@0.13.0` と `ollama-intern-mcp@2.6.0` に対して **PASS_WITH_CONDITIONS (条件付きで合格) を返し、完全な権限を与えなかった** (`operator_aloneness_dst_v0.5`) ために存在します。すべての v0.13 の機能 (R-018 + R-019 + R-020 + R-021) は、バグなしで正常に動作し、防御機能は維持され、問題が発生した場合は、事前に文書化された復旧手順に従って適切に処理されました。しかし、セクション 02 (`02-safety-and-economic`) の 8 つのソースのうち 3 つが、抽出処理中にオペレーターによるオーバーライドなしで、内部の 15000ms のインスタント・ティアのタイムアウト (TIER_TIMEOUT) に達しました。R-019 は、v0.13.0 でシンセティック・プローズのための同様のオーバーライドを導入しました。v0.13.1 は、これを抽出ステージに拡張します。
+
+> **R-024 は、完全なカバー範囲を持つティア・バジェットルールを実装します。ティア・バジェットを拡張する場合、そのステージで同じ内部タイムアウトを引き起こす可能性のあるすべての LLM 呼び出しに、バジェットが適用されなければなりません。部分的なカバー範囲は、呼び出しサイトのカバー範囲層における不適切なパッチを示します。**
+> **R-024 は、ライブ・リプレイテストの脆弱性に関するルールも実装します。ライブ・リプレイの受け入れテストが、メカニズムの問題ではなく、タイミング、キャプチャ、またはテスト環境の状態などの理由で失敗した場合、テスト環境を修正します。テストをスキップしたり、ダウングレードしたり、手動での検査に置き換えたりしないでください。**
+
+v0.5 の処理は、Path D (マルチトラックのトリアージ) です。v0.13.1 は、Track C を修正します。Track A は、メモリ・ゲートのフックパスのホワイトリスト化におけるスキャフォールディングで修正されました。Track B (ソース検出のスキャフォールディング) は、v0.13.1 のリリース後に別のセッションで実行されます。v0.6 のゲート設定は、Track B の後に実施されます。Admissibility Slice 1 は、v0.6 で PASS になるまで **権限なし** です。
+
+### 実行可能なもの
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+優先順位: CLI フラグ > 環境変数 > デフォルト (省略; `ollama-intern-mcp` プロファイルのデフォルトが適用されます)。`[1, 600000]` ms の範囲 (10 分の安全マージン)。無効な値が入力された場合、エラーコードが返され、エラーメッセージには問題のある表面と値が含まれます。
+
+### 新機能
+
+**R-024 — すべての 3 つの `ollama_extract` 呼び出しサイトにおける抽出ステージのティア・バジェット権限。** `claim extract` (および対応する `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS` 環境変数) に新しい `--tier-budget-ms <N>` フラグを追加することで、オペレーターが制御する、各呼び出しごとのティア・バジェットのオーバーライドを、`ollama-intern-mcp@>=2.6.0` に対して、すべての `ollama_extract` 呼び出しツール実行中に `tier_budget_ms_override` として適用します。具体的には、`MCPClaimExtractor.extractOnePage` (ウィンドウごとの抽出器)、`runCritic` (R-011 per-claim section-evidence critic、ドラフトごとにウィンドウごとに 1 回の呼び出し)、および `runRescueCritic` (R-012 per-rescue-candidate rescue critic on source_content_mismatch drafts) です。アクティブなバジェットは、標準エラー出力 (`[extract] tier_budget_ms=N source=... section=<id>` は、ソースごとのループの前に出力されます)、抽出の受信データ (`audits/<section>-claim-extract.json` の `tier_budget_ms` + `tier_budget_overridden_by`)、および、`EXTRACT_TIER_BUDGET_SOURCES` という列挙型 (`['default', 'cli_flag', 'env_var']`) で確認できます。デフォルトの動作は、v0.13.0 と同じです (フラグまたは環境変数が設定されていない場合、プロファイルのデフォルトが適用され、新しいフィールドは受信データに含まれません)。
+
+### アーキテクチャに関する注意
+
+R-024はR-019のアーキテクチャを参考にしていますが、異なる段階にあります。R-019では、オーバーライドが`runProseSynthesis`を通じてプランナー、ドラフター、バリデーター（3つの`ollama_extract`呼び出し箇所）に接続されていました。一方、R-024では、オーバーライドが`extract()`オーケストレーター → `MCPClaimExtractor.extract` → extractOnePage、runCritic、runRescueCritic（3つの抽出段階における`ollama_extract`呼び出し箇所）に接続されています。完全なカバレッジを保証するティア予算ルールは、現在では重要な原則となっています。オペレーターが利用するインターフェースのティア予算を拡張する場合、フェーズBのレポートには、その段階で使用されているすべてのLLM呼び出し箇所を列挙し、同じタイムアウト設定である必要があります。部分的なカバレッジの場合、呼び出し箇所のカバレッジ層で、R-018のラッパー/内部メカニズムと同様の自己矛盾するシグネチャを持つMISTARGETED-PATCHが発生します。この場合、記録にはオーバーライドの情報と、未カバーの呼び出し箇所で発生したタイムアウトの情報の両方が記録されます。
+
+ゼロのollama-intern-mcpの変更点。v2.6.0の`tier_budget_ms_override`スキーマフィールドは、R-019の同時リリース以降に導入されています。v0.13.1では、研究用OS側の抽出段階のクライアント接続が提供されています。
+
+### 防御機能は維持されています
+
+R-024は、アーキテクチャの変更ではなく、オペレーター向けの機能追加です。R-002からR-021までの機能はすべて変更されていません。`accepted_claim_floor`は引き続き変更できません。変更されていないenumは以下の通りです：`FailureShape`（9）、`RECOVERY_ACTIONS`（8）、`REGENERATION_REASONS`（3）、`PLANNER_TIMEOUT_SOURCES`（3）、`POLICY_KEYWORDS`（8）、`POLICY_RELEVANT_SOURCE_TYPES`（1）。R-024では、既存のenumに影響を与えずに、新しいenum `EXTRACT_TIER_BUDGET_SOURCES`（3つの値）が追加されています。AIによる回復アドバイザーのプロンプルトemplateは変更されていません。MCPのアーキテクチャは、追加的な機能が組み込まれています。R-010のフォールバック原因の正規表現の形状は維持されています。R-015の抽出における`--resume / --progress`の形状も維持されています（R-024では、新しいstderrログ行と新しいレシートフィールドが追加されます。既存のログ形式、スキップ動作、および出力形状は変更されていません）。
+
+フローズンパックの回帰テストは、すべての4つのフローズンパックにおいて、v0.3.3のベースラインとバイト単位で完全に一致しています。これは、**19回目の連続リリース**における同様の結果です。1630 → 1663（vitestの合格数：+33。R-024による合成的な合格と、常に有効なガードによるもの。スキップされたテストは6。ライブリプレイテストは、環境変数によって制御されます）。
+
+### v0.13.1で主張されていないこと
+
+- v1の対応状況。
+- v0.6のオペレーター単独での動作の検証結果。v0.6の設定はR-023（ソース発見のための基盤）に従います。v0.13.1は、Track-Cの完了の前提条件であり、その証明ではありません。
+- Admissibility Slice 1の対応状況。v0.6の合格を条件としています。
+- 延期されたv0.13.xの候補（F-2：R-009の監査↔抽出の乖離；F-3：共同作業の引き継ぎの遅延；F-4：R-017の`POLICY_KEYWORDS`の範囲の狭さ）。
+
+詳細については、[CHANGELOG.md](CHANGELOG.md)を参照してください。
 
 ## v0.13.0の新機能 — 最終化ブロック解除トライアル（R-019 + R-020 (Dのみ) + R-021）
 

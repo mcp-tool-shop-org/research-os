@@ -4,6 +4,83 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-05-19 — R-024 Extract-Stage Tier-Budget Authority (Path C Patch)
+
+v0.13.1 is a single-repair patch on top of v0.13.0. It closes the v0.5 Track-C condition (R-019 wire-up scope gap at the claim extract stage) by extending R-019's tier-budget authority to every `ollama_extract` MCP call made during `claim extract` — the per-window extractor, the per-claim R-011 section-evidence critic, and the per-rescue-candidate R-012 rescue critic. Same architectural shape as R-019's synth-prose coverage (planner + drafter + verifier). Single-repo patch (research-os only); ollama-intern-mcp@2.6.0's `tier_budget_ms_override` schema field is the unchanged server-side reach.
+
+The release exists because the v0.5 operator-aloneness gate (`operator_aloneness_dst_v0.5` against published `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0`) returned **PASS_WITH_CONDITIONS, NOT authorization-grade**. Three tracks of repair were identified: Track A (memory-gate hook scope; closed as R-022 in scaffolding), Track B (operator-side source coverage; opens as R-023 in v0.6 scaffolding), and Track C (this release — R-024). On the v0.5 operator-run, 3 of 8 sources in section 02 (`02-safety-and-economic`) hit the inner 15000ms instant-tier TIER_TIMEOUT during extract with no operator-facing override. R-019 had shipped the analog override for synth prose in v0.13.0; v0.13.1 extends it to the extract stage.
+
+> **R-024 lands the full-coverage tier-budget rule: when extending a tier budget, the budget must reach every LLM call at that stage that can produce the same inner timeout. Partial coverage = mistargeted patch at the call-site-coverage layer; the named timeout reappears at the uncovered call site.**
+> **R-024 also lands the live-replay test brittleness rule: when a live-replay acceptance test fails for harness reasons (timing, capture, fixture state) rather than mechanism reasons, fix the test harness — do NOT skip, downgrade, or substitute manual artifact inspection.**
+
+The v0.5 disposition is Path D (multi-track triage). v0.13.1 closes Track C. R-022 closed in scaffolding (memory-gate hook path whitelist exemption). R-023 fires in a separate session after v0.13.1 publishes. v0.6 gate setup follows R-023. Admissibility Slice 1 remains **NOT authorized** until v0.6 PASS.
+
+### Added
+
+#### R-024 — Extract-stage tier-budget authority (single slice)
+
+- **`research-os claim extract <section> --tier-budget-ms <N>`** (R-024) — operator-controllable per-call tier-budget override for the claim extract stage. Forwarded to `ollama-intern-mcp@>=2.6.0` as `tier_budget_ms_override` on EVERY `ollama_extract` callTool invocation during this section's extract run. Bounded `[1, 600000]` ms (10-minute upper safety rail; mirrors R-018's `MAX_PLANNER_TIMEOUT_MS`).
+- **`RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=<N>` env var** (R-024) — equivalent override surface. Precedence: cli_flag > env_var > default (mirrors R-018's resolver shape).
+- **`EXTRACT_TIER_BUDGET_SOURCES` closed enum** (R-024, `src/claims/types.ts`) — `['default', 'cli_flag', 'env_var']`. Kept separate from R-018's `PLANNER_TIMEOUT_SOURCES` so the claims layer does not import from synth/prose.
+- **`[extract] tier_budget_ms=<N|default> source=<...> section=<id>` stderr log line** (R-024, `src/claims/extract.ts`) — emitted before the per-source loop. Operators can `2>&1 | grep tier_budget_ms=` to see what budget was in effect. Mirrors R-018's `[synth] planner_timeout_ms=…` pattern.
+- **Extract receipt metadata fields** (R-024, `audits/<section>-claim-extract.json`) — `tier_budget_ms` (always populated when an override is in effect) + `tier_budget_overridden_by` (present only on override; absent on default runs). Both fields omitted on default-path runs preserving byte-identical pre-R-024 receipt shape.
+- **Three extract-stage `ollama_extract` call sites wired in full** (R-024):
+  - `MCPClaimExtractor.extractOnePage` in `src/claims/extractors/mcp.ts` — per-window extractor (primary path)
+  - `runCritic` in `src/claims/critic/mcp-critic.ts` — R-011 per-claim section-evidence critic (one call per draft per window)
+  - `runRescueCritic` in `src/claims/critic/rescue-critic.ts` — R-012 per-rescue-candidate rescue critic on source_content_mismatch drafts
+  - Orchestrator in `src/claims/extract.ts` derives the override from `ExtractClaimsOptions`, threads through `ClaimExtractionInput.tierBudgetMsOverride` into `MCPClaimExtractor.extract`, which fans out to all 3 call sites.
+
+### Changed
+
+- **`ExtractClaimsOptions` extended** (R-024, `src/claims/types.ts`) — adds optional `tierBudgetMs?: number` + `tierBudgetSource?: ExtractTierBudgetSource`. Resolved at the CLI surface via `resolveExtractTierBudget`; undefined preserves byte-identical pre-R-024 behavior.
+- **`ClaimExtractionInput` extended** (R-024, `src/claims/types.ts`) — adds optional `tierBudgetMsOverride?: number`. The heuristic extractor ignores this field; the MCP extractor forwards it to every `ollama_extract` call.
+- **`ExtractClaimsSummary` extended** (R-024, `src/claims/types.ts`) — adds optional `tierBudgetMs?: number` + `tierBudgetOverriddenBy?: Exclude<ExtractTierBudgetSource, 'default'>` matching the receipt-JSON shape.
+- **`CriticInput` + `RescueCriticInput` extended** (R-024, `src/claims/critic/{mcp-critic,rescue-critic}.ts`) — both gain optional `tierBudgetMsOverride?: number`; both `buildCriticToolArgs` + `buildRescueCriticToolArgs` forward it inline into the `ollama_extract` toolArgs.
+
+### Architectural note (logged for downstream consumers)
+
+R-024's mechanism crosses the research-os ↔ ollama-intern-mcp boundary. Research-os now passes `tier_budget_ms_override` in three distinct call-site flavors of the `ollama_extract` schema (extractor + critic + rescue critic); ollama-intern-mcp@2.6.0 honors it at `src/guardrails/timeouts.ts:61` for every tier visited (the `effectiveTimeouts` record applies to both the initial workhorse tier AND the instant fallback tier). The plumbing has been in place since v2.6.0 / v0.13.0 R-019; v0.13.1 supplies the research-os-side wire-up for the extract stage that R-019 left scoped to synth prose only. ZERO ollama-intern-mcp changes in this release.
+
+The full-coverage tier-budget rule is now a load-bearing doctrine (captured in `memory/feedback_synthetic_vs_live_acceptance.md`): when extending a tier budget for an operator-facing surface, the Phase B report-back MUST enumerate every LLM call site at that stage that shares the same inner timeout. R-019 covered all 3 synth-prose call sites; R-024 covers all 3 extract-stage call sites. Partial coverage produces a MISTARGETED-PATCH at the call-site-coverage layer, distinct from R-018's wrapper/inner-mechanism MISTARGETED-PATCH but with the same self-falsifying signature: receipt records the override AND the named timeout fires at an uncovered call site in the same artifact.
+
+### Preserved
+
+- **`pack freeze` semantics unchanged.** R-024 fires only during live claim extract. 4-pack regression byte-identical against v0.3.3 baselines — **nineteenth consecutive release** where this holds.
+- **`pack publish` semantics unchanged.** No new publish gates.
+- **All v0.10 + v0.11 + v0.12 + v0.12.1 + v0.13.0 defenses preserved.** R-002 through R-021 surfaces all untouched.
+- **`accepted_claim_floor` remains unwaiveable.** No recover / advisor / verifier rule changes.
+- **AI advisor prompt template untouched.** No `recover/prompt.ts` changes.
+- **R-010 fallback-cause regex shape preserved.** No error message shape changes.
+- **R-015 `claim extract --resume / --progress` shape preserved.** R-024 adds NEW stderr log line + NEW receipt fields; existing ledger format + skip behavior + emission shape unchanged.
+- **R-018 + R-019 + R-020 + R-021 surfaces all unchanged.** R-024 touches no synth/prose/* files; no contradictions/* files; no recover/* files.
+- **Closed enums unchanged.** `FailureShape` (9), `RECOVERY_ACTIONS` (8), `REGENERATION_REASONS` (3), `PLANNER_TIMEOUT_SOURCES` (3), `POLICY_KEYWORDS` (8), `POLICY_RELEVANT_SOURCE_TYPES` (1) unchanged. R-024 adds a new closed enum `EXTRACT_TIER_BUDGET_SOURCES` (3 values) in `src/claims/types.ts`.
+- **MCP architecture (existing tool call shape) extended additively.** `tier_budget_ms_override` on extract-stage callers is optional; pre-R-024 callers byte-identical.
+
+### Not shipped (deferred)
+
+- R-023 source-discovery scaffolding — separate session after v0.13.1 publishes (gate-scaffolding scope, not research-os product code).
+- v0.6 gate setup on project-relevant topic — after R-023 lands.
+- F-2 R-009 audit/extract divergence on Cohen ScienceDirect card — v0.13.x candidate
+- F-3 cowork-handoff staleness after review — v0.13.x candidate
+- F-4 R-017 POLICY_KEYWORDS too narrow — v0.13.x candidate
+
+### Test counts and regression
+
+- **vitest:** 1630 (v0.13.0) → 1663 (v0.13.1); +33 across one slice (32 synthetic R-024 acceptance tests + 1 always-on live-replay environment guard); 6 skipped (4 v0.13 live replays + 2 new R-024 live replays gated on `R024_LIVE_REPLAY=1`)
+- **4-pack regression:** nineteenth consecutive byte-identical run against v0.3.3 baselines (`comfyui-workflow-durability` / `godot-export-runtime-durability` / `research-os-self-dogfood` / `xrpl-creator-token-durability`)
+- **typecheck + lint:** clean
+- **Live replay acceptance (v0.5 section 02 fixture; v4 canonical, 242s with `--resume` narrowing to the 3 v0.5-FAILED sources):**
+  - R-024.LIVE.1 inner 15000ms TIER_TIMEOUT does NOT fire under override — verified (no failure body contains `budget=15000ms`; today's NDJSON shows zero `timeout_ms:15000` events from this run)
+  - R-024.LIVE.2 override reached MCP-side control point — verified (receipt records `tier_budget_ms=60000` + `tier_budget_overridden_by=cli_flag`; 16 post-runStartedAt timeout events on `ollama_extract`, ALL at `timeout_ms:60000` across both `workhorse` and `instant` tiers)
+  - R-024.LIVE.3 R-018 + R-019 surfaces preserved — verified (smoke imports + full-suite pass)
+  - R-024.LIVE.4 default behavior byte-identical — verified structurally (receipt-shape preservation; gated test exists behind `R024_LIVE_DEFAULT_PATH=1` for operator-rig sweep)
+
+### Operator upgrade note
+
+The v0.13.1 release is non-breaking for pre-v0.13.1 callers. The two new operator surfaces (R-024's `--tier-budget-ms` flag + `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS` env var) are both additive; default behavior with no flag and no env var is byte-identical to v0.13.0. Existing scripts and CI pipelines continue to work unchanged.
+
+For the R-024 override to actually reach the inner MCP-side per-tier control point on extract calls, `ollama-intern-mcp` must be at version 2.6.0 or later (already required by v0.13.0 R-019). Pre-2.6.0 versions silently discard the new override field (graceful degradation; profile defaults govern as before).
+
 ## [0.13.0] - 2026-05-17 — Finalization-Blocker Triage Arc (R-019 + R-020 D-only + R-021)
 
 v0.13.0 closes the v0.13 finalization-blocker triage arc opened after the v0.4 rerun against npm `@mcptoolshop/research-os@0.12.1` returned **PASS_WITH_CONDITIONS, NOT authorization-grade**, via Path D (multi-blocker triage arc, distinct from Path C named-patch). Three independent finalization blockers were identified at three different pipeline layers; this release ships three independent named knobs that, together, unblock synth prose finalization + no_answer_cluster recovery surface + contradict-map auto-mode. The defense floor and coverage-recovery surfaces from v0.10 / v0.11 / v0.12 / v0.12.1 remain intact; no closed-enum changes; no breaking surface changes.

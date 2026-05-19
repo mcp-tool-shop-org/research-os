@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,54 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 Quando `--runs <n>` é usado, os relatórios de cada execução são gravados em `<perfil>/runs/run-NNN.json` e um relatório agregado (com critérios baseados na mediana e detecção de falhas recorrentes) é gravado em `<perfil>/seeded-v1.{json,md}`. O relatório agregado contém `receipt_kind: 'aggregate'` para diferenciá-lo dos relatórios de execução única. O modo de execução única (`--runs 1` ou omitido) preserva o comportamento de gravação direta existente.
 
 **Perfis de revisor determinísticos** — utilize `review_profiles.<nome>.reviewer_options` em `research.yaml` para incluir os parâmetros de amostragem do Ollama, como `temperature` e `seed`, em cada instância de `OllamaInternReviewer` no fluxo de revisão de produção. O perfil `hermes-two-pass-deterministic` é fornecido como um exemplo integrado. Consulte [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) e a [página do manual de calibração do revisor](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
+## Nova versão v0.13.1 — Autoridade de Orçamento de Nível para a Etapa de Extração (Correção R-024, Caminho C)
+
+A versão v0.13.1 é uma correção pontual aplicada sobre a versão v0.13.0. Ela corrige a condição do Rastreamento C da versão v0.5 (lacuna na configuração do escopo do R-019 na etapa de extração de reclamações) estendendo a autoridade de orçamento de nível do R-019 para todas as chamadas `ollama_extract` feitas durante a "extração de reclamações" — o extrator por janela, o crítico de evidências de seção por reclamação (R-011) e o crítico de resgate por candidato (R-012). Possui a mesma estrutura arquitetural da cobertura de texto sintético do R-019. É uma correção para um único repositório (apenas para o sistema operacional de pesquisa); o campo de esquema `tier_budget_ms_override` do `ollama-intern-mcp@2.6.0` representa o alcance do servidor que não foi alterado.
+
+Esta versão foi lançada porque o mecanismo de segurança da versão v0.5, que impede a publicação de versões do `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0`, retornou **PASS_WITH_CONDITIONS, NÃO autorização** (`operator_aloneness_dst_v0.5`). Todas as funcionalidades da versão v0.13 (R-018 + R-019 + R-020 + R-021) foram testadas e funcionaram corretamente; a camada de proteção foi mantida; houve recusa explícita em caso de falhas, com ações de recuperação documentadas. No entanto, 3 de 8 fontes na seção 02 (`02-segurança-e-economia`) atingiram o limite de tempo interno de 15000ms (TIER_TIMEOUT) durante a extração, sem a possibilidade de anulação por parte do operador. A versão v0.13.0 já havia introduzido a sobreposição para texto sintético; a versão v0.13.1 estende essa funcionalidade para a etapa de extração.
+
+> **R-024 implementa a regra de orçamento de nível com cobertura total: ao estender um orçamento de nível, o orçamento deve atingir todas as chamadas de LLM nessa etapa que possam produzir o mesmo limite de tempo interno. Cobertura parcial = correção mal direcionada na camada de cobertura da chamada.**
+> **R-024 também implementa a regra de fragilidade do teste de repetição em tempo real: quando um teste de aceitação de repetição em tempo real falha devido a razões relacionadas ao ambiente de teste (tempo, captura, estado da configuração) e não devido a problemas no mecanismo, corrija o ambiente de teste — NÃO ignore, reduza a versão ou substitua pela inspeção manual de artefatos.**
+
+A avaliação da versão v0.5 segue o Caminho D (triagem de múltiplos níveis). A versão v0.13.1 fecha o Rastreamento C. O Rastreamento A foi fechado na fase de preparação (lista de permissões para o hook de controle de memória). O Rastreamento B (preparação para descoberta de fontes) será executado em uma sessão separada após a publicação da versão v0.13.1. A configuração da porta v0.6 seguirá o Rastreamento B. A "Fatia de Admissibilidade" 1 permanece **não autorizada** até a aprovação da versão v0.6.
+
+### O que você pode executar
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+Precedência: Flag da linha de comando > variável de ambiente > padrão (omitido; os perfis padrão do `ollama-intern-mcp` são aplicados). Valor limitado a `[1, 600000]` ms (limite de segurança máximo de 10 minutos). Valores inválidos resultam em uma falha clara com um código de saída diferente de zero, indicando a superfície e o valor incorreto.
+
+### O que há de novo
+
+**R-024 — Autoridade de orçamento de nível para a etapa de extração em todos os 3 locais de chamada `ollama_extract`.** A nova flag `--tier-budget-ms <N>` na opção "extração de reclamações" (e a variável de ambiente correspondente `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS`) encaminha uma sobreposição de orçamento de nível controlada pelo operador para cada chamada para `ollama-intern-mcp@>=2.6.0` como `tier_budget_ms_override` em TODAS as chamadas da ferramenta `ollama_extract` durante a execução da extração: `MCPClaimExtractor.extractOnePage` (o extrator por janela), `runCritic` (o crítico de evidências de seção por reclamação R-011, uma chamada por rascunho por janela) e `runRescueCritic` (o crítico de resgate por candidato R-012 para rascunhos com incompatibilidade de conteúdo da fonte). O orçamento ativo é exibido no stderr (`[extract] tier_budget_ms=N source=... section=<id>` exibido antes do loop por fonte), nos metadados do recebimento da extração (`tier_budget_ms` + `tier_budget_overridden_by` em `audits/<section>-claim-extract.json`) e no enum fechado `EXTRACT_TIER_BUDGET_SOURCES` (`['default', 'cli_flag', 'env_var']`). O comportamento padrão é idêntico ao da versão v0.13.0 (sem flag, sem variável de ambiente → os perfis padrão são aplicados; o recebimento omite os novos campos).
+
+### Observação arquitetural
+
+R-024 espelha a arquitetura de R-019, mas em um estágio diferente. R-019 conecta a função de "override" através de `runProseSynthesis` para o planejador + redator + verificador (3 pontos de chamada `ollama_extract` para a síntese de texto); R-024 conecta através do orquestrador `extract()` → `MCPClaimExtractor.extract` → distribuição para `extractOnePage` + `runCritic` + `runRescueCritic` (3 pontos de chamada `ollama_extract` para a extração). A regra de orçamento de nível de cobertura total é agora um princípio fundamental: ao estender um orçamento de nível para uma interface voltada para o usuário, o relatório da Fase B deve listar todos os pontos de chamada de LLM naquele estágio que compartilham o mesmo tempo limite interno. Uma cobertura parcial resulta em um "MISTARGETED-PATCH" na camada de cobertura do ponto de chamada, com a mesma assinatura auto-contraditória do "MISTARGETED-PATCH" do wrapper/mecanismo interno do R-018: o registro registra a função de "override" E o tempo limite especificado é acionado em um ponto de chamada não coberto no mesmo artefato.
+
+Nenhuma alteração interna relacionada ao "ollama-mcp". O campo de esquema `tier_budget_ms_override` da versão v2.6.0 existe desde a versão coordenada do R-019; a versão v0.13.1 fornece a conexão do cliente para a extração na camada de pesquisa do sistema operacional.
+
+### Camada de defesa preservada
+
+R-024 é uma adição de um parâmetro configurável para o usuário, e não uma mudança arquitetural. As versões de R-002 a R-021 permanecem inalteradas. O valor mínimo aceitável (`accepted_claim_floor`) permanece inalterado. Enumerações fechadas inalteradas (`FailureShape` com 9; `RECOVERY_ACTIONS` com 8; `REGENERATION_REASONS` com 3; `PLANNER_TIMEOUT_SOURCES` com 3; `POLICY_KEYWORDS` com 8; `POLICY_RELEVANT_SOURCE_TYPES` com 1). R-024 adiciona a nova enumeração fechada `EXTRACT_TIER_BUDGET_SOURCES` (com 3 valores) sem modificar nenhuma enumeração existente. O modelo de prompt do consultor de recuperação de IA permanece inalterado. A arquitetura do MCP foi estendida de forma aditiva. A forma de expressão regular da causa de fallback do R-010 foi preservada. A forma de extração com `--resume / --progress` do R-015 foi preservada (R-024 adiciona uma nova linha de log no stderr + novos campos no registro; o formato do registro existente + o comportamento de ignorar + a forma de emissão permanecem inalterados).
+
+A regressão do pacote congelado é byte a byte idêntica aos pontos de referência da versão v0.3.3 para todos os quatro pacotes congelados — **19ª versão consecutiva** em que isso ocorre. 1630 → 1663 testes vitest aprovados (+33 aceitações sintéticas do R-024 + 1 guardião sempre ativo; 6 ignorados — testes de reprodução em tempo real dependem das variáveis de ambiente do sistema).
+
+### O que a versão v0.13.1 NÃO afirma:
+
+- Prontidão para a versão 1.
+- Decisão de que a versão 0.6 é autossuficiente para o usuário. A configuração da versão 0.6 segue o R-023 (estrutura de descoberta de fontes); a versão 0.13.1 é um pré-requisito para a conclusão do "Track-C", e não uma prova.
+- Admissibilidade da Fatia 1. Depende da aprovação da versão 0.6.
+- Candidatos adiados para a versão 0.13.x (F-2 divergência de auditoria↔extração do R-009; F-3 obsolescência da transferência de trabalho colaborativo; F-4 restrição de `POLICY_KEYWORDS` do R-017).
+
+Consulte [CHANGELOG.md](CHANGELOG.md) para a entrada completa da versão.
 
 ## Novidades na v0.13.0 — Finalização: Triagem de Bloqueadores (R-019 + R-020 (apenas D) + R-021)
 

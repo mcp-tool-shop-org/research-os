@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,54 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 Lorsque l'option `--runs <n>` est utilisée, les rapports pour chaque exécution sont écrits dans `<profile>/runs/run-NNN.json`, et un rapport agrégé (avec des critères basés sur la médiane et la détection des défaillances récurrentes) est écrit dans `<profile>/seeded-v1.{json,md}`. Le rapport agrégé contient `receipt_kind: 'aggregate'` pour le distinguer des rapports d'une seule exécution. Le mode d'une seule exécution (`--runs 1` ou omis) conserve le comportement d'écriture directe existant.
 
 **Profils d'évaluateurs déterministes** — utilisez `review_profiles.<name>.reviewer_options` dans `research.yaml` pour intégrer les paramètres d'échantillonnage d'Ollama tels que `temperature`, `seed`, et d'autres, dans chaque instance de `OllamaInternReviewer` dans le processus de révision en production. Le profil `hermes-two-pass-deterministic` est fourni comme exemple. Consultez [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) et la [page du manuel de calibrage des évaluateurs](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
+## New in v0.13.1 — R-024 : Autorisation du budget par niveau pour l'étape d'extraction (correctif du chemin C)
+
+La version 0.13.1 est un correctif unique appliqué à la version 0.13.0. Elle corrige la condition v0.5 du chemin C (R-019 : correction d'un manque de couverture dans la phase d'extraction des données) en étendant l'autorisation du budget par niveau de R-019 à chaque appel de `ollama_extract` effectué pendant l'extraction des données : l'extracteur par fenêtre, le critique de section-preuve par demande (R-011) et le critique de secours par candidat de secours (R-012). La structure architecturale est la même que celle de la couverture de génération de texte de R-019. Ce correctif concerne uniquement le dépôt "research-os" ; le champ `tier_budget_ms_override` du schéma `ollama-intern-mcp@2.6.0` représente la portée côté serveur qui n'a pas été modifiée.
+
+Cette version est disponible car la validation v0.5, qui vérifie l'absence d'opérateur pour `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0`, a renvoyé **PASS_WITH_CONDITIONS, et non une autorisation complète** (`operator_aloneness_dst_v0.5`). Toutes les fonctionnalités de la version 0.13 (R-018 + R-019 + R-020 + R-021) ont fonctionné correctement sans bug ; les mécanismes de sécurité ont été préservés ; les échecs ont été signalés de manière claire avec des actions de récupération documentées. Cependant, 3 des 8 sources de la section 02 (`02-safety-and-economic`) ont dépassé le délai de 15000 ms défini pour le niveau d'exécution instantané (TIER_TIMEOUT) pendant l'extraction, sans qu'il y ait de surcharge imposée par l'opérateur. La version 0.13.0 avait introduit une surcharge analogue pour la génération de texte ; la version 0.13.1 l'étend à l'étape d'extraction.
+
+> **R-024 implémente la règle de budget par niveau couvrant l'ensemble du processus : lorsqu'un budget par niveau est étendu, ce budget doit s'appliquer à tous les appels d'API LLM à cette étape qui peuvent entraîner le même délai d'expiration interne. Une couverture partielle signifie qu'il s'agit d'un correctif mal ciblé au niveau de la couverture des appels.**
+> **R-024 implémente également la règle de robustesse des tests de relecture en direct : lorsqu'un test d'acceptation de relecture en direct échoue pour des raisons liées à l'environnement (synchronisation, capture, état de l'environnement) plutôt qu'à des problèmes de mécanisme, corrigez l'environnement de test — NE PAS ignorer, dégrader ou remplacer par une inspection manuelle des artefacts.**
+
+La disposition pour la version 0.5 est le chemin D (triage multi-parcours). La version 0.13.1 ferme le chemin C. Le chemin A a été fermé lors de la phase de mise en place (liste blanche des points de contrôle de la mémoire). Le chemin B (mise en place de la découverte des sources) sera traité lors d'une session distincte après la publication de la version 0.13.1. La configuration de la validation v0.6 suivra le chemin B. L'admissibilité de la tranche 1 reste **non autorisée** jusqu'à la validation de la version 0.6.
+
+### Ce que vous pouvez exécuter
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+Priorité : Drapeau de la ligne de commande > variable d'environnement > valeur par défaut (non spécifiée ; les profils `ollama-intern-mcp` définissent les valeurs par défaut). Limité à `[1, 600000]` ms (limite de sécurité maximale de 10 minutes). Les valeurs non valides génèrent une erreur claire avec un code de sortie non nul, indiquant la fonctionnalité concernée et la valeur incorrecte.
+
+### Nouveautés
+
+**R-024 — Autorisation du budget par niveau pour l'étape d'extraction, couvrant les 3 sites d'appel de `ollama_extract`.** Le nouveau drapeau `--tier-budget-ms <N>` dans la commande `claim extract` (et la variable d'environnement correspondante `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS`) transmet une surcharge de budget par niveau contrôlée par l'opérateur à `ollama-intern-mcp@>=2.6.0` sous la forme de `tier_budget_ms_override` pour CHAQUE appel de fonction `ollama_extract`Tool pendant l'exécution de l'extraction : `MCPClaimExtractor.extractOnePage` (l'extracteur par fenêtre), `runCritic` (le critique de section-preuve par demande R-011, un appel par brouillon par fenêtre) et `runRescueCritic` (le critique de secours par candidat de secours R-012 pour les brouillons avec un décalage du contenu source). Le budget actif est affiché dans la sortie d'erreur standard (`stderr`) (`[extract] tier_budget_ms=N source=... section=<id>` affiché avant la boucle par source), dans les métadonnées de réception de l'extraction (`tier_budget_ms` + `tier_budget_overridden_by` dans `audits/<section>-claim-extract.json`), et dans l'énumération fermée `EXTRACT_TIER_BUDGET_SOURCES` (`['default', 'cli_flag', 'env_var']`). Le comportement par défaut est identique à celui de la version 0.13.0 (sans drapeau ni variable d'environnement, les profils définissent les valeurs par défaut ; la réception omet les nouveaux champs).
+
+### Note architecturale
+
+R-024 reprend l'architecture de R-019, mais à un stade différent. R-019 connecte la fonction de contournement via `runProseSynthesis` vers le planificateur + le rédacteur + le vérificateur (3 points d'appel `ollama_extract` pour la synthèse textuelle) ; R-024 la connecte via `extract()` (orchestrateur) → `MCPClaimExtractor.extract` → distribution vers `extractOnePage` + `runCritic` + `runRescueCritic` (3 points d'appel `ollama_extract` pour l'extraction). La règle du budget de niveau de couverture complète est désormais un principe fondamental : lors de l'extension du budget d'un niveau pour une interface utilisateur, le rapport de la phase B doit énumérer tous les points d'appel de modèle de langage (LLM) à ce stade qui partagent le même délai d'attente interne. Une couverture partielle génère un correctif "MISTARGETED" au niveau de la couverture des points d'appel, avec la même signature auto-contradictoire que le correctif "MISTARGETED" du wrapper/mécanisme interne de R-018 : l'enregistrement indique à la fois le contournement et le délai d'attente spécifié, qui se déclenche à un point d'appel non couvert dans le même artefact.
+
+Aucun changement concernant `ollama-intern-mcp`. Le champ `tier_budget_ms_override` du schéma de la version 2.6.0 est en place depuis la version coordonnée de R-019 ; la version 0.13.1 fournit la configuration côté système de recherche pour le client de l'étape d'extraction.
+
+### Niveau de sécurité maintenu
+
+R-024 est une simple modification de paramètre pour l'utilisateur, et non une modification de l'architecture. Les éléments de R-002 à R-021 sont inchangés. `accepted_claim_floor` reste immuable. Les énumérations fermées restent inchangées (`FailureShape` à 9 ; `RECOVERY_ACTIONS` à 8 ; `REGENERATION_REASONS` à 3 ; `PLANNER_TIMEOUT_SOURCES` à 3 ; `POLICY_KEYWORDS` à 8 ; `POLICY_RELEVANT_SOURCE_TYPES` à 1). R-024 ajoute la nouvelle énumération fermée `EXTRACT_TIER_BUDGET_SOURCES` (3 valeurs) sans modifier aucune énumération existante. Le modèle de requête pour le conseiller de récupération de l'IA est inchangé. L'architecture de MCP est étendue de manière additive. La forme d'expression régulière pour la cause de repli de R-010 est conservée. La forme de `extract --resume / --progress` de R-015 est conservée (R-024 ajoute une nouvelle ligne de journalisation `stderr` et de nouveaux champs d'enregistrement ; le format de journal existant, le comportement de saut et la forme d'émission restent inchangés).
+
+La régression du paquet figé est identique en octets aux versions de référence de la version 0.3.3 pour les quatre paquets figés — **19e version consécutive** où cela est vrai. 1630 → 1663 tests `vitest` réussis (+33 acceptations synthétiques de R-024 + 1 garde toujours activée ; 6 tests ignorés — tests de relecture en direct conditionnés par les variables d'environnement du serveur).
+
+### Ce que la version 0.13.1 NE prétend PAS :
+
+- Prêt pour la version 1.
+- Verdict de la porte d'entrée de l'indépendance de l'opérateur pour la version 0.6. La configuration de la version 0.6 suit R-023 (infrastructure de découverte de la source) ; la version 0.13.1 est une condition préalable à la clôture de la voie C, et non une preuve.
+- Tranche d'admissibilité 1. Conditionnée par le passage de la version 0.6.
+- Candidats différés de la version 0.13.x (F-2 divergence de l'audit↔extraction de R-009 ; F-3 obsolescence de la transmission collaborative ; F-4 étroitesse de `POLICY_KEYWORDS` de R-017).
+
+Consultez [CHANGELOG.md](CHANGELOG.md) pour l'intégralité de l'annonce de la version.
 
 ## Nouvelle version v0.13.0 — Finalisation : Tri par arc bloquant (R-019 + R-020 uniquement pour le chemin D + R-021)
 

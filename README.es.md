@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -188,6 +188,54 @@ Cuando se utiliza `--runs <n>`, los informes de cada ejecución se escriben en `
 `research.yaml` para incluir los parámetros de muestreo de Ollama, como `temperature` y `seed`, en cada instancia de `OllamaInternReviewer` en la ruta de revisión de producción. El perfil `hermes-two-pass-deterministic` se proporciona como un ejemplo integrado. Consulte
 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) y la
 [página del manual de calibración de revisores](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/).
+
+## New in v0.13.1 — R-024: Autorización de presupuesto por nivel para la etapa de extracción (parche de la ruta C)
+
+La versión 0.13.1 es un parche de corrección única sobre la versión 0.13.0. Corrige la condición de la ruta C de la versión 0.5 (R-019: brecha en el alcance de la conexión en la etapa de extracción de reclamaciones) extendiendo la autorización de presupuesto por nivel de R-019 a cada llamada a `ollama_extract` que se realiza durante la "extracción de reclamaciones": el extractor por ventana, el crítico de evidencia de sección por reclamación (R-011) y el crítico de rescate por candidato de rescate (R-012). Tiene la misma estructura arquitectónica que la cobertura de prosa sintética de R-019. Es un parche de un solo repositorio (solo para research-os); el campo `tier_budget_ms_override` del esquema `ollama-intern-mcp@2.6.0` es el alcance del servidor que no se ha modificado.
+
+Esta versión se lanzó porque la puerta de "aislamiento del operador" de la versión 0.5, aplicada a `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0`, devolvió **PASS_WITH_CONDITIONS, NO autorización** (`operator_aloneness_dst_v0.5`). Todas las funciones de la versión 0.13 (R-018 + R-019 + R-020 + R-021) funcionaron correctamente sin errores; se mantuvo el nivel de seguridad; se rechazaron correctamente los casos de fallo esperados con acciones de recuperación documentadas. Sin embargo, 3 de 8 fuentes en la sección 02 ("02-seguridad y economía") alcanzaron el límite de tiempo interno de 15000 ms (TIER_TIMEOUT) durante la extracción, sin una anulación controlada por el operador. La versión 0.13.0 incluyó la anulación analógica para la prosa sintética; la versión 0.13.1 la extiende a la etapa de extracción.
+
+> **R-024 implementa la regla de presupuesto por nivel de cobertura total: cuando se extiende un presupuesto por nivel, este debe alcanzar cada llamada a un modelo de lenguaje (LLM) en esa etapa que pueda producir el mismo límite de tiempo interno. Una cobertura parcial significa un parche mal dirigido en la capa de cobertura de la llamada.**
+> **R-024 también implementa la regla de fragilidad de la prueba de reproducción en vivo: cuando una prueba de aceptación de reproducción en vivo falla por razones relacionadas con el entorno (tiempo, captura, estado del entorno) y no por razones de funcionamiento, se debe corregir el entorno de prueba; NO se debe omitir, degradar ni sustituir por una inspección manual de los resultados.**
+
+La disposición de la versión 0.5 es la ruta D (triaje de múltiples vías). La versión 0.13.1 cierra la ruta C. La ruta A se cerró en la fase de preparación (lista blanca de la ruta de enganche de la puerta de memoria). La ruta B (preparación del descubrimiento de fuentes) se activa en una sesión separada después de que se publique la versión 0.13.1. La configuración de la puerta de la versión 0.6 sigue a la ruta B. La "rebanada" de admisibilidad 1 permanece **no autorizada** hasta que la versión 0.6 pase la prueba.
+
+### Lo que puede ejecutar
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+Precedencia: bandera de la CLI > variable de entorno > valor predeterminado (omitido; los perfiles predeterminados de ollama-intern-mcp rigen). Límite de `[1, 600000]` ms (límite de seguridad superior de 10 minutos). Los valores no válidos fallan claramente con un código de salida diferente de cero que indica la función afectada y el valor incorrecto.
+
+### ¿Qué hay de nuevo?
+
+**R-024: Autorización de presupuesto por nivel para la etapa de extracción en los 3 sitios de llamada a `ollama_extract`.** La nueva bandera `--tier-budget-ms <N>` en `claim extract` (y la variable de entorno correspondiente `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS`) transmite una anulación de presupuesto por nivel controlada por el operador a `ollama-intern-mcp@>=2.6.0` como `tier_budget_ms_override` en CADA llamada a la herramienta `ollama_extract` durante la ejecución de la extracción: `MCPClaimExtractor.extractOnePage` (el extractor por ventana), `runCritic` (el crítico de evidencia de sección por reclamación R-011, una llamada por borrador por ventana) y `runRescueCritic` (el crítico de rescate por candidato de rescate R-012 en los borradores con "desajuste de contenido de origen"). El presupuesto activo se muestra en stderr (`[extract] tier_budget_ms=N source=... section=<id>` emitido antes del bucle por fuente), en los metadatos de la recepción de la extracción (`tier_budget_ms` + `tier_budget_overridden_by` en `audits/<section>-claim-extract.json`) y en la enumeración cerrada `EXTRACT_TIER_BUDGET_SOURCES` (`['default', 'cli_flag', 'env_var']`). El comportamiento predeterminado es idéntico al de la versión 0.13.0 (sin bandera, sin variable de entorno → los perfiles predeterminados rigen; la recepción omite los nuevos campos).
+
+### Nota arquitectónica
+
+R-024 refleja la arquitectura de R-019, pero en una etapa diferente. R-019 conecta la función de anulación a través de `runProseSynthesis` al planificador + diseñador + verificador (3 llamadas a `ollama_extract` en la etapa de generación de texto); R-024 la conecta a través del orquestador `extract()` → `MCPClaimExtractor.extract` → se distribuye a `extractOnePage` + `runCritic` + `runRescueCritic` (3 llamadas a `ollama_extract` en la etapa de extracción). La regla de presupuesto de nivel de cobertura total es ahora un principio fundamental: al ampliar el presupuesto de un nivel para una interfaz visible al usuario, el informe de la Fase B debe enumerar cada punto de llamada del modelo de lenguaje (LLM) en esa etapa que comparta el mismo tiempo de espera interno. Una cobertura parcial produce un parche "MISTARGETED" en la capa de cobertura de puntos de llamada, con la misma firma de auto-falsificación que el parche "MISTARGETED" del envoltorio/mecanismo interno de R-018: el registro registra la anulación Y el tiempo de espera especificado se activa en un punto de llamada no cubierto en el mismo artefacto.
+
+No hay cambios en el código interno de "ollama-intern-mcp". El campo de esquema `tier_budget_ms_override` de la versión v2.6.0 existe desde la versión coordinada de R-019; la versión v0.13.1 proporciona la configuración del cliente de la etapa de extracción en el lado del sistema operativo de investigación.
+
+### Nivel de defensa mantenido
+
+R-024 es una adición de un parámetro configurable para el usuario, no un cambio arquitectónico. Desde R-002 hasta R-021, todas las funciones permanecen inalteradas. El valor `accepted_claim_floor` sigue siendo inalterable. Los enumerados cerrados no se han modificado (`FailureShape` en 9; `RECOVERY_ACTIONS` en 8; `REGENERATION_REASONS` en 3; `PLANNER_TIMEOUT_SOURCES` en 3; `POLICY_KEYWORDS` en 8; `POLICY_RELEVANT_SOURCE_TYPES` en 1). R-024 agrega el nuevo enumerado cerrado `EXTRACT_TIER_BUDGET_SOURCES` (con 3 valores) sin modificar ningún enumerado existente. La plantilla de solicitud del asesor de recuperación de IA permanece inalterada. La arquitectura de MCP se ha ampliado de forma aditiva. La forma de expresión regular de la causa de respaldo de R-010 se ha conservado. La forma de `extract --resume / --progress` de R-015 se ha conservado (R-024 agrega una NUEVA línea de registro de error estándar y NUEVOS campos de registro; el formato de registro existente, el comportamiento de omisión y la forma de emisión no se han modificado).
+
+La regresión del paquete congelado es idéntica en bytes a las versiones base de v0.3.3 para los cuatro paquetes congelados: **la 19ª versión consecutiva** en la que esto se cumple. 1630 → 1663 pruebas de vitest superadas (+33 aceptaciones sintéticas de R-024 + 1 guardia siempre activa; 6 omitidas: pruebas de reproducción en vivo condicionadas a variables de entorno del sistema).
+
+### Lo que la versión v0.13.1 NO afirma:
+
+- Preparación para la versión 1.
+- Verificación de la condición de "aloneness" de la versión 0.6 para el operador. La configuración de la versión 0.6 sigue a R-023 (estructura de descubrimiento de fuentes); la versión 0.13.1 es un requisito previo para el cierre de la vía Track-C, no una prueba.
+- Admisión de la sección 1. Condicionada a la aprobación de la versión 0.6.
+- Candidatos de la versión 0.13.x pospuestos (F-2 divergencia de auditoría↔extracción de R-009; F-3 obsolescencia de la transferencia de trabajo colaborativo; F-4 limitación de `POLICY_KEYWORDS` de R-017).
+
+Consulte [CHANGELOG.md](CHANGELOG.md) para ver la entrada completa de la versión.
 
 ## Novedades en la versión 0.13.0: Finalización – Priorización de bloqueos (R-019 + R-020 solo D + R-021)
 

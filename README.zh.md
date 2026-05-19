@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/version-0.13.0-blue" alt="version 0.13.0"></a>
+  <a href="https://github.com/mcp-tool-shop-org/research-os/releases/tag/v0.13.1"><img src="https://img.shields.io/badge/version-0.13.1-blue" alt="version 0.13.1"></a>
   <a href="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/research-os/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A520-brightgreen" alt="Node ≥20">
@@ -181,6 +181,54 @@ research-os review-promote 01-section --pack <pack> --profile hermes-two-pass
 当使用`--runs <n>`参数时，每个运行的结果文件会被写入到`<profile>/runs/run-NNN.json`，并且会生成一个聚合结果文件（包含基于中位数的PASS/FAIL结果，以及重复失败检测），写入到`<profile>/seeded-v1.{json,md}`。聚合结果文件包含`receipt_kind: 'aggregate'`，用于区分单次运行的结果文件。单次运行模式（`--runs 1`或省略）会保留现有的直接写入行为。
 
 **确定性的评审员配置文件** — 在 `research.yaml` 文件中使用 `review_profiles.<name>.reviewer_options` 来将 `temperature`、`seed` 以及其他 Ollama 采样参数传递到生产评审流程中的每个 `OllamaInternReviewer` 实例。`hermes-two-pass-deterministic` 配置文件作为内置示例提供。请参阅 [`docs/experiment-6-proof.md`](docs/experiment-6-proof.md) 以及 [评审员校准手册](https://mcp-tool-shop-org.github.io/research-os/handbook/reviewer-calibration/) 页面。
+
+## 新版本 v0.13.1 — R-024：提取阶段的层级预算权限（Path C 补丁）
+
+v0.13.1 是一个基于 v0.13.0 的单次修复补丁。它解决了 v0.5 Track-C 的问题（R-019 在提取阶段存在范围上的差距），通过将 R-019 的层级预算权限扩展到 `claim extract` 期间的每个 `ollama_extract` MCP 调用，来实现这一点，包括：每个窗口的提取器、每个请求的 R-011 章节证据评估器，以及每个备选救援对象的 R-012 救援评估器。其架构与 R-019 的合成文本覆盖范围相同。这是一个单仓库补丁（仅适用于 research-os）；`ollama-intern-mcp@2.6.0` 的 `tier_budget_ms_override` 模式字段是服务器端的默认配置。
+
+此版本发布的原因是，针对已发布的 `@mcptoolshop/research-os@0.13.0` + `ollama-intern-mcp@2.6.0` 的 v0.5 独立运行测试返回了 **PASS_WITH_CONDITIONS，而不是完全通过** (`operator_aloneness_dst_v0.5`)。所有 v0.13 的功能（R-018 + R-019 + R-020 + R-021）在实际运行中没有出现错误；防御机制保持有效；在出现已知错误时，会进行明确的拒绝，并提供恢复操作的文档。但是，在第 02 部分（`02-safety-and-economic`）的 8 个来源中，有 3 个在提取过程中触发了内部的 15000 毫秒的层级超时（TIER_TIMEOUT），并且没有用户可用的覆盖设置。R-019 在 v0.13.0 中已经发布了用于合成文本的覆盖设置；v0.13.1 将其扩展到提取阶段。
+
+> **R-024 实现了完整的层级预算规则：在扩展层级预算时，该预算必须覆盖该阶段的所有 LLM 调用，这些调用都可能触发相同的内部超时。部分覆盖意味着补丁针对的是错误的调用层级。**
+> **R-024 还实现了关于实时回放测试的规则：当实时回放的验收测试由于测试框架的原因（例如：时间、捕获、测试环境状态）而不是机制原因而失败时，应该修复测试框架，而不是跳过、降级或使用手动检查来代替。**
+
+v0.5 的处理方式是 Path D（多路径分流）。v0.13.1 解决了 Track C。Track A 在构建过程中已解决（内存门限挂钩路径白名单）。Track B（源发现构建）将在 v0.13.1 发布后进行单独的测试。v0.6 的门限设置将遵循 Track B。Admissibility Slice 1 仍然是 **未授权** 状态，直到 v0.6 通过。
+
+### 您可以运行的内容
+
+```sh
+# R-024 — operator-controllable per-call tier-budget for the EXTRACT stage
+#         (mirrors R-019's --planner-timeout-ms for synth prose; same shape, different stage)
+#         (requires ollama-intern-mcp@>=2.6.0; pre-2.6.0 silently discards the override)
+research-os claim extract <id> --tier-budget-ms 60000
+RESEARCH_OS_EXTRACT_TIER_BUDGET_MS=60000 research-os claim extract <id>
+```
+
+优先级：CLI 标志 > 环境变量 > 默认值（未指定；`ollama-intern-mcp` 的配置文件默认值生效）。限制在 `[1, 600000]` 毫秒（10 分钟的安全上限）。无效的值会明确地失败，并返回非零的退出码，同时会显示出错的表面和错误值。
+
+### 有什么新内容？
+
+**R-024 — 在所有 3 个 `ollama_extract` 调用位置上，实现了提取阶段的层级预算权限。** 在 `claim extract` 上，添加了一个新的 `--tier-budget-ms <N>` 标志（以及对应的 `RESEARCH_OS_EXTRACT_TIER_BUDGET_MS` 环境变量），它会将用户控制的、每个调用的层级预算覆盖，传递给 `ollama-intern-mcp@>=2.6.0`，并在每个 `ollama_extract` 调用工具的执行过程中，将其作为 `tier_budget_ms_override` 传递：`MCPClaimExtractor.extractOnePage`（每个窗口的提取器）、`runCritic`（R-011 每个请求的章节证据评估器，每个窗口一个调用），以及 `runRescueCritic`（R-012 用于源内容不匹配的备选救援对象的救援评估器）。 实际生效的预算会在标准错误输出中显示（`[extract] tier_budget_ms=N source=... section=<id>`，在每个源循环之前显示），在提取接收器的元数据中显示（`tier_budget_ms` + `tier_budget_overridden_by`，位于 `audits/<section>-claim-extract.json`），以及在已关闭的枚举 `EXTRACT_TIER_BUDGET_SOURCES` 中（`['default', 'cli_flag', 'env_var']`）。默认行为与 v0.13.0 相同（没有标志，没有环境变量，则使用配置文件的默认值；接收器不包含新的字段）。
+
+### 架构说明
+
+R-024 的架构与 R-019 类似，但处于不同的阶段。R-019 通过 `runProseSynthesis` 将覆盖机制连接到规划器 + 文本生成器 + 验证器（3 个 `ollama_extract` 调用点）；R-024 通过 `extract()` 协调器 → `MCPClaimExtractor.extract` → 分发到 `extractOnePage` + `runCritic` + `runRescueCritic`（3 个提取阶段的 `ollama_extract` 调用点）。完整的资源预算规则现在是一个关键原则：当为面向操作员的接口扩展资源预算时，阶段 B 的报告必须列出该阶段的所有与相同超时时间相关的 LLM 调用点。部分覆盖会导致在调用点覆盖层产生一个 `MISTARGETED-PATCH`，其自证否定的签名与 R-018 的包装器/内部机制 `MISTARGETED-PATCH` 相同：记录会记录覆盖机制，并且在未覆盖的调用点处，命名的超时机制会被触发，所有这些都发生在同一个组件中。
+
+没有对 `ollama-intern-mcp` 进行任何更改。v2.6.0 的 `tier_budget_ms_override` 模式字段自 R-019 的协调发布以来一直存在；v0.13.1 提供了研究操作系统端的提取阶段客户端连接。
+
+### 安全底线保持稳定
+
+R-024 是一个面向操作员的可配置项的添加，而不是架构上的改变。R-002 到 R-021 的所有组件均未修改。`accepted_claim_floor` 仍然是不可放弃的。已关闭的枚举类型未更改（`FailureShape` 为 9；`RECOVERY_ACTIONS` 为 8；`REGENERATION_REASONS` 为 3；`PLANNER_TIMEOUT_SOURCES` 为 3；`POLICY_KEYWORDS` 为 8；`POLICY_RELEVANT_SOURCE_TYPES` 为 1）。R-024 添加了新的已关闭枚举类型 `EXTRACT_TIER_BUDGET_SOURCES`（3 个值），但未修改任何现有的枚举类型。AI 恢复建议的提示模板未修改。MCP 架构以增量方式扩展。R-010 的回退原因正则表达式形状保持不变。R-015 的提取 `--resume / --progress` 形状保持不变（R-024 添加了新的 stderr 日志行 + 新的记录字段；现有的日志格式 + 跳过行为 + 输出形状未更改）。
+
+所有四个冻结包的回归测试与 v0.3.3 的基线完全一致——**这是连续的第十九次发布**。1630 → 1663，vitest 通过测试 (+33 个 R-024 的合成验收 + 1 个始终开启的保护机制；6 个跳过 — 实时回放测试受环境变量控制)。
+
+### v0.13.1 不声称的内容：
+
+- v1 的可用性。
+- v0.6 的独立运行门控的验证结果。v0.6 的配置遵循 R-023（源发现框架）；v0.13.1 是 Track-C 完成的前提，而不是证明。
+- 可接受性切片 1。受 v0.6 通过测试的限制。
+- 延迟的 v0.13.x 版本候选者（F-2 R-009 审计↔提取的差异；F-3 协作交接的陈旧性；F-4 R-017 `POLICY_KEYWORDS` 的局限性）。
+
+请参阅 [CHANGELOG.md](CHANGELOG.md) 以获取完整的发布说明。
 
 ## 版本 0.13.0 的新功能：最终确认流程阻碍问题排查模块（R-019 + R-020，仅限 D 选项 + R-021）
 
