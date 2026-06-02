@@ -80,10 +80,14 @@ jobs:
       - name: Verify gate (build + typecheck + lint + test)
         run: npm run verify
 
+      # OIDC trusted publishing requires npm >= 11.5.1; Node 22 bundles
+      # npm 10.9.x, so upgrade the global npm before the publish call.
+      - name: Upgrade npm for OIDC trusted publishing (>= 11.5.1)
+        run: npm install -g npm@latest
+
       - name: Publish to npm (with provenance)
+        # Auth via npm Trusted Publishing (OIDC) — intentionally NO NODE_AUTH_TOKEN.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Auto-create a GitHub release on the tag-push path. We extract the
       # version's section from CHANGELOG.md (between "## [<version>]" and the
