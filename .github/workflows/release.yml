@@ -1,0 +1,185 @@
+name: Release
+
+# Tokenless npm Trusted Publishing (OIDC) + GitHub Release.
+#
+# IMPORTANT: this workflow's FILENAME (release.yml) is the npm trusted-publisher
+# binding for @mcptoolshop/research-os. Renaming or moving this file breaks the
+# OIDC publish until the npm trusted-publisher config is updated to match. There
+# is NO npm token — auth is the GitHub Actions OIDC id-token (requires npm
+# >= 11.5.1, installed in a sandbox below), and provenance is attested via the
+# same OIDC identity.
+#
+# Triggers:
+#   1. push tags v*.*.* — canonical tag-driven release.
+#   2. release: published — the GitHub-UI release flow (skips auto-create-release).
+#   3. workflow_dispatch — operator escape hatch / bootstrap (explicit tag input).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish (e.g., v0.14.0). Must match package.json version."
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # gh release create on the tag-push path
+  id-token: write   # npm Trusted Publishing (OIDC) auth + provenance attestation
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Assert Node major version (20.x or 22.x)
+        run: |
+          V=$(node --version)
+          case "$V" in
+            v20.*|v22.*) echo "Node $V ok";;
+            *) echo "::error::Node $V not 20.x or 22.x"; exit 1;;
+          esac
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm >=11.5 in a sandbox for OIDC trusted-publishing auth
+        run: |
+          # Tokenless OIDC trusted publishing needs npm >= 11.5.1. Node 22 ships
+          # npm 10.x, which races on an in-place `npm i -g npm@latest`
+          # (MODULE_NOT_FOUND: promise-retry). Install npm@latest into a sandbox
+          # dir and shadow the system npm via PATH instead.
+          SANDBOX="$HOME/.npm-cli-sandbox"
+          mkdir -p "$SANDBOX"
+          pushd "$SANDBOX" >/dev/null
+          echo '{"name":"npm-cli-sandbox","version":"0.0.0","private":true}' > package.json
+          npm install --no-save --no-audit --no-fund --silent npm@latest
+          popd >/dev/null
+          echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
+          echo "npm now: $("$SANDBOX/node_modules/.bin/npm" --version)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Tag-vs-package.json verify gate. All three trigger sources resolve to one
+      # tag string; we always compare against "v$(package.json.version)". A
+      # mismatch fails BEFORE publish so an out-of-sync tag can never produce an
+      # npm artifact.
+      - name: Verify tag matches package.json version
+        id: verify
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          EXPECTED="v$PKG_VERSION"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "::error::Tag $TAG does not match package.json version $EXPECTED"
+            exit 1
+          fi
+          echo "Tag $TAG matches package.json $PKG_VERSION"
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify gate (build + typecheck + lint + test)
+        run: npm run verify
+
+      # Auto-create a GitHub release on the tag-push path. We extract the
+      # version's section from CHANGELOG.md and pass it as the release body.
+      # Skipped when the trigger is `release: published` (the release exists).
+      - name: Extract CHANGELOG section for this version
+        if: github.event_name != 'release'
+        id: changelog
+        run: |
+          VERSION="${{ steps.verify.outputs.version }}"
+          # Capture the section between this version's heading and the next
+          # "## " heading. Compare the heading's version token by LITERAL string
+          # equality, NOT a regex interpolation — a regex "## \[?$ver\]?" treats
+          # '.' as any-char and is unanchored on the right, so e.g. ver=0.14.0
+          # would also match "## [0.14.01]" and a wrong section could ship.
+          SECTION=$(awk -v ver="$VERSION" '
+            /^## / {
+              if (found) { exit }
+              hdr = $0
+              sub(/^## +/, "", hdr)
+              gsub(/[][]/, "", hdr)
+              split(hdr, a, /[ \t]/)
+              if (a[1] == ver) { found = 1 }
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$SECTION" ]; then
+            echo "::warning::No CHANGELOG section found for v${VERSION} — release body falls back to --generate-notes"
+            echo "has_section=false" >> "$GITHUB_OUTPUT"
+          else
+            printf "%s\n" "$SECTION" > .release-notes.md
+            echo "has_section=true" >> "$GITHUB_OUTPUT"
+            echo "Resolved CHANGELOG section ($(wc -l < .release-notes.md) lines)"
+          fi
+
+      # The two irreversible release actions are `npm publish` then
+      # `gh release create`. If publish succeeds but the release step fails
+      # (transient gh/API error), a naive re-run would die at publish (version
+      # already on the registry). Detect that and SKIP publish so the re-run
+      # proceeds straight to the GitHub release — making the job idempotent.
+      #
+      # NAMED COMPENSATOR (manual, if the automated re-run is unavailable):
+      #   npm: a published version cannot be cleanly un-published after 72h —
+      #     treat it as committed. To finish a split release by hand:
+      #       gh release create <tag> --title <tag> --verify-tag \
+      #         --notes-file <CHANGELOG section>   (or --generate-notes)
+      #   Owner: release author (the human who pushed the tag).
+      - name: Check whether this version is already on the registry
+        id: published
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER="${{ steps.verify.outputs.version }}"
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "::warning::$NAME@$VER is already published — skipping npm publish (split-failure re-run path); proceeding to GitHub release"
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Tokenless: NO NODE_AUTH_TOKEN. npm >= 11.5.1 detects the GitHub Actions
+      # OIDC identity and authenticates against the configured trusted publisher;
+      # --provenance attests the build via the same Sigstore OIDC identity.
+      - name: Publish to npm (Trusted Publishing, OIDC)
+        if: steps.published.outputs.already != 'true'
+        run: npm publish --provenance --access public
+
+      - name: Create GitHub release (CHANGELOG section)
+        if: github.event_name != 'release' && steps.changelog.outputs.has_section == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.verify.outputs.tag }}" \
+            --title "${{ steps.verify.outputs.tag }}" \
+            --notes-file .release-notes.md \
+            --verify-tag
+
+      - name: Create GitHub release (fallback to auto-notes)
+        if: github.event_name != 'release' && steps.changelog.outputs.has_section != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.verify.outputs.tag }}" \
+            --title "${{ steps.verify.outputs.tag }}" \
+            --generate-notes \
+            --verify-tag

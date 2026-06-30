@@ -2,7 +2,9 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased] — Hardening pass (dogfood swarm: bug/security + proactive health)
+## [Unreleased]
+
+## [0.14.0] - 2026-06-29 — Hardening pass (bug/security + proactive health)
 
 A two-stage hardening pass over the v0.13.1 surface. **No new pipeline layers, gates, closure ledgers, or reviewer models** — every change is a defect fix or an additive guard/observability field within the locked architecture. Default (no-failure) behavior is byte-identical; the four frozen packs and the locked operator surfaces (error codes, the four help topics, CLI summary labels) are unchanged. 1663 → 1834 tests.
 

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createTinyPack } from './helpers.js';
 import { deriveManifest } from '../../src/pack/publish/manifest.js';
+import { RESEARCH_OS_VERSION } from '../../src/index.js';
 
 let tmpDir: string;
 
@@ -21,7 +22,10 @@ describe('deriveManifest', () => {
     const manifest = deriveManifest(packDir, 'test-package');
 
     expect(manifest.name).toBe('test-package');
-    expect(manifest.research_os_version).toBe('0.13.1');
+    // Track the single source of truth (RESEARCH_OS_VERSION), not a pinned
+    // literal — deriveManifest records the freezing build's version, so a
+    // hardcoded version here would (and did) break on every release bump.
+    expect(manifest.research_os_version).toBe(RESEARCH_OS_VERSION);
     expect(manifest.frozen_at).toBe('2026-05-09T12:00:00.000Z');
     expect(manifest.sections).toHaveLength(1);
     expect(manifest.sections[0].id).toBe('01-test');
