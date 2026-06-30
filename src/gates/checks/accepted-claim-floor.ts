@@ -1,5 +1,5 @@
 import type { GateCheckResult, GateInput } from '../types.js';
-import type { ClaimReview } from '../../review/schema.js';
+import { getEffectiveAcceptedClaimIds } from '../../closure-ledger/effective-accepted.js';
 
 const MIN_ACCEPTED_CLAIMS = 3;
 const MIN_ACCEPTED_SOURCES = 2;
@@ -7,18 +7,12 @@ const MIN_ACCEPTED_SOURCES = 2;
 export function checkAcceptedClaimFloor(input: GateInput): GateCheckResult[] {
   const reviews = input.claimReviews;
 
-  // Status-wins-by-latest: for each claim_id, the latest review entry wins.
-  const latestByClaimId = new Map<string, ClaimReview>();
-  for (const r of reviews) {
-    const existing = latestByClaimId.get(r.claim_id);
-    if (!existing || r.created_at > existing.created_at) {
-      latestByClaimId.set(r.claim_id, r);
-    }
-  }
-
-  const acceptedIds = [...latestByClaimId.values()]
-    .filter((r) => r.decision === 'accepted_for_synthesis')
-    .map((r) => r.claim_id);
+  // A-COWORK-001 (verifier follow-up): use the single canonical latest-decision
+  // join so the synthesis-blocking floor resolves same-`created_at` ties in the
+  // SAME (last-appended-wins) direction as cowork/synth/freeze. A hand-rolled
+  // strict-`>` join here would count an accepted-then-rejected same-millisecond
+  // pair as accepted while freeze enforces rejected — a split-brain gate verdict.
+  const acceptedIds = [...getEffectiveAcceptedClaimIds(reviews)];
 
   const acceptedCount = acceptedIds.length;
 
@@ -28,10 +22,17 @@ export function checkAcceptedClaimFloor(input: GateInput): GateCheckResult[] {
     claimSourceMap.set(claim.claim_id, claim.source_ids);
   }
 
+  // A-GATES-001: only count source_ids that resolve to a REAL source card.
+  // A claim may declare a phantom source_id (no matching source card); such an
+  // id must not satisfy the distinct-source floor. Intersect against the set of
+  // real source-card ids (input.sources) before counting. (Today this is masked
+  // by no_orphan_claims, but the floor must hold on its own.)
+  const realSourceIds = new Set(input.sources.map((s) => s.source_id));
+
   const distinctSources = new Set<string>();
   for (const cid of acceptedIds) {
     for (const sid of claimSourceMap.get(cid) ?? []) {
-      distinctSources.add(sid);
+      if (realSourceIds.has(sid)) distinctSources.add(sid);
     }
   }
   const distinctSourceCount = distinctSources.size;

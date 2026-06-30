@@ -13,11 +13,11 @@ import {
   type SourceCard,
 } from '../sources/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
+import { getEffectiveDecisionMap } from '../closure-ledger/effective-accepted.js';
 import { ContradictionSchema } from '../contradictions/schema.js';
 import {
   ClaimReviewSchema,
   ReviewFindingSchema,
-  type ClaimReview,
 } from '../review/schema.js';
 import { SectionReportSchema, type SectionReport } from './schema.js';
 
@@ -189,12 +189,10 @@ export async function reportSection(
     join(packPath, 'sections', options.sectionId, 'claim-reviews.jsonl'),
     (raw) => ClaimReviewSchema.parse(raw),
   );
-  // For each claim, take the LATEST review (append-only ledger).
-  const latestReviewByClaim = new Map<string, ClaimReview>();
-  for (const r of reviews) {
-    const prev = latestReviewByClaim.get(r.claim_id);
-    if (!prev || prev.created_at < r.created_at) latestReviewByClaim.set(r.claim_id, r);
-  }
+  // For each claim, take the LATEST review (append-only ledger). Routed through
+  // the single canonical join (A-COWORK-001 verifier follow-up) so the tie
+  // direction stays consistent with cowork/synth/freeze/gate/audit.
+  const latestReviewByClaim = getEffectiveDecisionMap(reviews);
   const findings = await readJsonl(
     join(packPath, 'audits', `${options.sectionId}-findings.jsonl`),
     (raw) => ReviewFindingSchema.parse(raw),

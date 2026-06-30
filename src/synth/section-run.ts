@@ -60,13 +60,37 @@ import type { SectionSynthesisOptions, SectionSynthesisSummary } from './types.j
 
 type SectionState = ReturnType<typeof CoworkHandoffPayloadSchema.parse>['sections'][number];
 
+// A-SYNTH-001: a malformed JSONL line or JSON source card previously threw a
+// raw SyntaxError/ZodError straight to the CLI. Route the failure through the
+// structured error model with a dedicated code + actionable hint naming the
+// offending file and (for JSONL) line. Runtime/blocked condition — operator
+// must repair the corrupt artifact before section synthesis can proceed.
+class MalformedDataFileError extends ResearchOSError {
+  constructor(path: string, lineNumber: number | null, detail: string) {
+    const where = lineNumber === null ? path : `${path} (line ${lineNumber})`;
+    super(
+      `Malformed data file at ${where}: ${detail}`,
+      'MALFORMED_DATA_FILE',
+      `Repair or remove the corrupt entry in ${where}, then re-run. See handbook/recovery.md for runbook.`,
+    );
+    this.name = 'MalformedDataFileError';
+  }
+}
+
 async function readJsonl<T>(path: string, parse: (raw: unknown) => T): Promise<T[]> {
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: T[] = [];
+  let lineNumber = 0;
   for (const line of text.split(/\r?\n/)) {
+    lineNumber += 1;
     if (!line.trim()) continue;
-    out.push(parse(JSON.parse(line)));
+    try {
+      out.push(parse(JSON.parse(line)));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new MalformedDataFileError(path, lineNumber, detail);
+    }
   }
   return out;
 }
@@ -79,8 +103,15 @@ async function readSectionSourceCards(packPath: string, sourceIds: Set<string>):
   const cards: SourceCard[] = [];
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
-    const text = await readFile(join(dir, entry), 'utf8');
-    const card = SourceCardSchema.parse(JSON.parse(text));
+    const cardPath = join(dir, entry);
+    const text = await readFile(cardPath, 'utf8');
+    let card: SourceCard;
+    try {
+      card = SourceCardSchema.parse(JSON.parse(text));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new MalformedDataFileError(cardPath, null, detail);
+    }
     if (sourceIds.has(card.source_id)) cards.push(card);
   }
   return cards;
@@ -347,6 +378,14 @@ export async function sectionSynthesis(
   const acceptedIdsForThisSection = handoffSection.accepted_claim_ids.filter((id) =>
     packAcceptedIds.has(id),
   );
+  // A-SYNTH-002: the pack-level accepted set is binding. Synthesize ONLY
+  // claims that appear in BOTH the section-state list AND the pack-level
+  // accepted list (the intersection). Previously this filter used the
+  // un-intersected `sectionAcceptedIds`, so a claim present in the section
+  // list but absent from the pack-level list could still be synthesized —
+  // the cross-check boolean (`acceptedIdsCrossCheckOk`) flagged the
+  // divergence in the report but did not actually exclude the claim.
+  const bindingAcceptedIds = new Set(acceptedIdsForThisSection);
 
   // Read claims for ONLY this section. We do not load other sections'
   // claims.jsonl — section synthesis is by-construction section-scoped.
@@ -354,7 +393,7 @@ export async function sectionSynthesis(
     join(packPath, 'sections', options.sectionId, 'claims.jsonl'),
     (r) => ClaimSchema.parse(r),
   );
-  const acceptedClaims = sectionClaims.filter((c) => sectionAcceptedIds.has(c.claim_id));
+  const acceptedClaims = sectionClaims.filter((c) => bindingAcceptedIds.has(c.claim_id));
 
   // Source IDs referenced by accepted claims (deduped, sorted for determinism).
   const sourceIdSet = new Set<string>();

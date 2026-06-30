@@ -301,10 +301,36 @@ export async function map(options: MapOptions): Promise<MapSummary> {
       0;
     void autoClassifiedPairs; // see autoModeFallThrough fields below
 
+    // A-CNT-001: the LLM detector's `unprocessedPairs` is the LLM prefilter's
+    // OWN subset — pairs the prefilter scored >= its 0.25 threshold but did not
+    // get to classify before fall-through. Running the heuristic over ONLY that
+    // subset leaves pairs that fell BELOW the prefilter's 0.25 threshold (yet
+    // are >= the heuristic's 0.4-0.5 thresholds) classified by NEITHER detector.
+    // To match `--detector heuristic` coverage, run the heuristic over the FULL
+    // pair space the LLM did not classify into a contradiction: every i<j minus
+    // the pairs the LLM already produced a draft for. Heuristic contradictions
+    // carry detector='heuristic' + a distinct contradiction_id suffix, so they
+    // cannot duplicate any LLM-produced entry.
+    const llmClassifiedPairKeys = new Set<string>();
+    for (const paired of detectionResult.drafts) {
+      const aIdx = candidateClaims.indexOf(paired.claim_a);
+      const bIdx = candidateClaims.indexOf(paired.claim_b);
+      if (aIdx < 0 || bIdx < 0) continue;
+      const [lo, hi] = aIdx < bIdx ? [aIdx, bIdx] : [bIdx, aIdx];
+      llmClassifiedPairKeys.add(`${lo},${hi}`);
+    }
+    const fullUnprocessedPairs: Array<[number, number]> = [];
+    for (let i = 0; i < candidateClaims.length; i += 1) {
+      for (let j = i + 1; j < candidateClaims.length; j += 1) {
+        if (llmClassifiedPairKeys.has(`${i},${j}`)) continue;
+        fullUnprocessedPairs.push([i, j]);
+      }
+    }
+
     const heuristic = new HeuristicContradictionDetector();
     const heuristicResult = await heuristic.detectSpecificPairs(
       candidateClaims,
-      detectionResult.unprocessedPairs,
+      fullUnprocessedPairs,
     );
 
     if (heuristicResult.ok) {
@@ -338,7 +364,9 @@ export async function map(options: MapOptions): Promise<MapSummary> {
       reason: 'consecutive_timeouts',
       remainingPairsHandledBy: 'heuristic',
       autoClassifiedPairs: detectionResult.fallThrough.triggeredAtPairIndex,
-      heuristicClassifiedPairs: detectionResult.unprocessedPairs.length,
+      // A-CNT-001: heuristic now covers the FULL unclassified pair space, not
+      // just the LLM prefilter's subset — report the actual pair count it ran on.
+      heuristicClassifiedPairs: fullUnprocessedPairs.length,
     };
     summary.autoModeFallThrough = autoModeFallThrough;
   }

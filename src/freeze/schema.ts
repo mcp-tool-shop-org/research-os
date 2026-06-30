@@ -78,6 +78,14 @@ export const FreezeReasonCodeSchema = z.enum([
   'FREEZE_MALFORMED_ARTIFACT',
   'FREEZE_PACK_AUDIT_NOT_READY',
   'FREEZE_HANDOFF_NOT_READY',
+  // A-FREEZE-002: same-timestamp conflicting review decisions in a live
+  // claim-reviews.jsonl — the latest-decision-wins tie-breaker is undefined,
+  // so freeze refuses rather than emit a receipt pack publish would reject.
+  'FREEZE_INCOMPATIBLE_REVIEW_DECISIONS',
+  // A-FREEZE-003: a [claim:...] citation captured from synthesis prose whose
+  // id is not a well-formed claim_id (e.g. [claim:see-above], [claim:typo]).
+  // It must not pass the refusal filters or land in cited_claim_ids verbatim.
+  'FREEZE_MALFORMED_CITATION',
 ]);
 
 export type FreezeReasonCode = z.infer<typeof FreezeReasonCodeSchema>;

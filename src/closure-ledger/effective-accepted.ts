@@ -24,18 +24,27 @@ import type { ClaimReview } from '../review/schema.js';
  *
  * Iterates through reviews and keeps the row with the latest `created_at`
  * timestamp per `claim_id`. ISO-8601 timestamps compare lexicographically, so
- * a string `>` comparison is correct for ordering.
+ * a string comparison is correct for ordering.
  *
- * Two rows for the same `claim_id` with the **same** `created_at` are
- * undefined-order; if their decisions disagree, callers should run
- * {@link findIncompatibleDecisions} to detect the ambiguity before relying on
- * this map's resolution.
+ * **Tie direction (A-COWORK-001):** on an equal `created_at` tie, the
+ * **last-appended** row wins (`>=`). `claim-reviews.jsonl` is append-only, so
+ * "last appended" is "last written" — a same-millisecond corrective decision
+ * must override the earlier one rather than be silently dropped. This is the
+ * single canonical join: `cowork/derive.ts` and `synth/derive.ts` route their
+ * per-claim decision resolution through here so the tie direction is
+ * consistent everywhere.
+ *
+ * Two rows for the same `claim_id` with the **same** `created_at` whose
+ * decisions **disagree** are still a genuine ambiguity; callers that must
+ * refuse on conflicting state (pack publish admission, freeze) run
+ * {@link findIncompatibleDecisions} to detect it. The `>=` tie-break does not
+ * mask those conflicts — it only makes the resolved value deterministic.
  */
 export function getEffectiveDecisionMap(reviews: ClaimReview[]): Map<string, ClaimReview> {
   const map = new Map<string, ClaimReview>();
   for (const r of reviews) {
     const existing = map.get(r.claim_id);
-    if (!existing || r.created_at > existing.created_at) {
+    if (!existing || r.created_at >= existing.created_at) {
       map.set(r.claim_id, r);
     }
   }

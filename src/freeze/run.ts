@@ -17,6 +17,10 @@ import {
 import { CrossSectionMapSchema } from '../synth/schema.js';
 import { ClaimSchema } from '../claims/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
+import {
+  findIncompatibleDecisions,
+  getEffectiveDecisionMap,
+} from '../closure-ledger/effective-accepted.js';
 
 import { hashArtifact, pass, type CheckContext } from './checks.js';
 import {
@@ -220,7 +224,11 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   // workspace ran, we want to catch it at freeze.
   const livePackClaimIds = new Set<string>();
   const liveLatestDecisionByClaim = new Map<string, string>();
-  const liveLatestCreatedAtByClaim = new Map<string, string>();
+  // A-FREEZE-001: record how many invalidArtifacts existed before the live
+  // read loop so we can convert ONLY the newly-added ones into refusals after
+  // the loop (the earlier 182-190 loop already converted the canonical-artifact
+  // ones; converting again would double-count).
+  const invalidArtifactsBeforeLiveRead = refusal.invalidArtifacts.length;
   for (const section of research.sections) {
     const claimsFile = join(packPath, 'sections', section.id, 'claims.jsonl');
     if (existsSync(claimsFile)) {
@@ -253,15 +261,43 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
           });
         }
       }
-      // Latest by created_at wins
-      for (const r of reviews) {
-        const existingCreatedAt = liveLatestCreatedAtByClaim.get(r.claim_id);
-        if (!existingCreatedAt || r.created_at > existingCreatedAt) {
-          liveLatestCreatedAtByClaim.set(r.claim_id, r.created_at);
-          liveLatestDecisionByClaim.set(r.claim_id, r.decision);
-        }
+      // A-FREEZE-002: same-timestamp conflicting decisions are unresolvable
+      // under latest-decision-wins. Detect them with the canonical helper and
+      // refuse — otherwise freeze emits a receipt that `pack publish` (which
+      // runs the identical check, see src/pack/publish/manifest.ts) rejects.
+      const conflicts = findIncompatibleDecisions(reviews);
+      if (conflicts.length > 0) {
+        const first = conflicts[0]!;
+        const others =
+          conflicts.length > 1
+            ? ` (${conflicts.length - 1} other claim_id(s) similarly affected)`
+            : '';
+        noteRefusal(
+          refusal,
+          'FREEZE_INCOMPATIBLE_REVIEW_DECISIONS',
+          `Section ${section.id}: claim-reviews.jsonl has incompatible review decisions for claim_id=${first.claim_id} at the same timestamp ${first.created_at} (decisions: ${first.decisions.join(', ')})${others}.`,
+        );
+      }
+      // A-FREEZE-002: resolve via the canonical last-wins-on-tie join rather
+      // than an inline duplicate so freeze and pack publish agree.
+      const decisionMap = getEffectiveDecisionMap(reviews);
+      for (const [cid, r] of decisionMap) {
+        liveLatestDecisionByClaim.set(cid, r.decision);
       }
     }
+  }
+
+  // A-FREEZE-001: the canonical-artifact loop at ~182 ran BEFORE the live
+  // reads, so corrupt-but-uncited live claims.jsonl / claim-reviews.jsonl lines
+  // pushed above never became refusals — the pack froze silently. Convert any
+  // newly-added invalidArtifacts into FREEZE_MALFORMED_ARTIFACT refusals here.
+  for (let i = invalidArtifactsBeforeLiveRead; i < refusal.invalidArtifacts.length; i += 1) {
+    const ia = refusal.invalidArtifacts[i]!;
+    noteRefusal(
+      refusal,
+      'FREEZE_MALFORMED_ARTIFACT',
+      `Canonical artifact failed to parse: ${ia.path}: ${ia.error}`,
+    );
   }
 
   const acceptedClaimIds: string[] = [];
@@ -283,6 +319,32 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
   const citationsInWorking = extractClaimCitations(workingReportText);
   const allCitedSet = new Set<string>([...citationsInFinal, ...citationsInBrief, ...citationsInWorking]);
   const allCited = Array.from(allCitedSet);
+
+  // A-FREEZE-003: a captured citation whose id is not a well-formed claim_id
+  // (e.g. [claim:see-above], [claim:typo]) slips past every other refusal
+  // filter (which all gate on isWellFormedClaimId) and would be written
+  // verbatim into the receipt's cited_claim_ids. Flag it as its own refusal
+  // and exclude it from the receipt's cited list.
+  //
+  // Exception: `clm_...` (literal ellipsis) is the synth-workspace scaffold's
+  // instructional placeholder ("Cite accepted_claim_ids inline as
+  // `[claim:clm_...]`") emitted into decision-brief.md / working-report.md. It
+  // is template chrome, never a real citation attempt, so it must not block
+  // freeze. See src/synth/markdown.ts.
+  const SCAFFOLD_CITATION_PLACEHOLDER = 'clm_...';
+  const malformedCitations = allCited.filter(
+    (c) => !isWellFormedClaimId(c) && c !== SCAFFOLD_CITATION_PLACEHOLDER,
+  );
+  // cited_claim_ids carries only well-formed ids (placeholder + malformed both
+  // excluded — neither resolves to a real claim).
+  const wellFormedCited = allCited.filter((c) => isWellFormedClaimId(c));
+  if (malformedCitations.length > 0) {
+    noteRefusal(
+      refusal,
+      'FREEZE_MALFORMED_CITATION',
+      `Synthesis contains malformed [claim:...] citation(s) whose id is not a well-formed claim_id: ${malformedCitations.join(', ')}.`,
+    );
+  }
 
   const unknownCitations = allCited.filter((c) => isWellFormedClaimId(c) && !allClaimIds.has(c));
   const repairCitations = allCited.filter((c) => repairOrRejected.has(c));
@@ -499,7 +561,10 @@ export async function freeze(options: FreezeOptions): Promise<FreezeSummary> {
     synthesis_hashes: synthesisHashes,
     canonical_artifact_hashes: canonicalHashes,
     accepted_claim_ids: acceptedClaimIds,
-    cited_claim_ids: allCited,
+    // A-FREEZE-003: only well-formed claim_ids reach the receipt; malformed
+    // citations have already forced a refusal above, so on the PASS path this
+    // equals allCited.
+    cited_claim_ids: wellFormedCited,
     uncited_accepted_claim_ids: uncitedAccepted,
     unresolved_contradictions: unresolvedContradictionRefs,
     waivers_disclosed: waiversDisclosed,
@@ -620,6 +685,10 @@ const NEXT_ACTION_BY_CODE: Record<FreezeReasonCode, string> = {
     'Run `research-os audit` after addressing repair items; freeze requires verdict=ready_for_synthesis.',
   FREEZE_HANDOFF_NOT_READY:
     'Run `research-os cowork handoff` after the pack reaches synthesis_ready.',
+  FREEZE_INCOMPATIBLE_REVIEW_DECISIONS:
+    'Inspect the reported claim-reviews.jsonl rows: multiple rows for the same claim_id at the same created_at disagree on decision. Remove the duplicate row or re-run `research-os review` to overwrite with a fresh decision.',
+  FREEZE_MALFORMED_CITATION:
+    'Replace any malformed [claim:...] citation in synthesis (e.g. [claim:see-above]) with a well-formed claim_id (clm_...) that exists in the pack.',
 };
 
 // B-C-003: derive next-action list from structured reason_records. The

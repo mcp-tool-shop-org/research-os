@@ -55,45 +55,57 @@ function evidenceGroundedViaLedger(
   if (!claim.evidence_excerpt_ids || claim.evidence_excerpt_ids.length === 0) {
     return { mode: 'legacy', reason: 'pre-span-first claim (no evidence_excerpt_ids)' };
   }
+  // A-REVIEW-002: a multi-source claim can carry evidence_excerpt_ids drawn
+  // from DIFFERENT cited sources. Resolving each id against only the FIRST
+  // source's ledger false-flagged such claims as ungrounded. Build the union
+  // of every cited source's ledger and resolve excerpt IDs against the union.
+  const unionLedger = new Map<string, Excerpt>();
+  let anyLedger = false;
   for (const sid of claim.source_ids) {
     const ledger = excerptsBySourceId.get(sid);
     if (!ledger) continue;
-    const allFound = claim.evidence_excerpt_ids.every((id) => ledger.has(id));
-    if (!allFound) {
-      return {
-        mode: 'span_first_fail',
-        reason: `One or more evidence_excerpt_ids do not resolve in the ledger for ${sid}`,
-      };
+    anyLedger = true;
+    for (const [id, ex] of ledger) {
+      if (!unionLedger.has(id)) unionLedger.set(id, ex);
     }
-    // Deterministic re-derivation of the expected evidence_excerpt.
-    const seen = new Set<string>();
-    const texts: string[] = [];
-    for (const id of claim.evidence_excerpt_ids) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      texts.push(ledger.get(id)!.text);
-    }
-    const expected = texts.join(EVIDENCE_EXCERPT_JOIN);
-    const actual = claim.evidence_excerpt;
-    if (actual === expected) {
-      return { mode: 'span_first_ok', reason: 'evidence_excerpt matches the ledger join exactly' };
-    }
-    // Tolerate the truncation suffix extract.ts adds when the joined text
-    // exceeds the per-claim cap.
-    if (actual.endsWith(' …') && expected.startsWith(actual.slice(0, -2).trimEnd())) {
-      return {
-        mode: 'span_first_ok',
-        reason: 'evidence_excerpt is a deterministic truncation of the ledger join',
-      };
-    }
+  }
+  if (!anyLedger) {
     return {
       mode: 'span_first_fail',
-      reason: `evidence_excerpt does not match the deterministic ledger join for ${sid}`,
+      reason: 'no ledger available for any cited source',
+    };
+  }
+  const allFound = claim.evidence_excerpt_ids.every((id) => unionLedger.has(id));
+  if (!allFound) {
+    return {
+      mode: 'span_first_fail',
+      reason: `One or more evidence_excerpt_ids do not resolve in the union of cited sources' ledgers`,
+    };
+  }
+  // Deterministic re-derivation of the expected evidence_excerpt.
+  const seen = new Set<string>();
+  const texts: string[] = [];
+  for (const id of claim.evidence_excerpt_ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    texts.push(unionLedger.get(id)!.text);
+  }
+  const expected = texts.join(EVIDENCE_EXCERPT_JOIN);
+  const actual = claim.evidence_excerpt;
+  if (actual === expected) {
+    return { mode: 'span_first_ok', reason: 'evidence_excerpt matches the ledger join exactly' };
+  }
+  // Tolerate the truncation suffix extract.ts adds when the joined text
+  // exceeds the per-claim cap.
+  if (actual.endsWith(' …') && expected.startsWith(actual.slice(0, -2).trimEnd())) {
+    return {
+      mode: 'span_first_ok',
+      reason: 'evidence_excerpt is a deterministic truncation of the ledger join',
     };
   }
   return {
     mode: 'span_first_fail',
-    reason: 'no ledger available for any cited source',
+    reason: `evidence_excerpt does not match the deterministic ledger join across cited sources`,
   };
 }
 

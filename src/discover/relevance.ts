@@ -26,6 +26,8 @@
  * naming the severity in clear_severities[].
  */
 
+import { isUrlSafe } from '../sources/url-safety.js';
+
 /** Default keyword-overlap threshold (≥ this fraction of query keywords must
  * appear in the fetched title for the candidate to be `verified`). 0.2 is
  * permissive enough to admit borderline-relevant titles while definitively
@@ -201,6 +203,17 @@ export async function fetchUrlTitle(
   fetchImpl: typeof fetch,
   timeoutMs: number,
 ): Promise<{ title: string | null; error: string | null }> {
+  // A-SOURCES-001 — SSRF guard before any network call. Discover-time title
+  // fetches hit LLM-PROPOSED URLs, so they MUST pass the same private/loopback
+  // + DNS-resolution check that gather-time fetch.ts applies. An unsafe URL is
+  // NOT fetched; the title resolves to null with the refusal reason, which
+  // assessRelevance maps to `unverified` (graceful degradation — never
+  // `verified`, never a confabulated signal). There is no escape hatch at
+  // discover time: LLM-proposed URLs are never operator-curated.
+  const safety = await isUrlSafe(url);
+  if (!safety.safe) {
+    return { title: null, error: `SSRF refused: ${safety.reason}` };
+  }
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -216,6 +229,20 @@ export async function fetchUrlTitle(
     } catch (err) {
       const message = err instanceof Error ? err.message : 'fetch failed';
       return { title: null, error: message };
+    }
+    // A-SOURCES-001 (verifier follow-up): re-validate the POST-REDIRECT final
+    // URL, mirroring src/sources/fetch.ts. Node fetch follows redirects by
+    // default, so a safe-looking https URL that 30x-redirects to a private /
+    // loopback / link-local host (e.g. 169.254.169.254 cloud-metadata,
+    // 127.0.0.1 admin endpoints) would otherwise be read here. Discover-time
+    // has no escape hatch — LLM-proposed URLs are never operator-curated. The
+    // body is NOT read until this passes.
+    const finalUrl = response.url || url;
+    if (finalUrl !== url) {
+      const finalCheck = await isUrlSafe(finalUrl);
+      if (!finalCheck.safe) {
+        return { title: null, error: `SSRF refused (redirect): ${finalCheck.reason}` };
+      }
     }
     // Accept 200 (full body), 206 (Range honored), and other 2xx variants.
     // Anything else: treat as fetch failure (no signal).

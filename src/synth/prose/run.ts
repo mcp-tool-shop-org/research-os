@@ -34,6 +34,7 @@ import type {
   SourceCardMeta,
   SupportBundle,
   UnusedClaimDisclosure,
+  VerifierDecision,
   WaiverMeta,
 } from './types.js';
 
@@ -193,8 +194,7 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
 
     // Draft (max 2 attempts: first draft, one retry on verifier rejection).
     let paragraph: string | null = null;
-    let verifierDecision: 'faithful' | 'unsupported_connective' | 'omits_critical_qualifier' =
-      'faithful';
+    let verifierDecision: VerifierDecision = 'faithful';
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const draftResult = await runDrafter(
@@ -233,9 +233,15 @@ export async function runProseSynthesis(input: ProseRunInput): Promise<ProseRunR
       );
 
       if (!verifyResult.ok) {
-        // Verifier call failed — treat conservatively: mark thin_evidence.
+        // A-SYNTH-003: the verifier CALL ITSELF failed (transport /
+        // TIER_TIMEOUT / parse) — verification is unavailable, NOT confirmed
+        // faithful. Record the distinct `verification_unavailable` decision
+        // so downstream `=== 'faithful'` filters exclude this paragraph. We
+        // still admit the drafted paragraph with a thin_evidence disclosure
+        // (operators need to see the section addressed), but it is no longer
+        // miscounted as verified.
         paragraph = draftResult.paragraph;
-        verifierDecision = 'faithful'; // conservative: admit with thin_evidence disclosure
+        verifierDecision = 'verification_unavailable';
         thinParagraphIds.push(paragraphId(paraIndex));
         break;
       }

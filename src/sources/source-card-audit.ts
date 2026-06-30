@@ -334,8 +334,31 @@ export async function runSourceCardAudit(packPath: string): Promise<AuditResult>
 
   const cards: SourceCard[] = [];
   for (const file of cardFiles) {
-    const raw = await readFile(join(cardsDir, file), 'utf8');
-    cards.push(SourceCardSchema.parse(JSON.parse(raw)));
+    // C1-013 / A-SOURCES-005: wrap per-card parse so one malformed or
+    // schema-invalid card does not abort the whole audit with a raw Zod /
+    // JSON stack. Re-route through the structured error model, naming the
+    // offending file so the operator can fix or remove exactly that card.
+    let raw: string;
+    try {
+      raw = await readFile(join(cardsDir, file), 'utf8');
+    } catch (err) {
+      throw new ResearchOSError(
+        `Cannot read source card: ${file}`,
+        'PACK_NOT_FOUND',
+        `Check evidence/source-cards/${file} is readable, or re-run \`research-os gather <section>\` to regenerate it. See handbook/recovery.md.`,
+        err instanceof Error ? err : undefined,
+      );
+    }
+    try {
+      cards.push(SourceCardSchema.parse(JSON.parse(raw)));
+    } catch (err) {
+      throw new ResearchOSError(
+        `Source card failed to parse: ${file} (${err instanceof Error ? err.message : String(err)})`,
+        'PACK_PARSE_ERROR',
+        `Inspect evidence/source-cards/${file} for malformed JSON or schema drift, or remove it and re-run \`research-os gather <section>\`. See handbook/recovery.md.`,
+        err instanceof Error ? err : undefined,
+      );
+    }
   }
 
   const overrides = await readOverrides(packPath);

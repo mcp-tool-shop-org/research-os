@@ -47,9 +47,13 @@ function makeCandidateId(sectionId: string, url: string): string {
 }
 
 function isHttpsUrl(s: string): boolean {
+  // A-SOURCES-001 — actually reject http:. The previous body returned true for
+  // http: as well, contradicting the function name AND the 'Rejected non-https
+  // URL' warning emitted when this returns false. Discover candidates come from
+  // an LLM provider; https-only is the intended floor.
   try {
     const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:';
+    return u.protocol === 'https:';
   } catch {
     return false;
   }
@@ -89,11 +93,15 @@ async function readCandidates(packPath: string, sectionId: string): Promise<Disc
 
 // Append-only ledger: latest entry per candidate_id wins. Approve/reject
 // emit a fresh entry with updated status; the ledger preserves history.
-function latestPerCandidate(candidates: DiscoveryCandidate[]): Map<string, DiscoveryCandidate> {
+export function latestPerCandidate(candidates: DiscoveryCandidate[]): Map<string, DiscoveryCandidate> {
   const out = new Map<string, DiscoveryCandidate>();
+  // A-SOURCES-004 — deterministic tie-break. `candidates` is in ledger append
+  // order; on equal discovered_at the later-APPENDED entry must win (a status
+  // update emitted in the same millisecond as the original would otherwise be
+  // dropped by a strict `<`). `<=` keeps the most recently iterated entry.
   for (const c of candidates) {
     const prev = out.get(c.candidate_id);
-    if (!prev || prev.discovered_at < c.discovered_at) out.set(c.candidate_id, c);
+    if (!prev || prev.discovered_at <= c.discovered_at) out.set(c.candidate_id, c);
   }
   return out;
 }

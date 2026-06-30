@@ -143,9 +143,19 @@ export async function promote(options: PromoteOptions): Promise<PromoteResult> {
     const research = ResearchYamlSchema.parse(yamlParse(await readFile(yamlPath, 'utf8')));
     const idx = research.sections.findIndex((s) => s.id === options.sectionId);
     if (idx >= 0 && research.sections[idx]!.status === 'gated') {
+      // A-REVIEW-001: frame_excluded synthetic reviews ARE present in the
+      // snapshot (filter-don't-reject topicality calls made at extract time),
+      // but they must NOT block promotion of an otherwise-clean section.
+      // Mirror run.ts finalizeReview: drop frame_excluded out of the
+      // reviewer-set before evaluating "every decision is accepted_for_synthesis".
+      // Otherwise a single off-topic chrome claim blocks the section forever,
+      // contradicting test/cowork-frame-excluded-promotion.test.ts Scenario A.
+      const reviewerSetReviews = snapshot.claim_reviews.filter(
+        (r) => r.decision !== 'frame_excluded',
+      );
       const allAccepted =
-        snapshot.candidate_claims > 0 &&
-        snapshot.claim_reviews.every((r) => r.decision === 'accepted_for_synthesis');
+        reviewerSetReviews.length > 0 &&
+        reviewerSetReviews.every((r) => r.decision === 'accepted_for_synthesis');
       if (allAccepted) {
         research.sections[idx] = { ...research.sections[idx]!, status: 'reviewed' };
         await writeFile(yamlPath, yamlStringify(research, { lineWidth: 0 }), 'utf8');

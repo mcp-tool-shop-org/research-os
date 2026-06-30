@@ -7,6 +7,7 @@ import type { ClaimSynthesisDisposition } from '../dispositions/schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
 import type { FetchReceipt, SourceCard } from '../sources/schema.js';
 import type { CoworkHandoffPayload } from '../cowork/schema.js';
+import { getEffectiveDecisionMap } from '../closure-ledger/effective-accepted.js';
 
 import type {
   ClaimSummary,
@@ -73,12 +74,11 @@ function packId(research: ResearchYaml): string {
 }
 
 function latestDecisionByClaim(reviews: ClaimReview[]): Map<string, ClaimReview> {
-  const m = new Map<string, ClaimReview>();
-  for (const r of reviews) {
-    const existing = m.get(r.claim_id);
-    if (!existing || r.created_at > existing.created_at) m.set(r.claim_id, r);
-  }
-  return m;
+  // A-COWORK-001 (verifier follow-up): delegate to the single canonical join so
+  // the audit verdict's accepted-set resolves same-`created_at` ties in the same
+  // last-appended-wins direction as freeze/cowork/synth, rather than the
+  // opposite (strict `>`) direction this used to hand-roll.
+  return getEffectiveDecisionMap(reviews);
 }
 
 function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<string, string> {
@@ -108,6 +108,35 @@ function buildEffectiveDispositions(
     map.set(d.claim_id, d.status);
   }
   return map;
+}
+
+/**
+ * A-AUD-003: `buildEffectiveDispositions` has a side effect — it pushes
+ * "invalid disposition" layer-violation warnings into the shared warnings
+ * array. It was previously invoked twice over the same per-section data
+ * (once in `buildSectionReadiness`, once in `buildClaimSummary`), so every
+ * layer-violation warning landed in `input.warnings` TWICE, which then
+ * duplicated through `blocking_reasons` (determineVerdict greps warnings for
+ * /invalid/). We now compute the effective-disposition map + warnings ONCE
+ * per section here, collect warnings a single time, and hand the precomputed
+ * maps to both consumers so neither re-runs the side-effecting build.
+ *
+ * Returns a map keyed by section id; the per-section value is the
+ * claim_id → effective-disposition-status map.
+ */
+function buildEffectiveDispositionsBySection(
+  input: AggregateInput,
+  warnings: string[],
+): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  for (const [sid, data] of input.perSection) {
+    const decisionByClaim = latestDecisionByClaim(data.claimReviews);
+    out.set(
+      sid,
+      buildEffectiveDispositions(data.dispositions ?? [], decisionByClaim, warnings),
+    );
+  }
+  return out;
 }
 
 function buildOrphanClaims(input: AggregateInput): OrphanClaimRow[] {
@@ -457,18 +486,19 @@ function buildSourceDiversityGaps(input: AggregateInput): SourceDiversityGapRow[
   return out;
 }
 
-function buildSectionReadiness(input: AggregateInput, warnings: string[]): SynthesisReadinessRow[] {
+function buildSectionReadiness(
+  input: AggregateInput,
+  effectiveDispositionsBySection: Map<string, Map<string, string>>,
+): SynthesisReadinessRow[] {
   const handoffMode: HandoffMode =
     (input.handoff?.mode as HandoffMode | undefined) ?? 'unknown';
   const workspaceAllowed = input.handoff?.synthesis_allowed ?? false;
   return input.research.sections.map((s) => {
     const data = input.perSection.get(s.id);
     const decisionByClaim = data ? latestDecisionByClaim(data.claimReviews) : new Map();
-    const effectiveDispositions = buildEffectiveDispositions(
-      data?.dispositions ?? [],
-      decisionByClaim,
-      warnings,
-    );
+    // A-AUD-003: reuse the precomputed map; do NOT re-run the side-effecting
+    // build (it would re-push layer-violation warnings → duplicates).
+    const effectiveDispositions = effectiveDispositionsBySection.get(s.id) ?? new Map<string, string>();
     let accepted = 0;
     let repair = 0;
     let rejected = 0;
@@ -508,7 +538,11 @@ function buildSectionReadiness(input: AggregateInput, warnings: string[]): Synth
   });
 }
 
-function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[], warnings: string[]): ClaimSummary {
+function buildClaimSummary(
+  input: AggregateInput,
+  orphans: OrphanClaimRow[],
+  effectiveDispositionsBySection: Map<string, Map<string, string>>,
+): ClaimSummary {
   let total = 0;
   let candidate = 0;
   let accepted = 0;
@@ -520,15 +554,13 @@ function buildClaimSummary(input: AggregateInput, orphans: OrphanClaimRow[], war
   let withSourceHashes = 0;
   let scopeNull = 0;
   let notNull = 0;
-  for (const data of input.perSection.values()) {
+  for (const [sid, data] of input.perSection) {
     total += data.claims.length;
     candidate += data.candidateClaims.length;
     const decisionByClaim = latestDecisionByClaim(data.claimReviews);
-    const effectiveDispositions = buildEffectiveDispositions(
-      data.dispositions ?? [],
-      decisionByClaim,
-      warnings,
-    );
+    // A-AUD-003: reuse the precomputed map; do NOT re-run the side-effecting
+    // build (it would re-push layer-violation warnings → duplicates).
+    const effectiveDispositions = effectiveDispositionsBySection.get(sid) ?? new Map<string, string>();
     for (const c of data.candidateClaims) {
       if (c.evidence_excerpt.trim().length > 0) withEvidence += 1;
       if (c.source_hashes.length > 0) withSourceHashes += 1;
@@ -831,9 +863,14 @@ export function aggregate(input: AggregateInput): AggregateOutput {
   const unresolvedContradictions = buildUnresolvedContradictions(input);
   const scopeWideningRisks = buildScopeWideningRisks(input);
   const sourceDiversityGaps = buildSourceDiversityGaps(input);
-  const sectionRows = buildSectionReadiness(input, input.warnings);
+  // A-AUD-003: compute effective dispositions (and their layer-violation
+  // warnings) ONCE, then share with both consumers so the warnings are not
+  // pushed into input.warnings twice (which previously duplicated through
+  // blocking_reasons).
+  const effectiveDispositionsBySection = buildEffectiveDispositionsBySection(input, input.warnings);
+  const sectionRows = buildSectionReadiness(input, effectiveDispositionsBySection);
 
-  const claimSummary = buildClaimSummary(input, orphanClaims, input.warnings);
+  const claimSummary = buildClaimSummary(input, orphanClaims, effectiveDispositionsBySection);
   const sourceSummary = buildSourceSummary(input);
   const contradictionSummary = buildContradictionSummary(input);
   const reviewSummary = buildReviewSummary(input);

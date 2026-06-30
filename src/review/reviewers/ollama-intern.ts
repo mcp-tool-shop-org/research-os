@@ -146,11 +146,18 @@ export interface OllamaReviewerConfig {
 const DEFAULT_CLAIMS_PER_WINDOW = 30;
 
 // Window an array into N-sized chunks.
+//
+// A-REVIEW-003 seam guard: a non-positive windowSize (0 or negative) would
+// make `i += windowSize` never advance, hanging the loop forever. Guard the
+// seam regardless of caller — clamp a non-positive/non-integer windowSize to a
+// single window covering all items so the function is always safe.
 export function pageClaimsForReview<T>(items: T[], windowSize: number): T[][] {
   if (items.length === 0) return [];
+  const safeWindow =
+    Number.isInteger(windowSize) && windowSize > 0 ? windowSize : items.length;
   const out: T[][] = [];
-  for (let i = 0; i < items.length; i += windowSize) {
-    out.push(items.slice(i, i + windowSize));
+  for (let i = 0; i < items.length; i += safeWindow) {
+    out.push(items.slice(i, i + safeWindow));
   }
   return out;
 }
@@ -172,10 +179,18 @@ export class OllamaInternReviewer implements Reviewer {
     this.timeoutMs =
       config.timeoutMs ??
       (this.mode === 'narrow_critic' ? NARROW_CRITIC_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+    // A-REVIEW-003: validate the window is a positive integer. A negative env
+    // value (e.g. OLLAMA_INTERN_REVIEW_WINDOW=-5) is truthy, so the old
+    // `parseInt(...) || DEFAULT` guard let it through; likewise config.claimsPerWindow
+    // via `??` survived a 0/negative from the CLI. pageClaimsForReview then
+    // looped forever on windowSize <= 0. Clamp any non-positive/non-integer
+    // (from either env OR caller config) back to the default.
+    const positiveOrDefault = (n: number | undefined): number =>
+      typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : DEFAULT_CLAIMS_PER_WINDOW;
     const envWindow = process.env.OLLAMA_INTERN_REVIEW_WINDOW;
-    this.claimsPerWindow =
-      config.claimsPerWindow ??
-      (envWindow ? parseInt(envWindow, 10) || DEFAULT_CLAIMS_PER_WINDOW : DEFAULT_CLAIMS_PER_WINDOW);
+    this.claimsPerWindow = positiveOrDefault(
+      config.claimsPerWindow ?? (envWindow ? parseInt(envWindow, 10) : undefined),
+    );
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
     this.reviewerOptions = config.reviewer_options
       ? ReviewerOptionsSchema.parse(config.reviewer_options)

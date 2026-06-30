@@ -201,6 +201,43 @@ async function readExistingClaimIds(
   return set;
 }
 
+// A-CLAIMS-003 — normalize a claim's `asserts` for content-level dedup. The
+// claim_id encodes a per-run writtenIndex, so claim_id-only dedup misses a
+// content duplicate produced by a non-resume re-extract (which appends the
+// same assertion under a fresh ID). Normalizing on whitespace + case mirrors
+// the in-extractor window-dedup key (extractors/mcp.ts) so the two dedup
+// layers agree on what "the same claim" means.
+function normalizeAssertForDedup(asserts: string): string {
+  return asserts.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// A-CLAIMS-003 — seed the content-dedup set from any claims already on disk
+// for this section (e.g. a prior --resume run, or a re-extract where the
+// pre-mcp preservation branch left claims.jsonl in place). Empty when no file
+// exists. Lines that fail to parse are tolerated (skipped) — this set is an
+// optimization for dedup, not an authority on file contents.
+async function readExistingAssertKeys(
+  packPath: string,
+  sectionId: string,
+): Promise<Set<string>> {
+  const path = join(packPath, 'sections', sectionId, 'claims.jsonl');
+  if (!existsSync(path)) return new Set();
+  const text = await readFile(path, 'utf8');
+  const set = new Set<string>();
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const obj = JSON.parse(line) as { asserts?: string };
+      if (typeof obj.asserts === 'string') {
+        set.add(normalizeAssertForDedup(obj.asserts));
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return set;
+}
+
 interface ResolveResult {
   ok: boolean;
   evidenceText: string;
@@ -406,6 +443,10 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
   // file already exists" branch — where we left claims.jsonl in place — is
   // handled by reading the actual file state.
   const existingIds = await readExistingClaimIds(packPath, options.sectionId);
+  // A-CLAIMS-003 — content-level dedup keys, seeded from claims already on
+  // disk and grown as we append within this run. Prevents a non-resume
+  // re-extract from appending the same assertion under a fresh claim_id.
+  const existingAssertKeys = await readExistingAssertKeys(packPath, options.sectionId);
 
   const summary: ExtractClaimsSummary = {
     sectionId: options.sectionId,
@@ -421,8 +462,6 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     claimsRejectedUngrounded: 0,
     claimsRejectedExcerptIdMissing: 0,
     claimsRejectedExcerptIdMalformed: 0,
-    claimsRejectedScopeMissing: 0,
-    claimsRejectedExtractorParaphrase: 0,
     claimIds: [],
     claimsAdmittedPersisted: 0,
     failures: [],
@@ -614,8 +653,19 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
               summary.claimsDeduped += 1;
               continue;
             }
+            // A-CLAIMS-003 — content-level dedup. claim_id encodes a per-run
+            // writtenIndex, so a non-resume re-extract produces a NEW id for
+            // the same assertion and would slip past the claim_id check above.
+            // Skip the append when this normalized assert was already persisted
+            // (either on disk before this run or earlier in this run).
+            const assertKey = normalizeAssertForDedup(claim.asserts);
+            if (existingAssertKeys.has(assertKey)) {
+              summary.claimsDeduped += 1;
+              continue;
+            }
             await appendFile(claimsPath, JSON.stringify(claim) + '\n', 'utf8');
             existingIds.add(claim.claim_id);
+            existingAssertKeys.add(assertKey);
             summary.claimsAdded += 1;
             perSourceClaimsAdded += 1;
             summary.claimIds.push(claim.claim_id);

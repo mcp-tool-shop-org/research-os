@@ -204,6 +204,16 @@ export const VERIFIER_DECISIONS = [
   'faithful',
   'unsupported_connective',
   'omits_critical_qualifier',
+  // A-SYNTH-003: distinct from the three model-returned decisions above. This
+  // value is NOT part of the MCP wire schema (VERIFIER_DECISIONS_ENUM in
+  // prompt.js) — the verifier model never returns it. It is recorded by
+  // run.ts when the verifier CALL ITSELF fails (transport / TIER_TIMEOUT /
+  // parse), so "verification unavailable" is no longer conflated with
+  // "verified faithful". Downstream consumers that gate on
+  // `verifier_decision === 'faithful'` (partial-pack classifier, bundle
+  // planner, recover diagnose) naturally exclude paragraphs carrying this
+  // value, which is the intended conservative posture.
+  'verification_unavailable',
 ] as const;
 
 export type VerifierDecision = (typeof VERIFIER_DECISIONS)[number];

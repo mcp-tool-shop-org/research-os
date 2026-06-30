@@ -346,9 +346,10 @@ export interface ExtractClaimsFailure {
   reason: string;
 }
 
-// Six precise rejection categories replace the umbrella "hallucination" label.
-// At extract time we can detect three of them mechanically; the other three
-// (unsupported_claim, scope_widening, cross_source_contam) are reviewer concerns.
+// Precise rejection categories replace the umbrella "hallucination" label.
+// At extract time we mechanically detect only two of them — excerpt_id_missing
+// and excerpt_id_malformed; the rest (e.g. unsupported_claim, scope_widening,
+// cross_source_contam) are reviewer concerns decided downstream.
 export interface ExtractClaimsSummary {
   sectionId: string;
   extractor: ClaimExtractor;
@@ -371,8 +372,6 @@ export interface ExtractClaimsSummary {
   // Precise span-first rejection categories.
   claimsRejectedExcerptIdMissing: number;
   claimsRejectedExcerptIdMalformed: number;
-  claimsRejectedScopeMissing: number;
-  claimsRejectedExtractorParaphrase: number;
   claimIds: string[];
   // Phase 1b-b v0.8.0 — count of claims persisted to claims.jsonl with
   // frame_excluded:false. Sourced from the actual persistence loop, NOT the

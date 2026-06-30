@@ -15,6 +15,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 import { MCPBinaryNotFoundError } from './errors.js';
+import { RESEARCH_OS_VERSION } from '../index.js';
 
 const BIN_NAME = 'ollama-intern-mcp';
 // Windows resolves bare executable names against this list when PATH lookup
@@ -162,15 +163,29 @@ export class MCPClientHandle {
     const client =
       this.options.clientFactory?.() ??
       new Client(
-        { name: 'research-os', version: '0.13.1' },
+        // A-MCP-002: identity version tracks the package version (single
+        // source of truth) instead of a hardcoded literal that silently
+        // drifts on every release bump.
+        { name: 'research-os', version: RESEARCH_OS_VERSION },
         { capabilities: {} },
       );
 
-    this.transport = transport;
-    this.client = client;
-
+    // A-MCP-001: do NOT commit this.client/this.transport until the handshake
+    // resolves. Assigning them before awaiting client.connect() meant a
+    // handshake rejection left this.client set, so a later connect() would
+    // short-circuit (`if (this.client) return ...`) and hand back a
+    // non-connected client. Commit on success; null both out on rejection.
     this.connectPromise = (async () => {
-      await client.connect(transport as unknown as Parameters<typeof client.connect>[0]);
+      try {
+        await client.connect(transport as unknown as Parameters<typeof client.connect>[0]);
+      } catch (err) {
+        this.client = null;
+        this.transport = null;
+        this.connectPromise = null;
+        throw err;
+      }
+      this.client = client;
+      this.transport = transport;
       return client;
     })();
     return this.connectPromise;

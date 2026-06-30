@@ -199,6 +199,14 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
       cardsWritten: 0,
       sourceIdsAddedCount: 0,
     };
+    // A-SOURCES-002 — defer the sources.jsonl appender enqueue + summary push
+    // until AFTER appendFetchLog succeeds. Previously add()/push() ran before
+    // appendFetchLog; if appendFetchLog threw, the catch popped
+    // summary.sourceIds but the appender's queued id still flushed to
+    // sources.jsonl on the next iteration — leaving a card referenced by
+    // sources.jsonl whose only receipt says the fetch failed. Holding the id
+    // here and enqueueing post-receipt keeps the two records consistent.
+    let pendingSourceId: string | null = null;
     try {
       const { receipt, rawText } = await fetchOnce(url, {
         sectionId: options.sectionId,
@@ -236,10 +244,12 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
           };
           const card = buildCard({ receipt: receiptToWrite, extraction: result, extractedBy: extractor.name, overrides });
           await writeSourceCard(packPath, card);
-          sourceIdAppender.add(card.source_id);
           delta.cardsWritten = 1;
-          delta.sourceIdsAddedCount = 1;
-          summary.sourceIds.push(card.source_id);
+          // A-SOURCES-002 — do NOT enqueue the source_id yet. The card JSON is
+          // on disk, but it must not be referenced by sources.jsonl until its
+          // fetch receipt is durably appended below. Hold the id; flush it into
+          // the appender + summary only after appendFetchLog succeeds.
+          pendingSourceId = card.source_id;
         } else {
           delta.extractedFailed = 1;
           receiptToWrite = {
@@ -302,6 +312,13 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
 
       await appendFetchLog(packPath, receiptToWrite);
       summary.receiptsAppended += 1;
+      // A-SOURCES-002 — the receipt is now durable. Only NOW is it safe to
+      // reference this card from sources.jsonl. Enqueue + record the id.
+      if (pendingSourceId !== null) {
+        sourceIdAppender.add(pendingSourceId);
+        delta.sourceIdsAddedCount = 1;
+        summary.sourceIds.push(pendingSourceId);
+      }
       // Commit per-iteration deltas only after the appendFetchLog write.
       summary.fetchedOk += delta.fetchedOk;
       summary.fetchedFailed += delta.fetchedFailed;

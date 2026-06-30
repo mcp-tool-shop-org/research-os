@@ -82,16 +82,30 @@ import { RESEARCH_OS_VERSION } from './index.js';
 import { loadReceiptForPack, receiptPathForPack } from './calibration/lookup.js';
 import type { ReviewerOptions } from './review/reviewer-options-schema.js';
 
+// Exit-code contract (SHIP_GATE): 0 ok · 1 user error · 2 runtime/blocked · 3 partial.
+// A thrown ResearchOSError defaults to exit 1 (user error), but some codes name a
+// runtime condition (corrupted/unreadable on-disk artifact) rather than operator
+// misuse — those map to exit 2 to match the gate/freeze/synth blocked-state convention.
+//
+// MALFORMED_DATA_FILE is new in this release, so exit 2 is its only-ever contract.
+// PACK_PARSE_ERROR names a structurally-similar corrupt-artifact condition but has
+// SHIPPED as exit 1; its exit code is part of the locked operator-observable
+// taxonomy (docs/roadmap.md → "error code taxonomy semantics" / grep contract), so
+// re-classifying it to exit 2 is a v2.0-track change and is deliberately NOT done here.
+const RUNTIME_ERROR_EXIT_CODES = new Set<string>(['MALFORMED_DATA_FILE']);
+
 function reportError(err: unknown): never {
+  let exitCode = 1;
   if (err instanceof ResearchOSError) {
     process.stderr.write(`research-os: ${err.code}: ${err.message}\n`);
     if (err.hint) process.stderr.write(`  hint: ${err.hint}\n`);
+    if (RUNTIME_ERROR_EXIT_CODES.has(err.code)) exitCode = 2;
   } else if (err instanceof Error) {
     process.stderr.write(`research-os: ${err.message}\n`);
   } else {
     process.stderr.write(`research-os: unknown error\n`);
   }
-  process.exit(1);
+  process.exit(exitCode);
 }
 
 /**
@@ -258,6 +272,45 @@ export function parseExtractTierBudgetMsArg(value: string): number {
   return r.value;
 }
 
+/**
+ * A-CLI-001 — sane upper bound for the bounded positive-integer CLI flags
+ * (`--review-window`, `--per-source-cap`). Values this large are typos, never
+ * intent; capping them prevents pathological paging windows and per-source
+ * caps from flowing downstream.
+ */
+const MAX_BOUNDED_INT_FLAG = 100_000;
+
+/**
+ * A-CLI-001 — shared validator for CLI flags that must be an integer >= 1
+ * (`--review-window`, `--per-source-cap`). The unbounded `parseIntArg` accepts
+ * 0 and negatives, which flow into `pageClaimsForReview` / the triage per-source
+ * cap and cause an infinite loop / OOM. Mirrors `parsePlannerTimeoutMsArg`'s
+ * shape: rejects non-integers, zero, negatives, unit suffixes, and values above
+ * a sane upper bound, naming the surface verbatim in the error.
+ */
+export function parsePositiveIntFlagArg(label: string): (value: string) => number {
+  return (value: string): number => {
+    const raw = value.trim();
+    if (!/^\d+$/.test(raw)) {
+      throw new InvalidArgumentError(
+        `${label}: expected a positive integer (>= 1), got '${value}'`,
+      );
+    }
+    const n = parseInt(raw, 10);
+    if (n < 1) {
+      throw new InvalidArgumentError(
+        `${label}: expected a positive integer (>= 1), got ${n}`,
+      );
+    }
+    if (n > MAX_BOUNDED_INT_FLAG) {
+      throw new InvalidArgumentError(
+        `${label}: value ${n} exceeds the safety upper bound (${MAX_BOUNDED_INT_FLAG}); values this large are usually typos`,
+      );
+    }
+    return n;
+  };
+}
+
 // C2-RE-001 fix: translate --no-progress / --progress Commander flags into the
 // RESEARCH_OS_NO_PROGRESS / RESEARCH_OS_FORCE_PROGRESS env vars that
 // src/util/progress.ts inspects. Reads process.argv directly so the two flags
@@ -275,6 +328,24 @@ export function applyProgressFlags(argv: readonly string[] = process.argv): void
   }
   if (hasNoProgress) process.env.RESEARCH_OS_NO_PROGRESS = '1';
   if (hasProgress) process.env.RESEARCH_OS_FORCE_PROGRESS = '1';
+}
+
+/**
+ * A-CLI-002 — `gather` accepts URLs from exactly one source. `--approved` and
+ * `--urls-file` are mutually exclusive: previously passing both ran the
+ * approved-file stat (which can throw APPROVED_URLS_NOT_FOUND) and then threw
+ * the approved value away (urlsFile ?? candidate), a throw-then-ignore path.
+ * Reject up front like applyProgressFlags does for --no-progress/--progress.
+ */
+export function assertGatherUrlSourceExclusive(
+  approved: boolean,
+  urlsFile: string | undefined,
+): void {
+  if (approved && urlsFile !== undefined) {
+    throw new InvalidArgumentError(
+      '--approved and --urls-file are mutually exclusive: pass one source of URLs, not both',
+    );
+  }
 }
 
 const program = new Command();
@@ -426,6 +497,13 @@ program
     try {
       applyProgressFlags();
       let urlsFile = opts.urlsFile as string | undefined;
+      // A-CLI-002: --approved and --urls-file are mutually exclusive (see
+      // assertGatherUrlSourceExclusive). Passing both previously fired the
+      // approved-file existence check (which can throw APPROVED_URLS_NOT_FOUND)
+      // only to then discard the approved candidate in favor of urlsFile — a
+      // confusing throw-then-ignore path. Reject up front like
+      // --no-progress/--progress do.
+      assertGatherUrlSourceExclusive(Boolean(opts.approved), urlsFile);
       if (opts.approved) {
         const path = await import('node:path');
         const fs = await import('node:fs/promises');
@@ -735,7 +813,7 @@ claimCmd
   )
   .argument('<section>', 'Section id, e.g. "03-source-and-claim-truth"')
   .option('--pack <dir>', 'Path to the pack root (defaults to cwd)', process.cwd())
-  .option('--per-source-cap <n>', 'Max claims per source forwarded to review', parseIntArg('--per-source-cap'), 10)
+  .option('--per-source-cap <n>', 'Max claims per source forwarded to review', parsePositiveIntFlagArg('--per-source-cap'), 10)
   .option('--min-assert-chars <n>', 'Asserts shorter than this become parked_low_value', parseIntArg('--min-assert-chars'), 30)
   .action(async (section: string, opts) => {
     try {
@@ -1225,7 +1303,7 @@ program
   .option(
     '--review-window <n>',
     'Claims per LLM review window (default 30). Smaller windows fit smaller models.',
-    parseIntArg('--review-window'),
+    parsePositiveIntFlagArg('--review-window'),
   )
   .option(
     '--two-pass-llm',

@@ -56,6 +56,8 @@ import {
   classifyRegenerationReason,
   computeInputStateHash,
   readExistingRecoveryArtifact,
+  restoreArchivedRecoveryFiles,
+  type ArchiveResult,
 } from './regeneration-ledger.js';
 import { RecoveryArtifactSchema } from './schema.js';
 import { verifyRecoveryAdvice } from './verifier.js';
@@ -507,20 +509,23 @@ export async function recoverPack(
     );
   };
 
-  try {
-    // R-014: archive existing recovery files BEFORE writing the new ones so
-    // the operator can correlate the new artifact's input_state_hash with
-    // the archived predecessor's filename suffix. Only the regenerate path
-    // archives; the default path overwrites in place (legacy behavior).
-    let archivedJsonPath: string | null = null;
-    let archivedMarkdownPath: string | null = null;
-    if (regenerateRequested && regenerationReason !== null) {
-      const previousHash = previousArtifact?.input_state_hash ?? null;
-      const archive = await archiveExistingRecoveryFiles(packPath, previousHash);
-      archivedJsonPath = archive.archivedJsonPath;
-      archivedMarkdownPath = archive.archivedMarkdownPath;
-    }
+  // A-RECOVER-001: hoisted out of the try block so the catch's NAMED
+  // COMPENSATOR can see whether an archive already happened. Tracks the
+  // archive result of the irreversible rename so a throw after archiving
+  // (write / ledger append) can restore the canonical files.
+  let archive: ArchiveResult = { archivedJsonPath: null, archivedMarkdownPath: null };
+  let archived = false;
 
+  try {
+    // A-RECOVER-001: make the regenerate path atomic. Resolve the MCP client
+    // AND build the new artifact FIRST (all in memory — these are the steps
+    // that can throw when the MCP binary is absent, ensureClient/advisor
+    // fail, or the artifact fails schema validation). ONLY once the new
+    // artifact exists do we perform the irreversible archive rename, then
+    // immediately write + append the ledger. This guarantees we never strand
+    // the canonical recovery files in history/ without a replacement and a
+    // ledger entry. If a write/ledger step still throws after archiving, the
+    // catch restores the archived files (named compensator).
     const client = await ensureClient();
     const { artifact, stats } = await buildRecoveryArtifact({
       packPath,
@@ -530,6 +535,19 @@ export async function recoverPack(
       model: options.advisorModel,
       inputStateHash: currentStateHash ?? undefined,
     });
+
+    // R-014: archive existing recovery files just before writing the new ones
+    // so the operator can correlate the new artifact's input_state_hash with
+    // the archived predecessor's filename suffix. Only the regenerate path
+    // archives; the default path overwrites in place (legacy behavior). The
+    // archive now happens AFTER the (fallible) build above, so an MCP-absent
+    // failure never reaches this point.
+    if (regenerateRequested && regenerationReason !== null) {
+      const previousHash = previousArtifact?.input_state_hash ?? null;
+      archive = await archiveExistingRecoveryFiles(packPath, previousHash);
+      archived = true;
+    }
+
     const { jsonPath, markdownPath } = await writeRecoveryArtifact({ packPath, artifact });
 
     if (regenerateRequested && regenerationReason !== null) {
@@ -539,7 +557,7 @@ export async function recoverPack(
         previousStateHash: previousArtifact?.input_state_hash ?? null,
         newStateHash: artifact.input_state_hash ?? '',
         regenerationReason,
-        archive: { archivedJsonPath, archivedMarkdownPath },
+        archive,
       });
       await appendRegenerationLedgerRecord(packPath, record);
     }
@@ -560,11 +578,22 @@ export async function recoverPack(
             regenerationReason,
             inputStateHash: artifact.input_state_hash,
             previousInputStateHash: previousArtifact?.input_state_hash ?? null,
-            archivedJsonPath,
-            archivedMarkdownPath,
+            archivedJsonPath: archive.archivedJsonPath,
+            archivedMarkdownPath: archive.archivedMarkdownPath,
           }
         : {}),
     };
+  } catch (err) {
+    // A-RECOVER-001 NAMED COMPENSATOR: if we already performed the
+    // irreversible archive rename and a later step (write / ledger append)
+    // threw, restore the canonical recovery files from history so they are
+    // never stranded without a replacement and without a ledger entry. The
+    // restore is best-effort and never clobbers a freshly written artifact;
+    // we then re-throw the original error unmasked.
+    if (archived) {
+      await restoreArchivedRecoveryFiles(packPath, archive);
+    }
+    throw err;
   } finally {
     if (mcpState.handle) {
       try {

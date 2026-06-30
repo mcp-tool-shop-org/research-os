@@ -28,11 +28,22 @@ export function getEffectiveSourceType(
   card: Pick<SourceCard, 'source_id' | 'source_type'>,
   overrides: SourceCardOverride[],
 ): SourceType {
+  // A-SOURCES-004 — deterministic tie-break. The override array is in
+  // append order, so on equal created_at the later-APPENDED record wins
+  // (sort by created_at desc, then appendIndex desc). A stable sort returning
+  // 0 on the tie would otherwise resolve to the FIRST (older) entry.
   const matched = overrides
-    .filter((o) => o.source_id === card.source_id && o.new_source_type != null)
-    .sort((a, b) => (a.created_at > b.created_at ? -1 : a.created_at < b.created_at ? 1 : 0));
+    .map((o, appendIndex) => ({ o, appendIndex }))
+    .filter((e) => e.o.source_id === card.source_id && e.o.new_source_type != null)
+    .sort((a, b) =>
+      a.o.created_at > b.o.created_at
+        ? -1
+        : a.o.created_at < b.o.created_at
+          ? 1
+          : b.appendIndex - a.appendIndex,
+    );
 
-  return matched.length > 0 ? (matched[0].new_source_type as SourceType) : card.source_type;
+  return matched.length > 0 ? (matched[0].o.new_source_type as SourceType) : card.source_type;
 }
 
 /**
@@ -47,12 +58,21 @@ export function getEffectivePublisher(
   card: Pick<SourceCard, 'source_id' | 'publisher'>,
   overrides: SourceCardOverride[],
 ): string | null {
+  // A-SOURCES-004 — deterministic tie-break on equal created_at: later-APPENDED
+  // override wins (created_at desc, then appendIndex desc).
   const matched = overrides
-    .filter((o) => o.source_id === card.source_id && o.new_publisher !== undefined)
-    .sort((a, b) => (a.created_at > b.created_at ? -1 : a.created_at < b.created_at ? 1 : 0));
+    .map((o, appendIndex) => ({ o, appendIndex }))
+    .filter((e) => e.o.source_id === card.source_id && e.o.new_publisher !== undefined)
+    .sort((a, b) =>
+      a.o.created_at > b.o.created_at
+        ? -1
+        : a.o.created_at < b.o.created_at
+          ? 1
+          : b.appendIndex - a.appendIndex,
+    );
 
   if (matched.length === 0) return card.publisher;
-  return (matched[0].new_publisher ?? null);
+  return (matched[0].o.new_publisher ?? null);
 }
 
 /**

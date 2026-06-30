@@ -7,6 +7,7 @@ import type { SourceCard } from '../sources/schema.js';
 import type { ResearchYaml } from '../intake/schema.js';
 import type { CoworkHandoffPayload } from '../cowork/schema.js';
 import { jaccardSimilarity } from '../contradictions/scope.js';
+import { getEffectiveDecisionMap } from '../closure-ledger/effective-accepted.js';
 
 import type {
   AllowedSynthesisInput,
@@ -32,15 +33,12 @@ export interface DeriveMapInput {
   generatedAt: string;
 }
 
+// A-COWORK-001: route through the single canonical last-wins-on-tie join in
+// closure-ledger/effective-accepted.ts so the equal-`created_at` tie direction
+// is consistent with cowork/derive.ts (last appended wins). Previously this
+// kept the FIRST-seen row on a tie (strict `>`), the opposite direction.
 function latestDecisionByClaim(reviews: ClaimReview[]): Map<string, ClaimReview> {
-  const map = new Map<string, ClaimReview>();
-  for (const r of reviews) {
-    const existing = map.get(r.claim_id);
-    if (!existing || r.created_at > existing.created_at) {
-      map.set(r.claim_id, r);
-    }
-  }
-  return map;
+  return getEffectiveDecisionMap(reviews);
 }
 
 function clusterClaimsBySharedSources(claims: Claim[]): ClaimCluster[] {

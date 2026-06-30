@@ -81,7 +81,12 @@ export async function triage(options: TriageOptions): Promise<TriageRunResult> {
   if (!existsSync(join(packPath, 'sections', options.sectionId)))
     throw new SectionNotFoundError(options.sectionId);
 
-  const perSourceCap = options.perSourceCap ?? DEFAULT_PER_SOURCE_CAP;
+  // A-CLI-001 seam guard: a 0/negative/non-integer cap would drive the Pass-3
+  // parking loop to a negative start index and over-park every claim. Clamp to
+  // the default — belt-and-suspenders for the CLI coercer's positive-int floor.
+  const requestedCap = options.perSourceCap ?? DEFAULT_PER_SOURCE_CAP;
+  const perSourceCap =
+    Number.isInteger(requestedCap) && requestedCap > 0 ? requestedCap : DEFAULT_PER_SOURCE_CAP;
   const minAssertChars = options.minAssertChars ?? DEFAULT_MIN_ASSERT_CHARS;
   const stamp = (options.now ?? (() => new Date()))();
   const stampIso = stamp.toISOString();
@@ -176,21 +181,36 @@ export async function triage(options: TriageOptions): Promise<TriageRunResult> {
       stillSelectedBySrc.set(sid, arr);
     }
   }
+  // First pass: compute the global keep-set. A multi-source claim is kept if
+  // ANY of its sources still has cap headroom for it — i.e. it ranks within the
+  // top perSourceCap for at least one referenced source. We must decide keep
+  // membership for ALL sources before parking anyone, otherwise a row parked on
+  // the first over-dense source processed never gets the chance to be rescued by
+  // a later under-cap source (A-TRIAGE-001).
+  const keep = new Set<TriageWorkRow>();
+  // Record, per row, the source + rank that PARKS it, so the reason string for a
+  // genuinely-parked row matches the source it was over-dense in.
+  const parkInfo = new Map<TriageWorkRow, { sid: string; count: number; rank: number }>();
   for (const [sid, list] of stillSelectedBySrc) {
-    if (list.length <= perSourceCap) continue;
     list.sort((a, b) => {
       if (b.quality !== a.quality) return b.quality - a.quality;
       return a.claim.claim_id.localeCompare(b.claim.claim_id);
     });
-    for (let i = perSourceCap; i < list.length; i += 1) {
-      const r = list[i]!;
-      // Only mark the row over the cap if it isn't already parked by a
-      // different source (a multi-source claim is kept if any of its
-      // sources still has cap headroom).
-      if (r.decision !== 'selected_for_review') continue;
-      r.decision = 'parked_overdense_source';
-      r.reason = `Source ${sid} contributed ${list.length} candidates; cap is ${perSourceCap}. This claim's quality (${r.quality.toFixed(2)}) ranks ${i + 1} for the source.`;
-    }
+    list.forEach((r, i) => {
+      if (i < perSourceCap) {
+        keep.add(r);
+      } else if (!parkInfo.has(r)) {
+        parkInfo.set(r, { sid, count: list.length, rank: i + 1 });
+      }
+    });
+  }
+  // Second pass: park only the rows no source kept (no referenced source had
+  // headroom for them).
+  for (const [r, info] of parkInfo) {
+    if (keep.has(r)) continue;
+    if (r.decision !== 'selected_for_review') continue;
+    r.decision = 'parked_overdense_source';
+    r.reason = `Source ${info.sid} contributed ${info.count} candidates; cap is ${perSourceCap}. This claim's quality (${r.quality.toFixed(2)}) ranks ${info.rank} for the source.`;
   }
 
   // Pass 4 — assign ranks to surviving selected_for_review rows so review

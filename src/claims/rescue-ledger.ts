@@ -166,9 +166,15 @@ function claimsJsonlPath(packPath: string, sectionId: string): string {
 }
 
 /**
- * Read all claims for a section. Skips malformed lines (matches the
- * tolerance pattern used elsewhere in the codebase for supplementary
- * inputs); throws if claims.jsonl is missing entirely.
+ * Read all claims for a section. Throws if claims.jsonl is missing entirely.
+ *
+ * A-CLAIMS-002 fix: this reader feeds the rescue/decline paths, which rewrite
+ * the WHOLE file from the returned claims. Silently skipping a line that fails
+ * JSON.parse or ClaimSchema.parse would mean a forward-incompatible or hand-
+ * edited claim line is permanently lost on the next rewrite. So we FAIL LOUD
+ * with the line number + content (matching repair-scope.ts:readClaimsJsonl,
+ * which does not silently skip) BEFORE any destructive rewrite can run. The
+ * operator can fix or remove the offending line deliberately.
  */
 async function readClaims(
   packPath: string,
@@ -182,13 +188,27 @@ async function readClaims(
   }
   const text = await readFile(path, 'utf8');
   const claims: Claim[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
     if (!line.trim()) continue;
+    const lineNum = i + 1;
+    let obj: unknown;
     try {
-      const obj = JSON.parse(line);
-      claims.push(ClaimSchema.parse(obj));
+      obj = JSON.parse(line);
     } catch {
-      /* skip malformed line */
+      throw new Error(
+        `claims.jsonl (section ${sectionId}): malformed JSON at line ${lineNum} — refusing to rewrite the file and silently drop it. Content: ${line.slice(0, 120)}`,
+      );
+    }
+    try {
+      claims.push(ClaimSchema.parse(obj));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `claims.jsonl (section ${sectionId}): invalid claim record at line ${lineNum} — refusing to rewrite the file and silently drop it: ${msg}\n  Content: ${line.slice(0, 120)}`,
+        { cause: err },
+      );
     }
   }
   return claims;
@@ -232,7 +252,18 @@ function peersForEligibility(claims: Claim[], target: Claim): PeerSnapshot[] {
       }
     }
     if (!shares) continue;
-    peers.push({ frame_excluded: c.frame_excluded ?? false });
+    // A-CLAIMS-001 fix: the eligibility gate counts frame-critic SURVIVORS
+    // (per rescue-eligibility.ts: "non-excluded on-topic" = claims that
+    // PASSED R-011's precheck AND the LLM critic). A claim that earned its
+    // frame_excluded=false via a PRIOR rescue is NOT independent topical-
+    // relevance proof — counting it would let one rescued claim bootstrap
+    // the rescue of another from the same (unproven) source body, defeating
+    // the defense floor. Treat already-rescued peers as non-survivors.
+    const wasRescued =
+      c.rescue_status === 'rescued_by_llm' ||
+      c.rescue_status === 'rescued_by_operator';
+    const isSurvivor = (c.frame_excluded ?? false) === false && !wasRescued;
+    peers.push({ frame_excluded: !isSurvivor });
   }
   return peers;
 }

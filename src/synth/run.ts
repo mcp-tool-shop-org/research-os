@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as yamlParse } from 'yaml';
 
-import { HandoffNotFoundError, PackNotFoundError } from '../errors.js';
+import { HandoffNotFoundError, PackNotFoundError, ResearchOSError } from '../errors.js';
 import { ResearchYamlSchema, type ResearchYaml } from '../intake/schema.js';
 import { ClaimSchema, type Claim } from '../claims/schema.js';
 import { ClaimReviewSchema, type ClaimReview } from '../review/schema.js';
@@ -21,13 +21,38 @@ import {
 } from './markdown.js';
 import type { WorkspaceOptions, WorkspaceSummary } from './types.js';
 
+// A-SYNTH-001: a malformed JSONL line or JSON source card previously threw a
+// raw SyntaxError/ZodError straight to the CLI ('research-os: <raw stack>').
+// Route the failure through the structured error model with a dedicated code
+// + actionable hint that names the offending file and (for JSONL) line. This
+// is a runtime/blocked condition — the operator must repair the corrupt
+// artifact before synthesis can proceed.
+class MalformedDataFileError extends ResearchOSError {
+  constructor(path: string, lineNumber: number | null, detail: string) {
+    const where = lineNumber === null ? path : `${path} (line ${lineNumber})`;
+    super(
+      `Malformed data file at ${where}: ${detail}`,
+      'MALFORMED_DATA_FILE',
+      `Repair or remove the corrupt entry in ${where}, then re-run. See handbook/recovery.md for runbook.`,
+    );
+    this.name = 'MalformedDataFileError';
+  }
+}
+
 async function readJsonl<T>(path: string, parse: (raw: unknown) => T): Promise<T[]> {
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: T[] = [];
+  let lineNumber = 0;
   for (const line of text.split(/\r?\n/)) {
+    lineNumber += 1;
     if (!line.trim()) continue;
-    out.push(parse(JSON.parse(line)));
+    try {
+      out.push(parse(JSON.parse(line)));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new MalformedDataFileError(path, lineNumber, detail);
+    }
   }
   return out;
 }
@@ -40,8 +65,14 @@ async function readSourceCards(packPath: string): Promise<SourceCard[]> {
   const cards: SourceCard[] = [];
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
-    const text = await readFile(join(dir, entry), 'utf8');
-    cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    const cardPath = join(dir, entry);
+    const text = await readFile(cardPath, 'utf8');
+    try {
+      cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new MalformedDataFileError(cardPath, null, detail);
+    }
   }
   return cards;
 }

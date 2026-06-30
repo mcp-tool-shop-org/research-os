@@ -23,14 +23,30 @@ export class IndexNotBuiltError extends ResearchOSError {
   }
 }
 
+// A-IDX-001: a lone '-' (and other "looks-like-FTS" punctuation) must NOT be
+// treated as raw FTS5 syntax opt-in. Plain words containing a hyphen
+// ('machine-learning', 'cost-benefit', 'peer-reviewed') were previously
+// passed UNQUOTED into `facts_fts MATCH`, where FTS5 parses '-learning' as a
+// column filter / NOT operator and raises a raw SqliteError
+// ('no such column: learning'), bypassing the ResearchOSError contract and
+// exiting 1. We now restrict the raw-passthrough to *unambiguous* FTS intent:
+//   - a leading or wrapping double-quote (the user explicitly quoted a phrase)
+//   - a trailing '*' for prefix search (e.g. 'transform*')
+// Everything else is treated as a literal phrase and quoted (embedded
+// double-quotes doubled, per FTS5 escaping). A trailing-'*' prefix term has
+// its leading portion quoted so embedded hyphens stay literal.
 function escapeFtsTerm(term: string): string {
-  // Quote each word and OR them together so common phrasing works.
-  // For simplicity: wrap the entire term in quotes if it contains spaces,
-  // otherwise pass through. FTS5 prefix queries supported via *.
   const trimmed = term.trim();
   if (!trimmed) return '""';
-  // If user already provided FTS syntax characters, pass through. Otherwise quote.
-  if (/[" *^()-]/.test(trimmed)) return trimmed;
+  // Already a quoted phrase (leading quote) → unambiguous FTS intent.
+  if (trimmed.startsWith('"')) return trimmed;
+  // Trailing '*' → prefix query. Quote the stem so embedded hyphens/spaces
+  // stay literal, then re-attach the prefix operator.
+  if (trimmed.endsWith('*')) {
+    const stem = trimmed.slice(0, -1);
+    return `"${stem.replace(/"/g, '""')}"*`;
+  }
+  // Default: treat the whole term as a literal phrase.
   return `"${trimmed.replace(/"/g, '""')}"`;
 }
 
@@ -78,6 +94,19 @@ export function query(options: IndexQueryOptions): IndexQuerySummary {
       );
       rows = stmt.all(ftsTerm, limit) as typeof rows;
     }
+  } catch (e) {
+    // A-IDX-001: a malformed FTS5 MATCH expression surfaces as a raw
+    // SqliteError (e.g. "no such column: ...", "fts5: syntax error near ...").
+    // Route it through the structured ResearchOSError contract so the CLI
+    // prints `<code>: <message>` + hint and exits as a user error rather than
+    // dumping a raw stack. escapeFtsTerm now quotes plain terms, so this only
+    // fires for explicit/quoted FTS syntax the user got wrong.
+    throw new ResearchOSError(
+      `Index query failed for term ${JSON.stringify(options.term)}: ${(e as Error).message}`,
+      'INDEX_QUERY_INVALID',
+      `The search term was interpreted as an FTS5 expression and rejected. Quote the term to search it literally (e.g. '"${options.term.replace(/"/g, '\\"')}"'), or fix the FTS5 syntax. See handbook/recovery.md.`,
+      e as Error,
+    );
   } finally {
     db.close();
   }

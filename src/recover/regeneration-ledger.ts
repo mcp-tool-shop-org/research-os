@@ -34,7 +34,7 @@
  * regenerate-or-skip discriminator pattern cohere as one module.
  */
 import { existsSync } from 'node:fs';
-import { appendFile, mkdir, readdir, readFile, rename } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -260,6 +260,65 @@ export async function archiveExistingRecoveryFiles(
   }
 
   return { archivedJsonPath, archivedMarkdownPath };
+}
+
+/**
+ * NAMED COMPENSATOR for `archiveExistingRecoveryFiles`.
+ *
+ * The archive step is an irreversible rename of the canonical recovery files
+ * into `recovery/history/`. If a later step in the regenerate path throws
+ * AFTER the archive (e.g. write or ledger append fails), the canonical files
+ * would otherwise be stranded in history with no replacement at their
+ * canonical path and no ledger entry. This restores them: it renames the
+ * archived files back to their canonical `recovery/blocked-section-recovery.{json,md}`
+ * locations.
+ *
+ * Best-effort + idempotent: it restores an archived file (back to its canonical
+ * path) whenever the archived source still exists. Crucially it OVERWRITES the
+ * canonical path if a partial new artifact was already written there — a
+ * post-archive failure (verifier follow-up: a throw DURING the ledger append,
+ * after writeRecoveryArtifact already overwrote the canonical files) means the
+ * regeneration did NOT complete (its ledger record was never written), so the
+ * pre-regeneration original is the correct on-disk state. Either path may be
+ * null (the corresponding file was absent at archive time) — those are skipped.
+ * Idempotent because the archived source is renamed away on success, so a second
+ * invocation finds nothing to restore. Restore failures are swallowed so the
+ * original error propagates unmasked.
+ *
+ * Post-rollback state: the canonical recovery artifact is back at its path
+ * exactly as it was before the failed regeneration; no orphaned history file
+ * remains without a ledger entry.
+ *
+ * Owner: recover/run.ts recoverPack() regenerate path (A-RECOVER-001).
+ */
+export async function restoreArchivedRecoveryFiles(
+  packPath: string,
+  archive: ArchiveResult,
+): Promise<void> {
+  const recoverDir = join(packPath, RECOVERY_DIR);
+  const canonicalJson = join(recoverDir, RECOVERY_JSON);
+  const canonicalMd = join(recoverDir, RECOVERY_MD);
+
+  const restore = async (
+    archived: string | null,
+    canonical: string,
+  ): Promise<void> => {
+    if (!archived) return;
+    if (!existsSync(archived)) return;
+    try {
+      // Overwrite any partial new artifact at the canonical path: on a
+      // post-archive failure the regeneration is incomplete (no ledger entry),
+      // so the archived original must win. rm-then-rename is robust across
+      // platforms where rename-over-existing is not guaranteed atomic.
+      if (existsSync(canonical)) await rm(canonical, { force: true });
+      await rename(archived, canonical);
+    } catch {
+      /* swallow — restore is best-effort; do not mask the original error */
+    }
+  };
+
+  await restore(archive.archivedJsonPath, canonicalJson);
+  await restore(archive.archivedMarkdownPath, canonicalMd);
 }
 
 // ─── Ledger record construction ──────────────────────────────────────────────

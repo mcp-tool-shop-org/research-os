@@ -113,24 +113,41 @@ async function runR012RescueStage(args: {
   }
   if (candidates.length === 0) return;
 
+  // A-CLAIMS-001 fix: snapshot every draft's frame_excluded ONCE, before any
+  // rescue mutates it. The eligibility gate counts frame-critic SURVIVORS
+  // (per rescue-eligibility.ts) — a candidate rescued earlier in this loop
+  // sets target.frame_excluded=false IN PLACE, so reading the live drafts
+  // array for a later candidate's peer snapshot would count an already-
+  // rescued claim as topical-relevance proof. That contradicts the gate's
+  // invariant ("no rescue from a source body that hasn't otherwise proven
+  // topical relevance" — rescued claims are not independent proof). Freeze
+  // the basis here so each candidate is judged against the same immutable
+  // pre-rescue survivor set.
+  const frozenFrameExcluded = new Map<DraftClaim, boolean>();
+  for (const d of drafts) {
+    frozenFrameExcluded.set(d, d.frame_excluded ?? false);
+  }
+
   // Pre-compute the peer asserts that the LLM rescue critic will see as
-  // topical-relevance evidence: non-excluded drafts from the same source.
-  // These are the same peers the eligibility gate counts.
+  // topical-relevance evidence: non-excluded drafts from the same source,
+  // measured against the FROZEN snapshot so a rescued candidate never
+  // becomes evidence for a later candidate's rescue.
   const peerAsserts: string[] = [];
   for (const d of drafts) {
-    if (d.frame_excluded === false) {
+    if (frozenFrameExcluded.get(d) === false) {
       peerAsserts.push(d.asserts);
     }
   }
 
   for (const target of candidates) {
-    // Build the peer snapshot for the eligibility gate. Exclude the target
-    // draft itself (defensive — the gate is robust to its inclusion, but
+    // Build the peer snapshot for the eligibility gate from the FROZEN
+    // pre-rescue basis (NOT the live drafts array). Exclude the target draft
+    // itself (defensive — the gate is robust to its inclusion, but
     // semantically peers are OTHER drafts).
     const peers: PeerSnapshot[] = [];
     for (const d of drafts) {
       if (d === target) continue;
-      peers.push({ frame_excluded: d.frame_excluded ?? false });
+      peers.push({ frame_excluded: frozenFrameExcluded.get(d) ?? false });
     }
     const eligibility = checkRescueEligibility({ peers });
     target.rescue_eligibility_check = eligibility;

@@ -119,14 +119,21 @@ export function chunkRawText(rawText: string): { cleaned: string; drafts: Excerp
       const end = idxInPara >= 0 ? start + sentence.length : start + sentence.length;
       cursor = idxInPara >= 0 ? idxInPara + sentence.length : cursor + sentence.length;
       let text = sentence;
+      let spanEnd = end;
       if (text.length > MAX_EXCERPT_CHARS) {
-        text = text.slice(0, MAX_EXCERPT_CHARS).trimEnd() + ' …';
+        // A-SOURCES-003 — keep the char span consistent with the (truncated)
+        // text so cleaned.slice(char_start, char_end) === text. The previous
+        // code left char_end at the FULL sentence length while text was
+        // truncated, breaking that invariant. We take a verbatim prefix of the
+        // sentence (no synthetic ellipsis) and shrink char_end to match.
+        text = text.slice(0, MAX_EXCERPT_CHARS);
+        spanEnd = start + text.length;
       }
       if (text.length < MIN_EXCERPT_CHARS) continue;
       drafts.push({
         text,
         char_start: start,
-        char_end: end,
+        char_end: spanEnd,
         location_hint: `paragraph ${paraIndex}`,
       });
     }

@@ -11,3 +11,6 @@ site/dist/
 site/node_modules/
 .polyglot-cache.json
 tmp/
+# Dogfood-swarm coordination artifacts (manifest, findings, reports) — local
+# resume/checkpoint state, not part of the shipped product.
+swarms/

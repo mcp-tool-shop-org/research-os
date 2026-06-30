@@ -7,6 +7,7 @@ import type { Contradiction } from '../contradictions/schema.js';
 import type { ContradictionResolution } from '../contradictions/resolution-schema.js';
 import type { ClaimSynthesisDisposition } from '../dispositions/schema.js';
 import type { SectionGateResult } from '../gates/schema.js';
+import { getEffectiveDecisionMap } from '../closure-ledger/effective-accepted.js';
 
 import type {
   CoworkHandoffPayload,
@@ -75,15 +76,13 @@ function packId(research: ResearchYaml): string {
   return createHash('sha256').update(fingerprint).digest('hex').slice(0, 12);
 }
 
+// A-COWORK-001: route through the single canonical last-wins-on-tie join in
+// closure-ledger/effective-accepted.ts so the equal-`created_at` tie direction
+// is consistent with synth/derive.ts and buildEffectiveStatuses (last appended
+// wins). Previously this kept the FIRST-seen row on a tie (strict `>`), which
+// silently dropped a same-millisecond corrective decision.
 function latestDecisionByClaim(reviews: ClaimReview[]): Map<string, ClaimReview> {
-  const map = new Map<string, ClaimReview>();
-  for (const r of reviews) {
-    const existing = map.get(r.claim_id);
-    if (!existing || r.created_at > existing.created_at) {
-      map.set(r.claim_id, r);
-    }
-  }
-  return map;
+  return getEffectiveDecisionMap(reviews);
 }
 
 function buildEffectiveStatuses(resolutions: ContradictionResolution[]): Map<string, string> {

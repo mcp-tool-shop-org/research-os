@@ -28,6 +28,12 @@ export {
   NoSourcesGatheredError,
   HandoffNotFoundError,
   SynthesisNotReadyError,
+  UnsupportedReceiptVersionError,
+  ReviewerCascadeFailedError,
+  ReviewerProfileInvalidError,
+  ReviewerProfileNotFoundError,
+  CalibrationReceiptMalformedError,
+  NoReviewerAvailableError,
 } from './errors.js';
 
 export const RESEARCH_OS_VERSION = '0.13.1';
