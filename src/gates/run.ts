@@ -70,7 +70,16 @@ async function readJsonl<T>(
   return out;
 }
 
-async function readSourceCards(packPath: string): Promise<SourceCard[]> {
+// B-GATES-002: every other gate input (claims/fetch-log/contradictions/reviews/
+// resolutions) degrades gracefully via readJsonl's skip-with-warning collector,
+// but source cards were parsed with no guard — one corrupt .json aborted the
+// whole gate run with an opaque ZodError. Feed malformed cards into the same
+// `malformed_jsonl_warnings` collector so a bad card is skipped + surfaced,
+// consistent with the other readers in this file.
+async function readSourceCards(
+  packPath: string,
+  warnings: Array<{ path: string; line: number; reason: string }>,
+): Promise<SourceCard[]> {
   const dir = join(packPath, 'evidence', 'source-cards');
   if (!existsSync(dir)) return [];
   const { readdir } = await import('node:fs/promises');
@@ -78,8 +87,18 @@ async function readSourceCards(packPath: string): Promise<SourceCard[]> {
   const cards: SourceCard[] = [];
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
-    const text = await readFile(join(dir, entry), 'utf8');
-    cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    try {
+      const text = await readFile(join(dir, entry), 'utf8');
+      cards.push(SourceCardSchema.parse(JSON.parse(text)));
+    } catch (err) {
+      warnings.push({
+        // one card per file — `line: 0` signals "whole-file" rather than a
+        // specific JSONL line, matching the nonnegative-int schema.
+        path: join('evidence', 'source-cards', entry),
+        line: 0,
+        reason: err instanceof Error ? err.message : 'parse error',
+      });
+    }
   }
   return cards;
 }
@@ -316,7 +335,7 @@ export async function gate(options: RunGateOptions): Promise<SectionGateResult> 
   const malformedWarnings: Array<{ path: string; line: number; reason: string }> = [];
   const claims = await readJsonl<Claim>(packPath, `sections/${options.sectionId}/claims.jsonl`, (r) => ClaimSchema.parse(r), malformedWarnings);
   const candidateClaims = claims.filter((c) => c.review_state === 'candidate');
-  const sources = await readSourceCards(packPath);
+  const sources = await readSourceCards(packPath, malformedWarnings);
   const receipts = await readJsonl<FetchReceipt>(packPath, 'evidence/fetch-log.jsonl', (r) => FetchReceiptSchema.parse(r), malformedWarnings);
   const contradictions = await readJsonl<Contradiction>(packPath, `sections/${options.sectionId}/contradictions.jsonl`, (r) => ContradictionSchema.parse(r), malformedWarnings);
   const claimReviews = await readJsonl<ClaimReview>(packPath, `sections/${options.sectionId}/claim-reviews.jsonl`, (r) => ClaimReviewSchema.parse(r), malformedWarnings);

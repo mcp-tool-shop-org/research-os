@@ -31,6 +31,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # B-TESTS-CI: bound a wedged run (concurrency here is cancel-in-progress:false,
+    # so a hung publish would otherwise occupy a slot up to the 6h default cap).
+    timeout-minutes: 20
     permissions:
       # id-token: write — required for npm --provenance (OIDC → Sigstore).
       # contents: write — required for gh release create on the tag-push path.
@@ -80,7 +83,33 @@ jobs:
       - name: Verify gate (build + typecheck + lint + test)
         run: npm run verify
 
+      # B-TESTS-CI-002: the two irreversible release actions are `npm publish`
+      # (below) then `gh release create` (further down). If publish succeeds but
+      # the release step fails (transient gh/API error), a naive re-run would die
+      # here because the version is already on the registry. Detect that case and
+      # SKIP publish so the re-run proceeds straight to creating the GitHub release
+      # — making the release job idempotent across a split failure.
+      #
+      # NAMED COMPENSATOR (manual, if the automated re-run is unavailable):
+      #   npm: a published version cannot be un-published cleanly after 72h; treat
+      #     it as committed. To complete a split release by hand, run:
+      #       gh release create <tag> --title <tag> --verify-tag \
+      #         --notes-file <CHANGELOG section>   (or --generate-notes)
+      #   Owner: release author (the human who pushed the tag).
+      - name: Check whether this version is already on the registry
+        id: published
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER="${{ steps.verify.outputs.version }}"
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "::warning::$NAME@$VER is already published — skipping npm publish (split-failure re-run path); proceeding to GitHub release"
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm (with provenance)
+        if: steps.published.outputs.already != 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -97,11 +126,22 @@ jobs:
         id: changelog
         run: |
           VERSION="${{ steps.verify.outputs.version }}"
-          # Match "## [0.13.1]" or "## 0.13.1" and capture everything up to the
-          # next "## " heading. Use awk for portability + multi-line capture.
+          # Capture the section between this version's heading and the next
+          # "## " heading. B-TESTS-CI-001: compare the heading's version token
+          # by LITERAL string equality, NOT a regex interpolation — a regex
+          # "## \\[?$ver\\]?" treats '.' as any-char and is unanchored on the
+          # right, so e.g. ver=0.13.1 would also match "## [0.13.10]" and a
+          # wrong section could be shipped as the release notes.
           SECTION=$(awk -v ver="$VERSION" '
-            $0 ~ "^## \\[?" ver "\\]?" { found=1; next }
-            found && /^## / { exit }
+            /^## / {
+              if (found) { exit }            # next section heading: stop
+              hdr = $0
+              sub(/^## +/, "", hdr)          # drop the "## " prefix
+              gsub(/[][]/, "", hdr)          # drop [ and ] around the version
+              split(hdr, a, /[ \t]/)         # first token is the version
+              if (a[1] == ver) { found = 1 } # exact match only
+              next                           # never print the heading line
+            }
             found { print }
           ' CHANGELOG.md)
           if [ -z "$SECTION" ]; then

@@ -25,8 +25,43 @@ export function defaultClaimExtractors(): ClaimExtractorAdapter[] {
 export async function pickClaimExtractor(
   extractors: ClaimExtractorAdapter[],
 ): Promise<ClaimExtractorAdapter> {
+  return (await pickClaimExtractorWithDegradation(extractors)).extractor;
+}
+
+// B-CLAIMS-002 (Stage B proactive hardening) — degradation-aware pick.
+//
+// pickClaimExtractor() silently walks the ladder and returns the first
+// available adapter. When the MCP-backed extractor is the FIRST preference but
+// is unavailable, the ladder falls through to the deterministic
+// HeuristicClaimExtractor — which bypasses the ENTIRE topicality defense floor
+// (no frame critic / source-content guard / R-012 rescue; every claim is
+// admitted with frame_excluded=false and no exclusion reason). The only prior
+// trace of this was the neutral `extractor: heuristic` field; an operator who
+// expected MCP topicality enforcement got none, silently.
+//
+// This wrapper reports whether the picked extractor is a heuristic fallback
+// that displaced a first-preference MCP extractor, so the caller can emit one
+// contrastive run-start warning + an additive receipt field. The original
+// pickClaimExtractor() is preserved for callers that don't need the signal.
+export interface ClaimExtractorPick {
+  extractor: ClaimExtractorAdapter;
+  // true iff the FIRST-preference adapter was the MCP extractor
+  // ('ollama-intern'), it was unavailable, and the resolved extractor is the
+  // deterministic heuristic fallback. false on the happy path (MCP available)
+  // and when the heuristic was the operator's explicit first preference.
+  degradedToHeuristic: boolean;
+}
+
+export async function pickClaimExtractorWithDegradation(
+  extractors: ClaimExtractorAdapter[],
+): Promise<ClaimExtractorPick> {
+  const mcpWasFirstPreference = extractors[0]?.name === 'ollama-intern';
   for (const e of extractors) {
-    if (await e.available()) return e;
+    if (await e.available()) {
+      const degradedToHeuristic =
+        mcpWasFirstPreference && e.name === 'heuristic';
+      return { extractor: e, degradedToHeuristic };
+    }
   }
   throw new Error(
     'No claim extractor available. The HeuristicClaimExtractor should always be available — this indicates a bug.',

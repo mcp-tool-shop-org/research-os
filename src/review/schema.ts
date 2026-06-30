@@ -96,6 +96,19 @@ export const ReviewSnapshotSchema = z.object({
   // a single name. Absent = legacy snapshot from pre-B-C-004 build (parses
   // cleanly; no migration needed).
   profile: z.string().optional(),
+  // B-REVIEW-001: durable receipt of partial reviewer-window failure. A paged
+  // LLM reviewer can succeed overall while some windows' calls failed; those
+  // windows' claims received NO findings and would silently auto-accept.
+  // Present (>0) records how many of windows_total failed so the snapshot is
+  // an honest partial-coverage receipt. Both omitted on a clean run — keeps
+  // default-path snapshots byte-identical (additive-optional, no .default()).
+  windows_failed: z.number().int().nonnegative().optional(),
+  windows_total: z.number().int().nonnegative().optional(),
+  // B-REVIEW-002: reviewer:error strings for reviewers that failed during a
+  // multi-pass run that still completed (partial cascade). Absent when every
+  // reviewer succeeded; present so the dropped LLM failures escape the
+  // all-failed branch and survive on the persisted snapshot.
+  failed_reviewers: z.array(z.string()).optional(),
 });
 
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;

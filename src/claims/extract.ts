@@ -32,7 +32,10 @@ import {
   getNextExtractionAttempt,
   readExtractCompletionLedger,
 } from './extract-completion-ledger.js';
-import { defaultClaimExtractors, pickClaimExtractor } from './extractors/index.js';
+import {
+  defaultClaimExtractors,
+  pickClaimExtractorWithDegradation,
+} from './extractors/index.js';
 import { appendRescueLedgerRecord } from './rescue-ledger.js';
 import { ClaimSchema, type Claim } from './schema.js';
 import {
@@ -381,7 +384,25 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     : null;
 
   const adapters = options.extractors ?? defaultClaimExtractors();
-  const extractor = await pickClaimExtractor(adapters);
+  const pick = await pickClaimExtractorWithDegradation(adapters);
+  const extractor = pick.extractor;
+  // B-CLAIMS-002 — when the MCP extractor was first preference but unavailable
+  // and we fell through to the deterministic heuristic, the entire topicality
+  // defense floor (frame critic / source-content guard / R-012 rescue) is
+  // bypassed: every claim is admitted with frame_excluded=false. Emit ONE
+  // contrastive run-start warning (you probably expected MCP topicality
+  // enforcement; you're getting none) so the operator isn't silently surprised
+  // by an unfiltered claim set. The neutral `extractor` receipt field alone did
+  // not communicate the lost enforcement. Happy path (MCP available) emits
+  // nothing — byte-identical pre-hardening behavior.
+  const degradedToHeuristic = pick.degradedToHeuristic;
+  if (degradedToHeuristic) {
+    process.stderr.write(
+      '[extract] WARNING: ollama-intern MCP extractor unavailable; degraded to heuristic — ' +
+        'frame critic / source-content guard / rescue NOT applied; claims admitted without ' +
+        'topicality enforcement\n',
+    );
+  }
 
   // Resolve framePurpose ONCE per extract() call. The section purpose is
   // pack-stable, so reading research.yaml inside the per-source loop would
@@ -467,6 +488,14 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     failures: [],
     modelFallbacks: [],
     framesExcluded: 0,
+    // B-CLAIMS-001 — pack-wide count of windows that failed on otherwise-ok
+    // per-source extractions (partial-window failure). Drives the
+    // completion-ledger withhold below so --resume recovers dropped windows.
+    windowsFailed: 0,
+    // B-CLAIMS-002 — whether this run degraded from the MCP extractor to the
+    // heuristic fallback (topicality defense floor bypassed). Resolved at pick
+    // time above.
+    degradedToHeuristic,
     // Phase 1b-b: aggregate critic decisions across all sources. Always
     // present; populated by MCPClaimExtractor.extract() per source.
     criticTally: {
@@ -524,6 +553,12 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     let outcome: 'processed' | 'skipped' | 'failed' = 'processed';
     let failureDetail: string | null = null;
     let skipReason: string | null = null;
+    // B-CLAIMS-001 — set when an ok:true extraction reported windowsFailed > 0
+    // (some ledger windows succeeded, others dropped their claims). On a
+    // partial-window failure we withhold the completion-ledger entry so the
+    // source is re-attempted on --resume and the dropped windows' claims are
+    // recovered, rather than being permanently skipped as fully 'processed'.
+    let partialWindowFailure = false;
 
     const card = await readSourceCard(packPath, sourceId);
     if (!card) {
@@ -612,6 +647,25 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
           }
           if (typeof result.framesExcluded === 'number' && result.framesExcluded > 0) {
             summary.framesExcluded += result.framesExcluded;
+          }
+          // B-CLAIMS-001 — a partial-window failure: the extractor returned
+          // ok:true (≥1 window succeeded) but reported windowsFailed > 0,
+          // meaning other windows dropped their claims (TIER_TIMEOUT /
+          // transport / parse). Fold the count into the pack-wide summary and
+          // record a failure entry per dropped window so the receipt and the
+          // [extract] summary surface the loss. The withhold of the
+          // completion-ledger entry below makes --resume re-attempt this
+          // source to recover the dropped windows' claims.
+          if (typeof result.windowsFailed === 'number' && result.windowsFailed > 0) {
+            summary.windowsFailed += result.windowsFailed;
+            partialWindowFailure = true;
+            const winErrors = result.pageErrors ?? [];
+            for (const err of winErrors) {
+              summary.failures.push({
+                source_id: sourceId,
+                reason: `partial window failure (claims dropped, source will re-attempt on --resume): ${err}`,
+              });
+            }
           }
           // Phase 1b-b: fold per-source critic tally into the pack-wide summary.
           if (result.criticTally) {
@@ -717,7 +771,7 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     // extractions and gate-skipped sources do NOT write — they re-evaluate
     // on the next run. The ledger is the always-on substrate that --resume
     // consumes; the flags only change observation/visibility.
-    if (outcome === 'processed') {
+    if (outcome === 'processed' && !partialWindowFailure) {
       const attempt = getNextExtractionAttempt(
         completionRecords,
         options.sectionId,
@@ -791,6 +845,16 @@ export async function extract(options: ExtractClaimsOptions): Promise<ExtractCla
     // section-report consumers can disclose them without re-reading run logs.
     model_fallbacks: summary.modelFallbacks,
     frames_excluded: summary.framesExcluded,
+    // B-CLAIMS-001 — count of ledger windows that failed on otherwise-ok
+    // per-source extractions (partial-window failure). When > 0, the affected
+    // sources were NOT recorded in the completion ledger and re-attempt on
+    // `claim extract --resume`. Zero on a clean run (receipt stays informative
+    // without changing the locked happy-path shape).
+    windows_failed: summary.windowsFailed,
+    // B-CLAIMS-002 — whether the run degraded to the heuristic extractor
+    // (topicality defense floor bypassed). false on the happy path so the
+    // additive field stays informative without altering the locked shape.
+    degraded_to_heuristic: summary.degradedToHeuristic,
     // Phase 1b-b v0.8.0 — per-claim critic decision counts for this section.
     // Helps the operator (and audit-time consumers) see how many claims the
     // extract-time topicality critic kept vs routed out, with the breakdown

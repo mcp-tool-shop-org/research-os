@@ -13,6 +13,7 @@ import {
 import { HeuristicContradictionDetector } from './detectors/heuristic.js';
 import { OllamaInternContradictionDetector } from './detectors/ollama-intern.js';
 import { renderMarkdownView } from './markdown.js';
+import { emitProgress } from '../util/progress.js';
 import type {
   AutoModeFallThroughInfo,
   ContradictionDetector,
@@ -289,18 +290,15 @@ export async function map(options: MapOptions): Promise<MapSummary> {
   // suffix (DETECTOR_ID_PART), so they cannot duplicate any LLM-produced
   // entry on a different pair.
   let autoModeFallThrough: AutoModeFallThroughInfo | undefined;
-  if (detectionResult.fallThrough && detectionResult.unprocessedPairs) {
-    const autoClassifiedPairs =
-      (detectionResult.unprocessedPairs.length === 0
-        ? summary.pairsCompared
-        : (candidateClaims.length * (candidateClaims.length - 1)) / 2 -
-          detectionResult.unprocessedPairs.length) -
-      // Subtract the pair the trigger fired ON (counted as auto-classified
-      // attempt — it timed out, so 0 drafts came from it, but it WAS the
-      // pair the LLM attempted last).
-      0;
-    void autoClassifiedPairs; // see autoModeFallThrough fields below
-
+  // B-CNT-002: run the full-space heuristic backfill whenever the LLM detector
+  // EITHER fell through OR dropped scattered per-pair failures that never
+  // triggered fall-through. In both cases some pairs were classified by neither
+  // detector; the backfill below already covers the FULL unclassified pair space
+  // (A-CNT-001), so it closes both gaps with the same machinery. Clean runs
+  // (no fall-through, pairsFailed=0) skip this block entirely → byte-identical.
+  const fellThrough = !!(detectionResult.fallThrough && detectionResult.unprocessedPairs);
+  const detectionPairsFailed = detectionResult.pairsFailed ?? 0;
+  if (fellThrough || detectionPairsFailed > 0) {
     // A-CNT-001: the LLM detector's `unprocessedPairs` is the LLM prefilter's
     // OWN subset — pairs the prefilter scored >= its 0.25 threshold but did not
     // get to classify before fall-through. Running the heuristic over ONLY that
@@ -353,22 +351,36 @@ export async function map(options: MapOptions): Promise<MapSummary> {
       }
     }
 
-    // Compose the summary fall-through info. autoClassifiedPairs =
-    // triggeredAtPairIndex (1-based pair index at which the Nth timeout
-    // fired; equivalent to "the LLM attempted this many pairs before
-    // bailing"). heuristicClassifiedPairs = unprocessedPairs.length.
-    autoModeFallThrough = {
-      triggeredAtPairIndex: detectionResult.fallThrough.triggeredAtPairIndex,
-      consecutiveTimeouts: detectionResult.fallThrough.consecutiveTimeouts,
-      perPairTimeoutMs: detectionResult.fallThrough.perPairTimeoutMs,
-      reason: 'consecutive_timeouts',
-      remainingPairsHandledBy: 'heuristic',
-      autoClassifiedPairs: detectionResult.fallThrough.triggeredAtPairIndex,
-      // A-CNT-001: heuristic now covers the FULL unclassified pair space, not
-      // just the LLM prefilter's subset — report the actual pair count it ran on.
-      heuristicClassifiedPairs: fullUnprocessedPairs.length,
-    };
-    summary.autoModeFallThrough = autoModeFallThrough;
+    if (fellThrough && detectionResult.fallThrough) {
+      // Compose the summary fall-through info. autoClassifiedPairs =
+      // triggeredAtPairIndex (1-based pair index at which the Nth timeout
+      // fired; equivalent to "the LLM attempted this many pairs before
+      // bailing"). heuristicClassifiedPairs = unprocessedPairs.length.
+      autoModeFallThrough = {
+        triggeredAtPairIndex: detectionResult.fallThrough.triggeredAtPairIndex,
+        consecutiveTimeouts: detectionResult.fallThrough.consecutiveTimeouts,
+        perPairTimeoutMs: detectionResult.fallThrough.perPairTimeoutMs,
+        reason: 'consecutive_timeouts',
+        remainingPairsHandledBy: 'heuristic',
+        autoClassifiedPairs: detectionResult.fallThrough.triggeredAtPairIndex,
+        // A-CNT-001: heuristic now covers the FULL unclassified pair space, not
+        // just the LLM prefilter's subset — report the actual pair count it ran on.
+        heuristicClassifiedPairs: fullUnprocessedPairs.length,
+      };
+      summary.autoModeFallThrough = autoModeFallThrough;
+    } else {
+      // B-CNT-002: scattered per-pair failures that never tripped fall-through.
+      // The heuristic backfill above already covered the unclassified pairs;
+      // surface the otherwise-silent partial coverage durably (MapSummary) AND
+      // with a forced stderr line (un-gated, like the fall-through trigger) so a
+      // non-TTY / --no-progress operator still learns the LLM dropped pairs.
+      summary.autoModePairsFailed = detectionPairsFailed;
+      emitProgress(
+        `auto-mode: ${detectionPairsFailed} pair(s) failed LLM classification (scattered, no fall-through); ` +
+          `the heuristic detector backfilled the unclassified pairs`,
+        { forceProgress: true },
+      );
+    }
   }
 
   const md = renderMarkdownView({

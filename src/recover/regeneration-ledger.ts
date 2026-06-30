@@ -205,10 +205,44 @@ export async function readExistingRecoveryArtifact(
 
 function safeTimestamp(now: Date): string {
   // ISO-8601 with ":" replaced by "-" so the result is a legal filename
-  // segment on Windows + POSIX. We also drop the fractional-second part
-  // for readability — collisions inside a single millisecond are protected
-  // by the random regeneration_id, not the archive filename.
+  // segment on Windows + POSIX. The fractional-second part is dropped for
+  // readability — this gives 1-SECOND resolution, so two regenerations in
+  // the same wall-clock second produce an identical timestamp segment.
+  //
+  // B-RECOVER-003 — the historical comment here claimed "collisions inside a
+  // single millisecond are protected by the random regeneration_id, not the
+  // archive filename." That was FALSE: the regeneration_id disambiguates the
+  // LEDGER record id, not the archive PATH. With 1-second resolution AND the
+  // same 8-char hash prefix, two same-second regenerations produced an
+  // identical archive base filename and the second rename silently
+  // OVERWROTE the first archived file — losing a history record and breaking
+  // the 1:1 archive↔ledger pairing. The fix lives in
+  // archiveExistingRecoveryFiles via disambiguateArchiveBase(), which
+  // suffix-increments the base when the target path is already taken rather
+  // than renaming over it. The filename FORMAT (a locked operator surface)
+  // is intentionally left unchanged.
   return now.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-');
+}
+
+/**
+ * Disambiguate an archive base filename against the history dir: if
+ * `<base>.json` (or `<base>.md`) already exists there, suffix-increment the
+ * base (`<base>-1`, `<base>-2`, …) until a free slot is found. Guards the
+ * same-second + same-hash-prefix collision so a second archive never renames
+ * over the first, keeping archive files 1:1 with ledger records
+ * (B-RECOVER-003). Best-effort: bounded retries.
+ */
+function disambiguateArchiveBase(historyDir: string, base: string): string {
+  const taken = (b: string): boolean =>
+    existsSync(join(historyDir, `${b}.json`)) ||
+    existsSync(join(historyDir, `${b}.md`));
+  if (!taken(base)) return base;
+  for (let n = 1; n < 1000; n += 1) {
+    const candidate = `${base}-${n}`;
+    if (!taken(candidate)) return candidate;
+  }
+  // Extremely unlikely fall-through; append a random suffix as last resort.
+  return `${base}-${randomBytes(3).toString('hex')}`;
 }
 
 function hashPrefix(hash: string | null | undefined): string {
@@ -240,7 +274,10 @@ export async function archiveExistingRecoveryFiles(
 
   const ts = safeTimestamp(now);
   const prefix = hashPrefix(previousHash);
-  const archivedBase = `blocked-section-recovery-${ts}-${prefix}`;
+  const archivedBase = disambiguateArchiveBase(
+    historyDir,
+    `blocked-section-recovery-${ts}-${prefix}`,
+  );
 
   const oldJson = join(recoverDir, RECOVERY_JSON);
   const oldMd = join(recoverDir, RECOVERY_MD);

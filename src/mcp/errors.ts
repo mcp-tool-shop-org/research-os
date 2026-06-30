@@ -6,11 +6,15 @@
 // does NOT take the form "research-os <verb> ..." inside a quoted string —
 // src/ has a doctrine test (test/cli/error-command-text-references.test.ts)
 // that flags any quoted `research-os <token>` as a stale command reference.
-// We keep the load-bearing substrings ("ollama-intern-mcp@^2.3.0",
+// We keep the load-bearing substrings ("ollama-intern-mcp@>=2.6.0",
 // "npm install -g ollama-intern-mcp", "OLLAMA_INTERN_MCP_BIN") so downstream
 // tests + operator readers can match the key install tokens without drift.
+// B-MCP-002: bumped from ^2.3.0 to >=2.6.0 — the tier-budget override
+// (tier_budget_ms_override) that v0.13.1 forwards is only honored by
+// ollama-intern-mcp >=2.6.0; older servers silently discard it. The version
+// substring is hint prose, NOT the locked MCPBinaryNotFoundError CODE identity.
 const INSTALL_HINT =
-  'ollama-intern-mcp@^2.3.0 must be installed locally for research-os to extract claims.\n' +
+  'ollama-intern-mcp@>=2.6.0 must be installed locally for research-os to extract claims.\n' +
   'Install with: npm install -g ollama-intern-mcp\n' +
   'Or set OLLAMA_INTERN_MCP_BIN to the binary path.';
 

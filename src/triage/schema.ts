@@ -57,6 +57,21 @@ export const TriageSummarySchema = z.object({
       total: z.number().int().nonnegative(),
     }),
   ),
+  // B-TRIAGE-001: per-line malformed-JSONL warnings collected while reading
+  // claims.jsonl during triage. Additive-optional (.default([])) so pre-B-TRIAGE-001
+  // triage summaries parse cleanly. Mirrors the gate run's `malformed_jsonl_warnings`
+  // (B-C-005) skip-with-warning collector — without it a corrupt claim line is
+  // dropped from the review queue and candidate_claims undercounts with no signal.
+  malformed_jsonl_warnings: z
+    .array(
+      z.object({
+        path: z.string(),
+        line: z.number().int().nonnegative(),
+        reason: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 export type TriageDecision = z.infer<typeof TriageDecisionSchema>;

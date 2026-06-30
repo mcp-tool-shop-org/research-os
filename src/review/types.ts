@@ -54,7 +54,21 @@ export interface DraftFinding {
 }
 
 export type ReviewerResult =
-  | { ok: true; drafts: DraftFinding[]; method: string; rejected_ungrounded?: number }
+  | {
+      ok: true;
+      drafts: DraftFinding[];
+      method: string;
+      rejected_ungrounded?: number;
+      // B-REVIEW-001: a paged reviewer can succeed overall (>= 1 window ok)
+      // while individual windows fail their LLM call. Those windows' claims
+      // get NO findings, so they silently become accepted_for_synthesis
+      // downstream. These optional counters let the success path carry the
+      // partial-failure scope so it becomes a durable receipt instead of being
+      // discarded. Absent on reviewers with no window concept (heuristic) and
+      // on fully-clean paged runs — keeps default snapshots byte-identical.
+      windows_failed?: number;
+      windows_total?: number;
+    }
   // C2-002: on cascade failure callers want to tell the operator how much
   // work completed before the cascade gave up. Both fields are optional —
   // heuristic reviewer has no concept of windows. ollama-intern populates
@@ -130,4 +144,15 @@ export interface RunReviewSummary {
   decisions: Record<ReviewDecision, number>;
   blockingFindings: number;
   promotedToReviewed: boolean;
+  // B-REVIEW-001: count of LLM windows whose call failed but were tolerated
+  // because >= 1 window succeeded. Absent (undefined) when no window failed —
+  // preserves the byte-identical happy-path summary.
+  windowsFailed?: number;
+  windowsTotal?: number;
+  // B-REVIEW-002: reviewer:error strings for reviewers that failed during a
+  // multi-pass run that nonetheless completed (a partial cascade — e.g. the
+  // LLM passes failed but the heuristic succeeded). Absent when every reviewer
+  // succeeded. Surfaces failures that the all-failed branch would otherwise
+  // drop on a partially-successful run.
+  failedReviewers?: string[];
 }

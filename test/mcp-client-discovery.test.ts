@@ -131,7 +131,7 @@ describe('MCPBinaryNotFoundError', () => {
     // test/cli/error-command-text-references.test.ts — but the three
     // operator-relevant substrings (the npm dep name, the install command,
     // and the env-var override path) remain present.
-    expect(INSTALL_HINT_TEXT).toContain('ollama-intern-mcp@^2.3.0');
+    expect(INSTALL_HINT_TEXT).toContain('ollama-intern-mcp@>=2.6.0');
     expect(INSTALL_HINT_TEXT).toContain('research-os');
     expect(INSTALL_HINT_TEXT).toContain('npm install -g ollama-intern-mcp');
     expect(INSTALL_HINT_TEXT).toContain('OLLAMA_INTERN_MCP_BIN');

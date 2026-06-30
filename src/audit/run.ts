@@ -205,6 +205,27 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
   );
   const handoff = await readHandoff(packPath, warnings);
 
+  // B-AUD-001 — read the source-card override ledger BEFORE the core audit
+  // files are written. Previously readOverrides() ran AFTER all 16 core audit
+  // files (incl. pack-audit.json) were on disk, and it throws a plain Error on
+  // a malformed evidence/source-card-overrides.jsonl line. That left a
+  // fresh-looking, possibly ready_for_synthesis pack-audit.json beside a
+  // missing missing-policy-sources audit, surfacing a raw stack to the
+  // operator. We now read it up here and, on failure, push a malformed-class
+  // warning (matched by determineVerdict's /malformed|invalid|parse/ grep, so
+  // the verdict escalates to human_review_required) and proceed with an empty
+  // override set so the missing-policy-sources audit reflects the unread state.
+  // The single-pass write model stays consistent: no core file is written
+  // until the override read has been accounted for in `warnings`.
+  let overrides: Awaited<ReturnType<typeof readOverrides>> = [];
+  try {
+    overrides = await readOverrides(packPath);
+  } catch (err) {
+    warnings.push(
+      `malformed source-card-overrides.jsonl: ${err instanceof Error ? err.message : 'parse error'} (overrides unread — effective source_type falls back to raw card values)`,
+    );
+  }
+
   const generatedAt = new Date().toISOString();
   const result = aggregate({
     research,
@@ -275,7 +296,8 @@ export async function audit(options: AuditOptions): Promise<AuditSummary> {
   // Informational only; does NOT affect verdict / blocking_reasons /
   // synthesis_allowed. The audit JSON+MD are always written so operators
   // get an explicit "no warning fired" signal rather than absence.
-  const overrides = await readOverrides(packPath);
+  // B-AUD-001: `overrides` is read (with malformed-line resilience) up near
+  // the source-card read, before any core audit file is written.
   const missingPolicySources = buildMissingPolicySourcesAudit({
     research,
     sources,

@@ -270,6 +270,20 @@ export type ClaimExtractionResult =
       // Phase 1b-b: per-claim critic decisions for the whole extract run on
       // this source. Optional; only the MCP extractor populates it.
       criticTally?: CriticTally;
+      // B-CLAIMS-001 (Stage B proactive hardening) — count of ledger windows
+      // that FAILED (TIER_TIMEOUT / transport / parse) on an otherwise-ok:true
+      // extraction. A partial-window failure means ≥1 window succeeded (so the
+      // result is ok:true and some claims came back) but other windows dropped
+      // their claims silently. When > 0, extract.ts folds it into the summary +
+      // receipt AND withholds the completion-ledger entry so --resume
+      // re-attempts the source and recovers the dropped windows' claims.
+      // Absent / 0 on a clean run preserves byte-identical pre-hardening behavior.
+      windowsFailed?: number;
+      // B-CLAIMS-001 — the per-window error strings collected during a
+      // partial-window failure (the same strings that, when EVERY window fails,
+      // become the ok:false error summary). Optional; present only alongside a
+      // positive windowsFailed so operators can see WHY windows dropped.
+      pageErrors?: string[];
     }
   | { ok: false; error: string };
 
@@ -391,6 +405,22 @@ export interface ExtractClaimsSummary {
   // processed for this section. Always present (zero counts when the
   // heuristic extractor ran, since heuristic never invokes the critic).
   criticTally: CriticTally;
+  // B-CLAIMS-001 (Stage B proactive hardening) — pack-wide count of ledger
+  // windows that FAILED on otherwise-successful per-source extractions (the
+  // partial-window-failure case: ≥1 window ok, others TIER_TIMEOUT / transport
+  // / parse). When > 0, the affected sources did NOT get a completion-ledger
+  // entry, so `claim extract --resume` re-attempts them to recover the dropped
+  // windows' claims. Zero on a clean run. Surfaced in the extract receipt as
+  // `windows_failed`.
+  windowsFailed: number;
+  // B-CLAIMS-002 (Stage B proactive hardening) — true when the MCP extractor
+  // was first preference but unavailable, so extraction fell through to the
+  // deterministic heuristic, which bypasses the entire topicality defense floor
+  // (frame critic / source-content guard / rescue). A run-start contrastive
+  // stderr warning is also emitted. Surfaced in the extract receipt as
+  // `degraded_to_heuristic`. false on the happy path (MCP available) and when
+  // the heuristic was the operator's explicit first preference.
+  degradedToHeuristic: boolean;
   // R-024 (v0.13.1) — active extract tier-budget in milliseconds. undefined
   // when no override is in effect (ollama-intern-mcp profile defaults govern,
   // byte-identical to pre-R-024 behavior). Surfaced in the extract receipt at

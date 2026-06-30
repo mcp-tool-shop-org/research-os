@@ -51,17 +51,35 @@ function makeTriageId(claimId: string): string {
   return 'tri_' + createHash('sha256').update(claimId).digest('hex').slice(0, 12);
 }
 
-async function readClaims(packPath: string, sectionId: string): Promise<Claim[]> {
-  const path = join(packPath, 'sections', sectionId, 'claims.jsonl');
+// B-TRIAGE-001: mirror the gate run's skip-with-warning collector (B-C-005).
+// A malformed claims.jsonl line is skipped (as before) but now recorded as a
+// {path, line, reason} warning so the dropped line surfaces on TriageSummary
+// instead of vanishing silently and undercounting candidate_claims.
+type MalformedWarning = { path: string; line: number; reason: string };
+
+async function readClaims(
+  packPath: string,
+  sectionId: string,
+  warnings: MalformedWarning[],
+): Promise<Claim[]> {
+  const rel = `sections/${sectionId}/claims.jsonl`;
+  const path = join(packPath, rel);
   if (!existsSync(path)) return [];
   const text = await readFile(path, 'utf8');
   const out: Claim[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
     if (!line.trim()) continue;
     try {
       out.push(ClaimSchema.parse(JSON.parse(line)));
-    } catch {
-      /* skip */
+    } catch (err) {
+      warnings.push({
+        path: rel,
+        // 1-based line number for operator readability
+        line: i + 1,
+        reason: err instanceof Error ? err.message : 'parse error',
+      });
     }
   }
   return out;
@@ -92,7 +110,10 @@ export async function triage(options: TriageOptions): Promise<TriageRunResult> {
   const stampIso = stamp.toISOString();
   const stampMs = stamp.getTime();
 
-  const claims = await readClaims(packPath, options.sectionId);
+  // B-TRIAGE-001: collect malformed claims.jsonl lines so they surface on the
+  // summary instead of being silently dropped (mirrors gate B-C-005).
+  const malformedWarnings: MalformedWarning[] = [];
+  const claims = await readClaims(packPath, options.sectionId, malformedWarnings);
 
   // Pass 1 — apply per-claim filters in priority order. The first matching
   // filter wins; downstream filters skip any already-decided row.
@@ -274,6 +295,8 @@ export async function triage(options: TriageOptions): Promise<TriageRunResult> {
         total,
       }))
       .sort((a, b) => b.total - a.total),
+    // B-TRIAGE-001: skip-with-warning records for any unparseable claim lines.
+    malformed_jsonl_warnings: malformedWarnings,
   });
 
   // Write outputs.
@@ -339,6 +362,22 @@ function buildMarkdown(records: ClaimTriage[], summary: TriageSummary): string {
   lines.push(`- **Per-source cap:** ${summary.per_source_cap}`);
   lines.push(`- **Duplicate clusters collapsed:** ${summary.duplicate_clusters_collapsed}`);
   lines.push('');
+  // B-TRIAGE-001: surface skipped malformed claim lines so a dropped line is
+  // visible to the operator. Only rendered when non-empty — happy-path markdown
+  // stays byte-identical.
+  const malformed = summary.malformed_jsonl_warnings ?? [];
+  if (malformed.length > 0) {
+    lines.push('## Malformed JSONL warnings');
+    lines.push('');
+    lines.push(`${malformed.length} claim line(s) were skipped as unparseable and excluded from triage.`);
+    lines.push('');
+    lines.push('| Path | Line | Reason |');
+    lines.push('|---|---:|---|');
+    for (const w of malformed) {
+      lines.push(`| \`${w.path}\` | ${w.line} | ${w.reason.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')} |`);
+    }
+    lines.push('');
+  }
   lines.push('## Decisions');
   lines.push('');
   lines.push('| Decision | Count |');

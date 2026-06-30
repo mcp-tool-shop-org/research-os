@@ -202,7 +202,14 @@ async function readClaims(
       );
     }
     try {
-      claims.push(ClaimSchema.parse(obj));
+      // B-CLAIMS-003 (Stage B forward-compat) — parse with passthrough so
+      // unknown additive keys (written by a NEWER research-os under version
+      // skew) survive the read→mutate→rewrite cycle. writeClaims() re-serializes
+      // these objects; a strict parse would silently strip any field this
+      // version doesn't know, permanently dropping it on the next rescue/decline
+      // rewrite. Passthrough keeps them on the runtime object so JSON.stringify
+      // preserves them. Validation is unchanged — known fields still enforced.
+      claims.push(ClaimSchema.passthrough().parse(obj) as Claim);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(

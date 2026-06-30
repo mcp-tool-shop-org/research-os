@@ -65,4 +65,11 @@ export interface GatherSummary {
   cardsWritten: number;
   receiptsAppended: number;
   sourceIds: string[];
+  /**
+   * B-SOURCES-002 — malformed / non-http(s) URLs dropped by collectUrls'
+   * validate step (e.g. blank-after-trim, ftp:, file:, unparseable). Additive
+   * observability field so the CLI can surface what was silently discarded
+   * from a --urls-file. Defaults to [] when nothing was rejected.
+   */
+  invalidUrls: string[];
 }

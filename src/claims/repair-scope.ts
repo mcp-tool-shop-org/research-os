@@ -141,7 +141,13 @@ async function readClaimsJsonl(packPath: string, sectionId: string): Promise<Cla
   const out: Claim[] = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    out.push(ClaimSchema.parse(JSON.parse(line)));
+    // B-CLAIMS-003 (Stage B forward-compat) — parse with passthrough so
+    // unknown additive keys (written by a NEWER research-os under version skew)
+    // survive the read→mutate→rewrite cycle in writeClaimsJsonl(). The scope
+    // repair mutates rows via object-spread, which preserves passthrough keys;
+    // a strict parse would strip any field this version doesn't know and the
+    // rewrite would permanently drop it. Validation of known fields unchanged.
+    out.push(ClaimSchema.passthrough().parse(JSON.parse(line)) as Claim);
   }
   return out;
 }

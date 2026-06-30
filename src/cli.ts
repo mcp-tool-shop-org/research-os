@@ -541,6 +541,14 @@ program
       process.stdout.write(`  extracted failed:  ${result.extractedFailed}\n`);
       process.stdout.write(`  cards written:     ${result.cardsWritten}\n`);
       process.stdout.write(`  receipts appended: ${result.receiptsAppended}\n`);
+      // B-SOURCES-002: surface URLs dropped by collectUrls' validate step
+      // (blank-after-trim, non-http(s) schemes, unparseable). Mirrors the
+      // discover summary's invalid-url line. Only printed when non-empty so the
+      // happy path stays byte-identical.
+      if (result.invalidUrls.length > 0) {
+        process.stdout.write(`  urls rejected (invalid): ${result.invalidUrls.length}\n`);
+        for (const u of result.invalidUrls) process.stdout.write(`    - ${u}\n`);
+      }
     } catch (err) {
       reportError(err);
     }
@@ -1471,6 +1479,27 @@ indexCmd
       process.stdout.write(`  gate results:      ${result.gateResults}\n`);
       process.stdout.write(`  fetch receipts:    ${result.fetchReceipts}\n`);
       process.stdout.write(`  artifacts tracked: ${result.artifacts}\n`);
+      // B-IDX-001: surface index-build warnings (malformed_jsonl /
+      // malformed_source_card / section_index_failed) the same way every other
+      // warning-bearing command does. Display-only — the array already exists
+      // on the result; previously the build path silently dropped it. Warnings
+      // here are structured (IndexBuildWarning) rather than plain strings, so
+      // we render kind + the available locator fields into one line.
+      if (result.warnings.length > 0) {
+        process.stdout.write(`\nwarnings:\n`);
+        for (const w of result.warnings) {
+          const loc = [
+            w.section_id ? `section ${w.section_id}` : null,
+            w.path ?? null,
+            w.line !== undefined ? `line ${w.line}` : null,
+          ]
+            .filter((p): p is string => p !== null)
+            .join(' ');
+          process.stdout.write(
+            `  - [${w.kind}]${loc ? ` ${loc}:` : ':'} ${w.reason}\n`,
+          );
+        }
+      }
     } catch (err) {
       reportError(err);
     }
@@ -2259,3 +2288,9 @@ const invokedAsCli =
 if (invokedAsCli) {
   program.parseAsync(process.argv);
 }
+
+// Additive export so display-only command rendering (e.g. the index-build /
+// gather summary + warning blocks) can be exercised in-process by tests
+// without spawning a subprocess. Does NOT change CLI behavior — the guarded
+// auto-run above is unaffected.
+export { program };

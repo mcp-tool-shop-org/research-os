@@ -288,6 +288,11 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
     // an honest "no contradiction" from the model proves the call path is
     // working.
     let consecutiveFailures = 0;
+    // B-CNT-002: TOTAL per-pair failures across the whole run (not just the
+    // consecutive run that trips fall-through). Scattered failures reset
+    // consecutiveFailures on each intervening success, so they never trigger
+    // fall-through and were previously dropped silently.
+    let pairsFailed = 0;
     let fallThroughTriggered: {
       triggeredAtPairIndex: number;
       consecutiveTimeouts: number;
@@ -310,6 +315,7 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
       } else {
         // Any other outcome is a failure for fall-through purposes.
         consecutiveFailures += 1;
+        pairsFailed += 1; // B-CNT-002: total failures, surfaced even without fall-through
 
         // Per-timeout / per-failure stderr emit — bypasses the throttle so
         // the operator sees the failure signal AS IT HAPPENS, not 4 pairs
@@ -375,10 +381,11 @@ export class OllamaInternContradictionDetector implements ContradictionDetector 
         method,
         fallThrough: fallThroughTriggered,
         unprocessedPairs: unprocessed,
+        ...(pairsFailed > 0 ? { pairsFailed } : {}),
       };
     }
 
-    return { ok: true, drafts, method };
+    return { ok: true, drafts, method, ...(pairsFailed > 0 ? { pairsFailed } : {}) };
   }
 }
 

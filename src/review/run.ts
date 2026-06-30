@@ -366,6 +366,10 @@ export async function review(options: RunReviewOptions): Promise<RunReviewSummar
     profile: options.profile ?? DEFAULT_PROFILE,
     research,
     reviewer_options: options.reviewer_options,
+    // B-REVIEW-001: carry the partial-window-failure scope from the reviewer's
+    // ok:true result onto the durable snapshot. undefined on a clean run.
+    windowsFailed: result.windows_failed,
+    windowsTotal: result.windows_total,
   });
 }
 
@@ -410,6 +414,11 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
   const failedReviewers: string[] = [];
   let llmFindingsRejected = 0;
   let pickedReviewerName: ReviewerName = 'heuristic';
+  // B-REVIEW-001: accumulate partial-window-failure scope across the paged LLM
+  // passes so it survives onto the merged snapshot. undefined unless a window
+  // failed somewhere.
+  let windowsFailed: number | undefined;
+  let windowsTotal: number | undefined;
 
   for (const reviewer of args.reviewers) {
     if (!(await reviewer.available())) continue;
@@ -432,6 +441,13 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     }
     methods.push(result.method);
     if (result.rejected_ungrounded) llmFindingsRejected += result.rejected_ungrounded;
+    // B-REVIEW-001: a paged LLM pass succeeded overall but lost some windows.
+    // Sum failed windows across passes; keep the largest window-total seen so
+    // the receipt reads "N windows failed out of M".
+    if (result.windows_failed !== undefined && result.windows_failed > 0) {
+      windowsFailed = (windowsFailed ?? 0) + result.windows_failed;
+      windowsTotal = Math.max(windowsTotal ?? 0, result.windows_total ?? 0);
+    }
     // The reviewer "name" recorded on the section is the one that contributed
     // the most findings — used for the snapshot's reviewer field. Default to
     // heuristic; let any LLM pass override.
@@ -480,6 +496,14 @@ async function runMultiPassReview(args: MultiPassArgs): Promise<RunReviewSummary
     profile: args.options.profile ?? DEFAULT_PROFILE,
     research: args.research,
     reviewer_options: args.options.reviewer_options,
+    // B-REVIEW-001: carry partial-window-failure scope onto the merged snapshot.
+    windowsFailed,
+    windowsTotal,
+    // B-REVIEW-002: a partial cascade (some reviewers failed, >= 1 succeeded)
+    // previously dropped the failures — the all-failed branch above is the only
+    // place they surfaced. Carry them onto the persisted record so the LLM
+    // failures escape even when the heuristic pass rescued the run.
+    failedReviewers: failedReviewers.length > 0 ? failedReviewers : undefined,
   });
 }
 
@@ -544,6 +568,15 @@ interface FinalizeArgs {
   research: ResearchYaml;
   // v0.5+: sampling options from the active preset; stamped onto review.json.
   reviewer_options?: ReviewerOptions;
+  // B-REVIEW-001: partial reviewer-window failure scope (paged LLM reviewer
+  // succeeded overall but some windows' calls failed). Stamped onto the
+  // snapshot + summary as a durable receipt. Both omitted on a clean run.
+  windowsFailed?: number;
+  windowsTotal?: number;
+  // B-REVIEW-002: reviewer:error strings for reviewers that failed in a
+  // multi-pass run that still completed (partial cascade). Omitted when none
+  // failed.
+  failedReviewers?: string[];
 }
 
 async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
@@ -669,6 +702,14 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     // implicit DEFAULT_PROFILE is in play so default-profile snapshots stay
     // byte-identical to legacy (preserves frozen-pack byte stability).
     profile: args.profile !== DEFAULT_PROFILE ? args.profile : undefined,
+    // B-REVIEW-001 / B-REVIEW-002: durable partial-failure receipts. All three
+    // omitted on a clean run so default-path snapshots stay byte-identical.
+    windows_failed:
+      args.windowsFailed !== undefined && args.windowsFailed > 0 ? args.windowsFailed : undefined,
+    windows_total:
+      args.windowsFailed !== undefined && args.windowsFailed > 0 ? args.windowsTotal : undefined,
+    failed_reviewers:
+      args.failedReviewers && args.failedReviewers.length > 0 ? args.failedReviewers : undefined,
   });
 
   // ALWAYS write the profile-scoped artifacts: even non-active runs leave a
@@ -728,5 +769,13 @@ async function finalizeReview(args: FinalizeArgs): Promise<RunReviewSummary> {
     decisions: decisionCounts,
     blockingFindings: dedupedFindings.filter((f) => f.severity === 'block').length,
     promotedToReviewed: promoted,
+    // B-REVIEW-001 / B-REVIEW-002: surface partial-failure scope to callers
+    // (CLI summary). Omitted on a clean run to preserve happy-path output.
+    ...(args.windowsFailed !== undefined && args.windowsFailed > 0
+      ? { windowsFailed: args.windowsFailed, windowsTotal: args.windowsTotal }
+      : {}),
+    ...(args.failedReviewers && args.failedReviewers.length > 0
+      ? { failedReviewers: args.failedReviewers }
+      : {}),
   };
 }

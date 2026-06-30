@@ -792,6 +792,18 @@ Source-card not: ${card.not ?? 'null'}`;
     };
     if (modelFallbacks.length > 0) out.modelFallbacks = modelFallbacks;
     if (framesExcluded > 0) out.framesExcluded = framesExcluded;
+    // B-CLAIMS-001 — surface partial-window failures on the ok:true result.
+    // We only reach here when pagesOk >= 1, so any non-empty pageErrors means
+    // SOME windows succeeded and OTHERS dropped their claims (TIER_TIMEOUT /
+    // transport / parse). Without this the caller marked the source fully
+    // 'processed', wrote a completion-ledger entry, and --resume permanently
+    // skipped re-extraction of the dropped windows. windowsFailed lets
+    // extract.ts withhold the ledger entry so the source re-attempts. Omitted
+    // entirely on a clean run (pageErrors empty) — byte-identical pre-hardening.
+    if (pageErrors.length > 0) {
+      out.windowsFailed = pageErrors.length;
+      out.pageErrors = [...pageErrors];
+    }
     return out;
   }
 }

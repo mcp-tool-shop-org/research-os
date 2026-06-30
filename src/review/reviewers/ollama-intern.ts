@@ -352,6 +352,20 @@ export class OllamaInternReviewer implements Reviewer {
       );
       if (!page.ok) {
         pageErrors.push(page.error);
+        // B-REVIEW-001: a window's LLM call failed. When >= 1 other window
+        // succeeds, the run still completes ok — but THIS window's claims get
+        // NO findings and silently become accepted_for_synthesis downstream,
+        // which can auto-promote a section to 'reviewed' on partial coverage.
+        // Mirror the contradiction detector's un-gated fall-through signal:
+        // always surface the failed window to stderr regardless of
+        // --no-progress / non-TTY, because silent partial coverage is worse
+        // than the failure itself. The routine per-window progress lines above
+        // stay TTY-gated; this defect event bypasses gating.
+        emitProgress(
+          `review window ${wIdx + 1}/${windows.length} failed (pass: ${passLabel}): ${page.error}; ` +
+            `its ${windowClaims.length} claim(s) get no findings — partial coverage`,
+          { forceProgress: true },
+        );
         continue;
       }
       pagesOk += 1;
@@ -401,6 +415,20 @@ export class OllamaInternReviewer implements Reviewer {
       windows.length > 1
         ? `ollama_intern_adversarial_review_paged${modeTag}`
         : `ollama_intern_adversarial_review${modeTag}`;
-    return { ok: true, drafts, method, rejected_ungrounded: rejectedCrossWindow };
+    // B-REVIEW-001: thread the partial-failure scope onto the success result.
+    // windows_failed is only set (>0) when at least one window failed but the
+    // run still succeeded overall (pagesOk >= 1). On a fully-clean run both
+    // counters stay undefined so the downstream snapshot is byte-identical to
+    // the pre-fix happy path.
+    const windowsFailed = pageErrors.length;
+    return {
+      ok: true,
+      drafts,
+      method,
+      rejected_ungrounded: rejectedCrossWindow,
+      ...(windowsFailed > 0
+        ? { windows_failed: windowsFailed, windows_total: windows.length }
+        : {}),
+    };
   }
 }

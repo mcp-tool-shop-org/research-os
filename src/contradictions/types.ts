@@ -81,6 +81,15 @@ export type DetectionResult =
         reason: 'consecutive_timeouts';
       };
       unprocessedPairs?: Array<[number, number]>;
+      // B-CNT-002 (Stage B verifier follow-up): total per-pair LLM
+      // classification failures (timeout / http_error / parse) across the
+      // whole run — NOT just the consecutive run that can trip fall-through.
+      // Scattered (non-consecutive) failures never reach fallThroughAfterN, so
+      // without this count they were silently dropped: not in unprocessedPairs,
+      // not heuristic-backfilled, classified by neither detector, with zero
+      // operator signal. Absent/0 on a clean run. map.ts surfaces it and runs
+      // the same full-space heuristic backfill the fall-through path uses.
+      pairsFailed?: number;
     }
   | { ok: false; error: string };
 
@@ -140,4 +149,11 @@ export interface MapSummary {
   // Absent on heuristic-only runs and on clean LLM runs that did not trigger
   // fall-through. Carries the trigger metadata + the per-detector pair counts.
   autoModeFallThrough?: AutoModeFallThroughInfo;
+  // B-CNT-002 — count of per-pair LLM classification failures that did NOT
+  // trigger fall-through (scattered/non-consecutive). Populated only when the
+  // auto-mode detector dropped pairs without falling through; in that case the
+  // heuristic backfill still ran over the unclassified pairs (so they are not
+  // lost), and this surfaces the otherwise-silent partial coverage. Absent on
+  // clean runs and on fall-through runs (which report via autoModeFallThrough).
+  autoModePairsFailed?: number;
 }

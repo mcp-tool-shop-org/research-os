@@ -117,7 +117,25 @@ async function readSectionSourceCards(
 async function readGateAudit(packPath: string, sectionId: string): Promise<Record<string, unknown> | null> {
   const path = join(packPath, 'audits', `${sectionId}-gate.json`);
   if (!existsSync(path)) return null;
-  return JSON.parse(await readFile(path, 'utf8'));
+  // B-RECOVER-002 — best-effort posture matching the other diagnose readers
+  // (readJsonl skips bad lines; readSectionSourceCards swallows;
+  // readSectionSynthesis returns null). A single corrupt
+  // audits/<id>-gate.json must NOT throw a raw SyntaxError that aborts the
+  // whole recover-pack run (and, in the partial-pack path, collapses EVERY
+  // excluded section to recovery_unavailable(engine_error)). Degrade that one
+  // section to the downstream/legacy classification by returning null.
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    // Corrupt gate audit JSON for `${sectionId}-gate.json` — skip it. The
+    // gate signal degrades to absent for this section; downstream signals
+    // (source-card classification gap, high frame-excluded rate) still apply.
+    return null;
+  }
 }
 
 async function readSectionSynthesis(

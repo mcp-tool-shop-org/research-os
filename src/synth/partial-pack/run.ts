@@ -62,6 +62,7 @@ import {
   buildRecoveryArtifact,
   writeRecoveryArtifact,
 } from '../../recover/run.js';
+import { readExistingRecoveryArtifact } from '../../recover/regeneration-ledger.js';
 import type { SectionRecoveryResult } from '../../recover/types.js';
 
 import { classifySections } from './classifier.js';
@@ -357,9 +358,28 @@ export async function partialPackSynthesis(
         model: options.proseModel,
         generatedAt,
       });
-      // Persist the canonical recovery artifact — same in-memory object as
-      // the embed (single source of truth).
-      await writeRecoveryArtifact({ packPath, artifact: recoveryArtifact });
+      // B-RECOVER-001 — preserve the R-014 chain invariant. The default
+      // partial-pack path overwrites recovery/blocked-section-recovery.json in
+      // place with a FRESH input_state_hash and NO regeneration-history entry.
+      // When pack state has not changed, that overwrite is a no-op-with-side-
+      // effects: the next `recover pack --regenerate-action-graph` sees a
+      // hash-match and skips, BUT if state DID change between a prior recover
+      // run and this synthesis the silent overwrite would desync the ledger's
+      // last new_state_hash from the artifact on disk. Mirror recoverPack's
+      // no-op short-circuit: if the canonical artifact already exists and its
+      // input_state_hash matches the freshly-computed hash, skip the overwrite
+      // so the on-disk artifact (and any ledger correlation) stays untouched.
+      const existingRecovery = await readExistingRecoveryArtifact(packPath);
+      const hashUnchanged =
+        existingRecovery !== null &&
+        existingRecovery.input_state_hash != null &&
+        recoveryArtifact.input_state_hash != null &&
+        existingRecovery.input_state_hash === recoveryArtifact.input_state_hash;
+      if (!hashUnchanged) {
+        // Persist the canonical recovery artifact — same in-memory object as
+        // the embed (single source of truth).
+        await writeRecoveryArtifact({ packPath, artifact: recoveryArtifact });
+      }
       for (const r of recoveryArtifact.sections) {
         recoveryBySectionId.set(r.section_id, r);
       }

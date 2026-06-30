@@ -63,9 +63,32 @@ export async function loadOrBuildLedger(args: LoadOrBuildArgs): Promise<LoadOrBu
   if (existsSync(path)) {
     const excerpts = await readLedger(path);
     if (excerpts.length > 0) {
-      const origins = new Set(excerpts.map((e) => e.origin));
-      const origin: ExcerptOrigin | 'mixed' = origins.size === 1 ? (excerpts[0]!.origin) : 'mixed';
-      return { excerpts, origin, built: false };
+      // B-SOURCES-001/003 — integrity guard. The on-disk ledger is reused only
+      // when its stored source_hash still matches the incoming sourceHash
+      // (current receipt.sha256). On a content-changed re-gather of the same
+      // URL, the claims will cite the NEW source_hash but the cached excerpts
+      // were derived from OLD content — silently weakening tamper-detection.
+      // When the incoming hash is non-null and ANY loaded excerpt carries a
+      // differing source_hash, treat the ledger as STALE and fall through to
+      // rebuild from current rawText/key_points. (Excerpts with a null stored
+      // hash predate hashing and are not treated as a mismatch.)
+      // B-SOURCES-001/003 — integrity guard. The on-disk ledger is reused only
+      // when its stored source_hash still matches the incoming sourceHash
+      // (current receipt.sha256). On a content-changed re-gather of the same
+      // URL, the claims will cite the NEW source_hash but the cached excerpts
+      // were derived from OLD content — silently weakening tamper-detection.
+      // When the incoming hash is non-null and ANY loaded excerpt carries a
+      // differing source_hash, treat the ledger as STALE and fall through to
+      // rebuild from current rawText/key_points. (Excerpts with a null stored
+      // hash predate hashing and are not treated as a mismatch.)
+      const stale =
+        sourceHash !== null &&
+        excerpts.some((e) => e.source_hash !== null && e.source_hash !== sourceHash);
+      if (!stale) {
+        const origins = new Set(excerpts.map((e) => e.origin));
+        const origin: ExcerptOrigin | 'mixed' = origins.size === 1 ? (excerpts[0]!.origin) : 'mixed';
+        return { excerpts, origin, built: false };
+      }
     }
   }
 

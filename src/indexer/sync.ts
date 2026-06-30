@@ -41,17 +41,35 @@ export async function syncRepoKnowledge(options: SyncOptions): Promise<SyncSumma
   // Re-read the JSONL we just wrote so repo-knowledge ingests the same canonical fact stream
   const { readFile } = await import('node:fs/promises');
   const text = await readFile(exportResult.outPath, 'utf8');
-  const facts = text
-    .split(/\r?\n/)
-    .filter((l) => l.trim().length > 0)
-    .map((l) => JSON.parse(l));
+  // B-IDX-003 — per-line resilient re-read. This was the one indexer read path
+  // with no try/catch around JSON.parse: a single corrupt line in the
+  // just-written export JSONL (concurrent writer, disk fault, partial flush)
+  // would throw a raw SyntaxError out of sync. Skip-with-warning matches the
+  // per-line convention in build.ts (tryReadJsonl) and audit/run.ts (readJsonl).
+  const facts: unknown[] = [];
+  const malformedLines: number[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim().length === 0) continue;
+    try {
+      facts.push(JSON.parse(line));
+    } catch {
+      malformedLines.push(i + 1);
+    }
+  }
+
+  const malformedSuffix =
+    malformedLines.length > 0
+      ? ` (skipped ${malformedLines.length} malformed export line(s): ${malformedLines.slice(0, 10).join(', ')}${malformedLines.length > 10 ? ', …' : ''})`
+      : '';
 
   try {
     const r = await rk.ingestFacts({ facts, namespace: 'research-os' });
     return {
       attempted: true,
       ok: true,
-      reason: 'ingested via @mcptoolshop/repo-knowledge.ingestFacts',
+      reason: `ingested via @mcptoolshop/repo-knowledge.ingestFacts${malformedSuffix}`,
       factsSynced: r.count ?? facts.length,
     };
   } catch (err) {

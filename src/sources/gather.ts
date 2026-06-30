@@ -137,7 +137,7 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
   if (!existsSync(join(packPath, 'sections', options.sectionId)))
     throw new SectionNotFoundError(options.sectionId);
 
-  const { urls } = await collectUrls({ urls: options.urls, urlsFile: options.urlsFile });
+  const { urls, invalid } = await collectUrls({ urls: options.urls, urlsFile: options.urlsFile });
   if (urls.length === 0) throw new NoUrlsProvidedError();
 
   const extractorList: Extractor[] = options.extractors ?? defaultExtractors();
@@ -158,6 +158,9 @@ export async function gather(options: GatherOptions): Promise<GatherSummary> {
     cardsWritten: 0,
     receiptsAppended: 0,
     sourceIds: [],
+    // B-SOURCES-002 — carry the malformed/non-http URLs dropped by collectUrls
+    // out to the operator instead of discarding them silently.
+    invalidUrls: invalid,
   };
 
   // A-008 — open the section-source-id appender once before the loop so the
