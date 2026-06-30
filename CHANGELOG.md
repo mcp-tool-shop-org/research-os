@@ -2,7 +2,29 @@
 
 All notable changes to `research-os` are documented here.
 
-## [Unreleased]
+## [Unreleased] — Hardening pass (dogfood swarm: bug/security + proactive health)
+
+A two-stage hardening pass over the v0.13.1 surface. **No new pipeline layers, gates, closure ledgers, or reviewer models** — every change is a defect fix or an additive guard/observability field within the locked architecture. Default (no-failure) behavior is byte-identical; the four frozen packs and the locked operator surfaces (error codes, the four help topics, CLI summary labels) are unchanged. 1663 → 1834 tests.
+
+### Security
+
+- **Discover-time SSRF guard.** `research-os discover run` fetches LLM-proposed URLs to title-check them; that fetch now routes through the same private/loopback/link-local + DNS guard that `gather` uses (factored into `src/sources/url-safety.ts`), **including a post-redirect re-check** so a public URL that 30x-redirects to `127.0.0.1` / `169.254.169.254` / an internal host is refused before its body is read. The discover intake filter now also rejects `http:` (was silently allowed).
+
+### Fixed
+
+- **`research-os query` no longer crashes on hyphenated terms.** FTS5 search of ordinary research vocabulary (`machine-learning`, `cost-benefit`, `peer-reviewed`) previously aborted with a raw SQLite error; terms are now quoted as phrases, and any residual FTS error surfaces as a structured `INDEX_QUERY_INVALID` with a quoting hint.
+- **`review --review-window 0` (or negative), and `--per-source-cap 0`/negative, no longer hang.** Both flags now require a positive integer; the reviewer and triage seams also clamp defensively.
+- **Freeze integrity at the immutability boundary.** `freeze` now refuses (rather than silently passing) when a live `claims.jsonl` / `claim-reviews.jsonl` line is malformed, when two same-timestamp review rows for one claim disagree (the canonical conflict guard `pack publish` already enforced — now shared via `getEffectiveDecisionMap`), and when a synthesis report contains a malformed `[claim:…]` citation. New refusal codes: `FREEZE_INCOMPATIBLE_REVIEW_DECISIONS`, `FREEZE_MALFORMED_CITATION`.
+- **`review promote` reads the shipped calibration receipts.** The canonical `seeded-v1.json` profile receipts are *aggregate* receipts; `loadReceiptForPack` now reads them (was hard-aborting `CALIBRATION_RECEIPT_MALFORMED` on a valid receipt). It also no longer mis-blocks promotion of a clean section that contains `frame_excluded` claims.
+- **Partial multi-window LLM failures are no longer silently treated as success.** During `claim extract`, a source with any failed window is no longer marked complete (so `--resume` re-attempts it instead of permanently skipping dropped evidence). During `review`, failed reviewer windows are recorded on the snapshot with a forced warning (un-reviewed claims are no longer indistinguishable from clean). Auto-mode contradiction detection surfaces scattered per-pair failures and backfills them with the heuristic detector.
+- **Recovery-artifact regeneration is atomic.** `recover pack --regenerate-action-graph` builds the new artifact before the irreversible archive and restores the original on any post-archive failure (named compensator), so a transiently-missing MCP binary can no longer strand the canonical recovery artifact.
+- Several smaller correctness fixes: triage keeps multi-source claims that have cap headroom; the accepted-claim floor ignores phantom (orphan) source ids; equal-timestamp ledger joins resolve consistently (last-appended wins) across gate / audit / cowork / synth / section-report / freeze; `gather` no longer leaves a source referenced with only a failed receipt; truncated excerpts keep accurate offsets.
+
+### Changed / Hardened
+
+- **Graceful degradation + observability.** A silent fall-through from the MCP extractor to the heuristic floor now emits a contrastive warning (the heuristic bypasses the topicality defense floor). `index build` prints the warnings it collects (a partial index is no longer silently clean). A `tier_budget_ms_override` sent to an `ollama-intern-mcp` below the honoring floor now warns instead of silently no-op'ing. The MCP install hint points at the version the feature actually requires. Corrupt-artifact reads in `synth`, `audit`, `gate`, `recover`, and the indexer degrade with structured warnings/errors rather than raw stacks or whole-run aborts; `synth` raises a structured `MALFORMED_DATA_FILE` (exit 2).
+- **Future-proofing.** The local SQLite index now detects a `SCHEMA_VERSION` change and rebuilds cleanly (the documented delete-on-bump contract, automated). Published packs no longer embed the derivative `.research-os/` index. Six previously-thrown error classes are now re-exported from the package entry so library consumers can `instanceof`-narrow them.
+- **CI/release robustness.** The dependency-audit gate is advisory (decoupled from the live advisory feed so a new transient advisory cannot red an unchanged lockfile); CI gained a concurrency group + `workflow_dispatch`; the publish workflow selects the correct CHANGELOG section by literal version match, is idempotent across a split npm/GitHub-release failure, and is bounded by a job timeout.
 
 ## [0.13.1] - 2026-05-19 — R-024 Extract-Stage Tier-Budget Authority (Path C Patch)
 
