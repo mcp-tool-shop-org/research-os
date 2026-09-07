@@ -5,13 +5,28 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    groups:
+      # Minor + patch only, so a breaking major still opens as its OWN PR.
+      all-npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: npm
     directory: /site
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    groups:
+      # Minor + patch only, so a breaking major still opens as its OWN PR.
+      all-npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    groups:
+      # Minor + patch only, so a breaking major still opens as its OWN PR.
+      all-github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
