@@ -58,7 +58,7 @@ The automated path (`pack publish`) and the manual Experiment 1 closeout path pr
 The dogfood test ran against both existing `research-packs/packages/*/pack/` directories, re-deriving packages into fresh temp directories:
 
 ```
-$tmp = C:\Users\mikey\AppData\Local\Temp\ros-dogfood-42720130\
+$tmp = ~/AppData\Local\Temp\ros-dogfood-42720130\
   comfyui-workflow-durability\   ← temp, not committed
   research-os-self-dogfood\      ← temp, not committed
 ```

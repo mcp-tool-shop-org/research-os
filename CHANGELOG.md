@@ -254,7 +254,7 @@ The "15000ms Instant-tier budget" the v0.4 gate hit lives in `ollama-intern-mcp/
 
 - **Default behavior is preserved byte-identical to v0.12.0.** Operators who don't set `--planner-timeout-ms` or `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS` see no observable change beyond the new stderr log line and the new `planner_timeout_ms` field in `section-synthesis.json` / ProseBlock metadata.
 - **Operators preparing the v0.4 rerun** (against published v0.12.1) should use `--planner-timeout-ms 30000` (or set `RESEARCH_OS_SYNTH_PLANNER_TIMEOUT_MS=30000`) on `synth section` to raise the budget past the observed 15010ms timing. The override surfaces in synthesis metadata, so the rerun's `section-synthesis.json` is self-documenting.
-- **Stale global install** of `@mcptoolshop/research-os@0.12.0` at `C:\Users\mikey\AppData\Roaming\npm\research-os` (or equivalent on Mac / Linux) will intercept `npx -y @mcptoolshop/research-os@0.12.1` invocations. Operators planning to rerun the v0.4 operator-aloneness gate against v0.12.1 should `npm uninstall -g @mcptoolshop/research-os` first OR use a fresh project-local install for the gate run (mirrors the v0.3 / v0.4 gate hygiene discipline).
+- **Stale global install** of `@mcptoolshop/research-os@0.12.0` at `~/AppData\Roaming\npm\research-os` (or equivalent on Mac / Linux) will intercept `npx -y @mcptoolshop/research-os@0.12.1` invocations. Operators planning to rerun the v0.4 operator-aloneness gate against v0.12.1 should `npm uninstall -g @mcptoolshop/research-os` first OR use a fresh project-local install for the gate run (mirrors the v0.3 / v0.4 gate hygiene discipline).
 
 ## [0.12.0] - 2026-05-16 — Coverage-Recovery Release
 
@@ -332,7 +332,7 @@ Operators upgrading from v0.11.0 will see two new persistent artifacts materiali
 - `evidence/extract-completion.jsonl` (R-015) — written on every successful `claim extract` run; consumed only by `--resume`. Benign; append-only.
 - `audits/missing-policy-sources.{json,md}` (R-017) — written on every `pack audit` run, with explicit "no warning" body when the warning does not fire. Pack audit file count is now 18 (was 16).
 
-A stale global install of `@mcptoolshop/research-os@0.11.0` at `C:\Users\mikey\AppData\Roaming\npm\research-os` (or equivalent on Mac / Linux) will intercept `npx -y @mcptoolshop/research-os@0.12.0` invocations. Operators planning to run the v0.4 operator-aloneness gate against v0.12.0 should `npm uninstall -g @mcptoolshop/research-os` first OR use a fresh project-local install for the gate run (mirrors the v0.3 gate hygiene discipline).
+A stale global install of `@mcptoolshop/research-os@0.11.0` at `~/AppData\Roaming\npm\research-os` (or equivalent on Mac / Linux) will intercept `npx -y @mcptoolshop/research-os@0.12.0` invocations. Operators planning to run the v0.4 operator-aloneness gate against v0.12.0 should `npm uninstall -g @mcptoolshop/research-os` first OR use a fresh project-local install for the gate run (mirrors the v0.3 gate hygiene discipline).
 
 ## [0.11.0] - 2026-05-15 — Second Operator-Aloneness Repair Release
 
