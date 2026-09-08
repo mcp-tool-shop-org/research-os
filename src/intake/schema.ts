@@ -50,11 +50,11 @@ export const SectionBudgetGateSchema = z.object({
 });
 
 export const GateConfigSchema = z.object({
-  source_floor: SourceFloorGateSchema.default({}),
-  claim_integrity: ClaimIntegrityGateSchema.default({}),
-  freshness: FreshnessGateSchema.default({}),
-  contradiction: ContradictionGateSchema.default({}),
-  section_budget: SectionBudgetGateSchema.default({}),
+  source_floor: SourceFloorGateSchema.prefault({}),
+  claim_integrity: ClaimIntegrityGateSchema.prefault({}),
+  freshness: FreshnessGateSchema.prefault({}),
+  contradiction: ContradictionGateSchema.prefault({}),
+  section_budget: SectionBudgetGateSchema.prefault({}),
 });
 
 // v0.10 Slice 3 (R-003 + R-005) — per-pack overrides for source-card
@@ -186,11 +186,11 @@ export const ResearchYamlSchema = z.object({
   audience: z.string().default('self'),
   desired_output: z.string().default(''),
   max_runtime_minutes: z.number().int().positive().default(240),
-  freshness: FreshnessRequirementsSchema.default({}),
+  freshness: FreshnessRequirementsSchema.prefault({}),
   excluded_sources: z.array(z.string()).default([]),
-  primary_source_waiver: PrimarySourceWaiverSchema.default({}),
+  primary_source_waiver: PrimarySourceWaiverSchema.prefault({}),
   sections: z.array(SectionSchema).default([]),
-  gates: GateConfigSchema.default({}),
+  gates: GateConfigSchema.prefault({}),
   // v0.10 Slice 3 — optional per-pack audit configuration. Source-card
   // severity-detection thresholds for R-003 (bot-check) + R-005 (extraction
   // ratio) live here. Defaults come from DEFAULT_SEVERITY_THRESHOLDS.
@@ -201,7 +201,7 @@ export const ResearchYamlSchema = z.object({
   // with `--preset <name>` on `research-os review`.
   review_profiles: z
     .record(z.string(), ReviewProfilePresetSchema)
-    .default(() => ({ ...DEFAULT_REVIEW_PROFILES })),
+    .prefault(() => ({ ...DEFAULT_REVIEW_PROFILES })),
   frozen_at: z.string().nullable().default(null),
 });
 

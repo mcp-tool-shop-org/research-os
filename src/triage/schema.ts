@@ -46,7 +46,7 @@ export const TriageSummarySchema = z.object({
   research_os_version: z.string(),
   triage_method: z.string(),
   candidate_claims: z.number().int().nonnegative(),
-  decisions: z.record(TriageDecisionSchema, z.number().int().nonnegative()),
+  decisions: z.partialRecord(TriageDecisionSchema, z.number().int().nonnegative()),
   per_source_cap: z.number().int().positive(),
   duplicate_clusters_collapsed: z.number().int().nonnegative(),
   selected_count: z.number().int().nonnegative(),
