@@ -1,0 +1,648 @@
+{
+  "authored": [
+    ".github/",
+    "docs/",
+    "examples/",
+    "root",
+    "site/",
+    "templates/"
+  ],
+  "breaks": [
+    {
+      "doors": 4,
+      "importedBy": [
+        "scripts"
+      ],
+      "importedByTests": [
+        "test"
+      ],
+      "kind": "part",
+      "name": "src",
+      "partLabel": "src"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "test",
+      "partLabel": "test"
+    }
+  ],
+  "changes": {
+    "first": true
+  },
+  "changesTogether": [
+    {
+      "a": "src/cowork/schema.ts",
+      "b": "src/cowork/types.ts",
+      "either": 5,
+      "partLabels": [
+        "src",
+        "src"
+      ],
+      "parts": [
+        "src",
+        "src"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "src/audit/aggregate.ts",
+      "b": "test/audit-aggregate.test.ts",
+      "either": 6,
+      "partLabels": [
+        "src",
+        "test"
+      ],
+      "parts": [
+        "src",
+        "test"
+      ],
+      "relation": "b-imports-a",
+      "shared": 5
+    },
+    {
+      "a": "src/cowork/derive.ts",
+      "b": "src/cowork/schema.ts",
+      "either": 6,
+      "partLabels": [
+        "src",
+        "src"
+      ],
+      "parts": [
+        "src",
+        "src"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "src/cowork/derive.ts",
+      "b": "src/cowork/types.ts",
+      "either": 6,
+      "partLabels": [
+        "src",
+        "src"
+      ],
+      "parts": [
+        "src",
+        "src"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "src/claims/extract.ts",
+      "b": "src/claims/types.ts",
+      "either": 12,
+      "partLabels": [
+        "src",
+        "src"
+      ],
+      "parts": [
+        "src",
+        "src"
+      ],
+      "relation": "inside",
+      "shared": 9
+    }
+  ],
+  "changesTogetherNote": [
+    "Confidence is low: fewer than 20 source files reach 10 revisions in the window.",
+    "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
+  ],
+  "changesTogetherWithTests": 0,
+  "commit": "d888f86c7265ae1a6964e2b96bc1556280d4c8c6",
+  "defaultBranch": "main",
+  "derived": "10 parts, mostly TypeScript (420 files) and JavaScript (7). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. People run research-os. People import @mcptoolshop/research-os.",
+  "doors": [
+    {
+      "checks": [
+        "src/"
+      ],
+      "checksCount": 1,
+      "checksMore": 0,
+      "file": ".github/workflows/ci.yml",
+      "id": ".github/workflows/ci.yml",
+      "landings": [],
+      "name": "CI",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 197
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 219
+        }
+      ],
+      "runs": [
+        "test/audit-aggregate.test.ts",
+        "test/audit-run.test.ts",
+        "test/calibration-aggregate.test.ts",
+        "test/calibration-lookup.test.ts",
+        "test/calibration-receipt.test.ts",
+        "test/calibration-schema-forward-compat.test.ts",
+        "test/canonical-pack-publish-force-text.test.ts",
+        "test/claims-density-shares-sum.test.ts",
+        "test/claims-density.test.ts",
+        "test/claims-extract-preserve-rename.test.ts",
+        "test/claims-extract-severity-quarantine.test.ts",
+        "test/claims-extract.test.ts",
+        "test/claims-extractor-mcp.test.ts",
+        "test/claims-heuristic.test.ts",
+        "test/claims-ollama-intern-null.test.ts",
+        "test/claims-ollama-intern.test.ts",
+        "test/claims-repair-scope-auto.test.ts",
+        "test/claims-repair-scope-interactive.test.ts",
+        "test/claims-schema.test.ts",
+        "test/claims-scope-repairs-ledger.test.ts",
+        "test/cli-help-topics-map.test.ts",
+        "test/cli/",
+        "test/closure-ledger/",
+        "test/contradictions-detector-flag.test.ts",
+        "test/contradictions-heuristic.test.ts",
+        "test/contradictions-map-malformed.test.ts",
+        "test/contradictions-map.test.ts",
+        "test/contradictions-markdown.test.ts",
+        "test/contradictions-ollama-intern-null.test.ts",
+        "test/contradictions-ollama-intern.test.ts",
+        "test/contradictions-prefilter.test.ts",
+        "test/contradictions-resolve.test.ts",
+        "test/contradictions-schema.test.ts",
+        "test/contradictions-scope.test.ts",
+        "test/cowork-derive.test.ts",
+        "test/cowork-frame-excluded-promotion.test.ts",
+        "test/cowork-markdown.test.ts",
+        "test/cowork-run.test.ts",
+        "test/critic-claim-routing.test.ts",
+        "test/critic-mcp.test.ts",
+        "test/critic-prompt-drift.test.ts",
+        "test/critic-soft-fail.test.ts",
+        "test/discover-relevance.test.ts",
+        "test/discover-run.test.ts",
+        "test/excerpts-chunk.test.ts",
+        "test/excerpts-ledger.test.ts",
+        "test/freeze-citations.test.ts",
+        "test/freeze-reason-codes.test.ts",
+        "test/freeze-run.test.ts",
+        "test/freeze-unaccepted-citation.test.ts",
+        "test/gate-frame-excluded.test.ts",
+        "test/gates-checks.test.ts",
+        "test/gates-effective-publisher.test.ts",
+        "test/gates-malformed-resilience.test.ts",
+        "test/gates-markdown.test.ts",
+        "test/gates-run.test.ts",
+        "test/gates-schema.test.ts",
+        "test/indexer-build.test.ts",
+        "test/indexer-export.test.ts",
+        "test/indexer-query.test.ts",
+        "test/indexer/",
+        "test/intake.test.ts",
+        "test/intake/",
+        "test/invalidate-review.test.ts",
+        "test/invalidate-run.test.ts",
+        "test/mcp-client-discovery.test.ts",
+        "test/pack-publish/f36-admission.test.ts",
+        "test/pack-publish/how-to-read.test.ts",
+        "test/pack-publish/manifest.test.ts",
+        "test/pack-publish/publish-force-clears.test.ts",
+        "test/pack-publish/publish.test.ts",
+        "test/pack-publish/readme.test.ts",
+        "test/pack-publish/structured-errors.test.ts",
+        "test/pack-publish/verify-cross-section-map.test.ts",
+        "test/pack-publish/verify-orphan-detection.test.ts",
+        "test/pack-publish/verify.test.ts",
+        "test/partial-pack-recovery-embed.test.ts",
+        "test/progress-emission.test.ts",
+        "test/r007-scope-boundary-alignment.test.ts",
+        "test/r008-discover-hallucinated-url-defense.test.ts",
+        "test/r009-extractor-identity-guard.test.ts",
+        "test/r010-recover-fallback-visibility.test.ts",
+        "test/r011-frame-critic-source-content-guard.test.ts",
+        "test/r012-frame-rescue-integration.test.ts",
+        "test/r012-rescue-eligibility-gate.test.ts",
+        "test/r013-source-card-rebuild.test.ts",
+        "test/r014-regenerate-action-graph.test.ts",
+        "test/r015-resume-progress.test.ts",
+        "test/r016-override-example.test.ts",
+        "test/r017-missing-policy-sources.test.ts",
+        "test/r018-planner-timeout-override.test.ts",
+        "test/r019-live-replay.test.ts",
+        "test/r019-tier-budget-override.test.ts",
+        "test/r020-live-replay.test.ts",
+        "test/r020-no-answer-cluster-recovery.test.ts",
+        "test/r021-contradict-auto-mode.test.ts",
+        "test/r021-live-replay.test.ts",
+        "test/r024-live-replay.test.ts",
+        "test/r024-tier-budget-override.test.ts",
+        "test/recover-action-graph-repair-claim-scope.test.ts",
+        "test/recover-action-graph.test.ts",
+        "test/recover-blocking-reasons-routing.test.ts",
+        "test/recover-diagnose.test.ts",
+        "test/recover-integration.test.ts",
+        "test/recover-verifier.test.ts",
+        "test/review-cli-preset.test.ts",
+        "test/review-decision.test.ts",
+        "test/review-error-classes.test.ts",
+        "test/review-frame-excluded-skip.test.ts",
+        "test/review-heuristic.test.ts",
+        "test/review-markdown.test.ts",
+        "test/review-ollama-intern.test.ts",
+        "test/review-run.test.ts",
+        "test/review-schema.test.ts",
+        "test/reviewer-options.test.ts",
+        "test/section-report.test.ts",
+        "test/section-scoped-waivers.test.ts",
+        "test/sections.test.ts",
+        "test/sources-fetch.test.ts",
+        "test/sources-gather.test.ts",
+        "test/sources-heuristic-extractor.test.ts",
+        "test/sources-ollama-intern-extractor.test.ts",
+        "test/sources-url-input.test.ts",
+        "test/sources/",
+        "test/stage-a/",
+        "test/stage-b/",
+        "test/stage-c-phase3-structured-errors.test.ts",
+        "test/synth-derive.test.ts",
+        "test/synth-partial-pack-bundle-planner.test.ts",
+        "test/synth-partial-pack-classifier.test.ts",
+        "test/synth-partial-pack-cross-section.test.ts",
+        "test/synth-partial-pack-integration.test.ts",
+        "test/synth-partial-pack-retry.test.ts",
+        "test/synth-partial-pack-schema.test.ts",
+        "test/synth-prose-admission.test.ts",
+        "test/synth-prose-drafter-opener.test.ts",
+        "test/synth-prose-drafter.test.ts",
+        "test/synth-prose-hard-ban.test.ts",
+        "test/synth-prose-integration.test.ts",
+        "test/synth-prose-planner-chunk.test.ts",
+        "test/synth-prose-planner.test.ts",
+        "test/synth-prose-status.test.ts",
+        "test/synth-prose-verifier.test.ts",
+        "test/synth-run.test.ts",
+        "test/synth-section.test.ts",
+        "test/triage-run.test.ts",
+        "test/util-progress.test.ts"
+      ],
+      "runsCount": 147,
+      "runsMore": 215,
+      "sends": [],
+      "stages": [],
+      "triggers": [
+        "on a pull request",
+        "on a push to main",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [
+        "src/"
+      ],
+      "checksCount": 1,
+      "checksMore": 0,
+      "file": ".github/workflows/release.yml",
+      "id": ".github/workflows/release.yml",
+      "landings": [],
+      "name": "Release",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 197
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 219
+        }
+      ],
+      "runs": [
+        "test/audit-aggregate.test.ts",
+        "test/audit-run.test.ts",
+        "test/calibration-aggregate.test.ts",
+        "test/calibration-lookup.test.ts",
+        "test/calibration-receipt.test.ts",
+        "test/calibration-schema-forward-compat.test.ts",
+        "test/canonical-pack-publish-force-text.test.ts",
+        "test/claims-density-shares-sum.test.ts",
+        "test/claims-density.test.ts",
+        "test/claims-extract-preserve-rename.test.ts",
+        "test/claims-extract-severity-quarantine.test.ts",
+        "test/claims-extract.test.ts",
+        "test/claims-extractor-mcp.test.ts",
+        "test/claims-heuristic.test.ts",
+        "test/claims-ollama-intern-null.test.ts",
+        "test/claims-ollama-intern.test.ts",
+        "test/claims-repair-scope-auto.test.ts",
+        "test/claims-repair-scope-interactive.test.ts",
+        "test/claims-schema.test.ts",
+        "test/claims-scope-repairs-ledger.test.ts",
+        "test/cli-help-topics-map.test.ts",
+        "test/cli/",
+        "test/closure-ledger/",
+        "test/contradictions-detector-flag.test.ts",
+        "test/contradictions-heuristic.test.ts",
+        "test/contradictions-map-malformed.test.ts",
+        "test/contradictions-map.test.ts",
+        "test/contradictions-markdown.test.ts",
+        "test/contradictions-ollama-intern-null.test.ts",
+        "test/contradictions-ollama-intern.test.ts",
+        "test/contradictions-prefilter.test.ts",
+        "test/contradictions-resolve.test.ts",
+        "test/contradictions-schema.test.ts",
+        "test/contradictions-scope.test.ts",
+        "test/cowork-derive.test.ts",
+        "test/cowork-frame-excluded-promotion.test.ts",
+        "test/cowork-markdown.test.ts",
+        "test/cowork-run.test.ts",
+        "test/critic-claim-routing.test.ts",
+        "test/critic-mcp.test.ts",
+        "test/critic-prompt-drift.test.ts",
+        "test/critic-soft-fail.test.ts",
+        "test/discover-relevance.test.ts",
+        "test/discover-run.test.ts",
+        "test/excerpts-chunk.test.ts",
+        "test/excerpts-ledger.test.ts",
+        "test/freeze-citations.test.ts",
+        "test/freeze-reason-codes.test.ts",
+        "test/freeze-run.test.ts",
+        "test/freeze-unaccepted-citation.test.ts",
+        "test/gate-frame-excluded.test.ts",
+        "test/gates-checks.test.ts",
+        "test/gates-effective-publisher.test.ts",
+        "test/gates-malformed-resilience.test.ts",
+        "test/gates-markdown.test.ts",
+        "test/gates-run.test.ts",
+        "test/gates-schema.test.ts",
+        "test/indexer-build.test.ts",
+        "test/indexer-export.test.ts",
+        "test/indexer-query.test.ts",
+        "test/indexer/",
+        "test/intake.test.ts",
+        "test/intake/",
+        "test/invalidate-review.test.ts",
+        "test/invalidate-run.test.ts",
+        "test/mcp-client-discovery.test.ts",
+        "test/pack-publish/f36-admission.test.ts",
+        "test/pack-publish/how-to-read.test.ts",
+        "test/pack-publish/manifest.test.ts",
+        "test/pack-publish/publish-force-clears.test.ts",
+        "test/pack-publish/publish.test.ts",
+        "test/pack-publish/readme.test.ts",
+        "test/pack-publish/structured-errors.test.ts",
+        "test/pack-publish/verify-cross-section-map.test.ts",
+        "test/pack-publish/verify-orphan-detection.test.ts",
+        "test/pack-publish/verify.test.ts",
+        "test/partial-pack-recovery-embed.test.ts",
+        "test/progress-emission.test.ts",
+        "test/r007-scope-boundary-alignment.test.ts",
+        "test/r008-discover-hallucinated-url-defense.test.ts",
+        "test/r009-extractor-identity-guard.test.ts",
+        "test/r010-recover-fallback-visibility.test.ts",
+        "test/r011-frame-critic-source-content-guard.test.ts",
+        "test/r012-frame-rescue-integration.test.ts",
+        "test/r012-rescue-eligibility-gate.test.ts",
+        "test/r013-source-card-rebuild.test.ts",
+        "test/r014-regenerate-action-graph.test.ts",
+        "test/r015-resume-progress.test.ts",
+        "test/r016-override-example.test.ts",
+        "test/r017-missing-policy-sources.test.ts",
+        "test/r018-planner-timeout-override.test.ts",
+        "test/r019-live-replay.test.ts",
+        "test/r019-tier-budget-override.test.ts",
+        "test/r020-live-replay.test.ts",
+        "test/r020-no-answer-cluster-recovery.test.ts",
+        "test/r021-contradict-auto-mode.test.ts",
+        "test/r021-live-replay.test.ts",
+        "test/r024-live-replay.test.ts",
+        "test/r024-tier-budget-override.test.ts",
+        "test/recover-action-graph-repair-claim-scope.test.ts",
+        "test/recover-action-graph.test.ts",
+        "test/recover-blocking-reasons-routing.test.ts",
+        "test/recover-diagnose.test.ts",
+        "test/recover-integration.test.ts",
+        "test/recover-verifier.test.ts",
+        "test/review-cli-preset.test.ts",
+        "test/review-decision.test.ts",
+        "test/review-error-classes.test.ts",
+        "test/review-frame-excluded-skip.test.ts",
+        "test/review-heuristic.test.ts",
+        "test/review-markdown.test.ts",
+        "test/review-ollama-intern.test.ts",
+        "test/review-run.test.ts",
+        "test/review-schema.test.ts",
+        "test/reviewer-options.test.ts",
+        "test/section-report.test.ts",
+        "test/section-scoped-waivers.test.ts",
+        "test/sections.test.ts",
+        "test/sources-fetch.test.ts",
+        "test/sources-gather.test.ts",
+        "test/sources-heuristic-extractor.test.ts",
+        "test/sources-ollama-intern-extractor.test.ts",
+        "test/sources-url-input.test.ts",
+        "test/sources/",
+        "test/stage-a/",
+        "test/stage-b/",
+        "test/stage-c-phase3-structured-errors.test.ts",
+        "test/synth-derive.test.ts",
+        "test/synth-partial-pack-bundle-planner.test.ts",
+        "test/synth-partial-pack-classifier.test.ts",
+        "test/synth-partial-pack-cross-section.test.ts",
+        "test/synth-partial-pack-integration.test.ts",
+        "test/synth-partial-pack-retry.test.ts",
+        "test/synth-partial-pack-schema.test.ts",
+        "test/synth-prose-admission.test.ts",
+        "test/synth-prose-drafter-opener.test.ts",
+        "test/synth-prose-drafter.test.ts",
+        "test/synth-prose-hard-ban.test.ts",
+        "test/synth-prose-integration.test.ts",
+        "test/synth-prose-planner-chunk.test.ts",
+        "test/synth-prose-planner.test.ts",
+        "test/synth-prose-status.test.ts",
+        "test/synth-prose-verifier.test.ts",
+        "test/synth-run.test.ts",
+        "test/synth-section.test.ts",
+        "test/triage-run.test.ts",
+        "test/util-progress.test.ts"
+      ],
+      "runsCount": 147,
+      "runsMore": 215,
+      "sends": [
+        "publishes to npm",
+        "creates a GitHub release on a tag push"
+      ],
+      "stages": [],
+      "triggers": [
+        "when a tag matching `v*.*.*` is pushed",
+        "when a release is published",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/pages.yml",
+      "id": ".github/workflows/pages.yml",
+      "landings": [],
+      "name": "Deploy site to GitHub Pages",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "site",
+          "depth": 0,
+          "files": 3
+        }
+      ],
+      "runs": [
+        "site/astro.config.mjs",
+        "site/src/"
+      ],
+      "runsCount": 2,
+      "runsMore": 0,
+      "sends": [
+        "deploys the site"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a push to main touching 2 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "package.json",
+      "id": "package.json#@mcptoolshop/research-os",
+      "kind": "package",
+      "landings": [],
+      "name": "@mcptoolshop/research-os",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 178
+        }
+      ],
+      "runs": [
+        "src/index.ts"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": []
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "package.json",
+      "id": "package.json#research-os",
+      "kind": "command",
+      "landings": [],
+      "name": "research-os",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 194
+        }
+      ],
+      "runs": [
+        "src/cli.ts"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": []
+    }
+  ],
+  "duplicates": [],
+  "duplicatesLead": null,
+  "duplicatesNote": [],
+  "edges": [
+    {
+      "from": "test",
+      "fromTests": true,
+      "to": "src"
+    }
+  ],
+  "generated": [
+    {
+      "place": "calibration/reviewer-profiles/",
+      "writers": [
+        "scripts/reviewer-calibration.mjs"
+      ]
+    }
+  ],
+  "generatedAt": "2026-09-25T02:11:45.081Z",
+  "limits": [
+    "1 import site could not be resolved.",
+    "12 writes and 7 reads use paths built at run time and are not named here.",
+    "101 writes and 223 reads go to the directory the command is run in or a path their caller passes, not to this repository.",
+    "47 writes and 142 reads go to a path their caller passes, not to this repository.",
+    "1 command is built at run time and not followed, and it is in tests.",
+    "Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window."
+  ],
+  "mainDoor": ".github/workflows/ci.yml",
+  "partLabels": {
+    ".github": ".github",
+    "calibration": "calibration",
+    "docs": "docs",
+    "examples": "examples",
+    "root": "the repository root",
+    "scripts": "scripts",
+    "site": "the site",
+    "src": "src",
+    "templates": "templates",
+    "test": "test"
+  },
+  "parts": 10,
+  "readers": [],
+  "repo": "mcp-tool-shop-org/research-os",
+  "sequences": [],
+  "startDoor": "package.json#research-os",
+  "startHere": [
+    "src/cli.ts"
+  ],
+  "startReason": "This path follows research-os (a command people run) from its entry, since CI runs only tests.",
+  "summary": null,
+  "summaryFrom": null,
+  "testFiles": 219,
+  "testedBy": {
+    "scripts": 0,
+    "src": 215
+  },
+  "unnamedWrites": 12,
+  "unread": [
+    {
+      "place": "calibration/reviewer-profiles/",
+      "writers": [
+        "scripts/reviewer-calibration.mjs"
+      ]
+    }
+  ],
+  "unreadFiles": 0,
+  "unreadNote": [],
+  "untested": [
+    {
+      "part": "scripts",
+      "partLabel": "scripts",
+      "testedBy": 0
+    }
+  ],
+  "untestedNote": [],
+  "written": 1
+}
