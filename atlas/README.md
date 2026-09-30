@@ -1,16 +1,14 @@
 # research-os: how it works
 
-Mapped at 2026-09-30 from commit 4bc808e by Atlas 1.24.0.
+Mapped at 2026-09-30 from commit d3cd0a8 by Atlas 1.24.0.
 
 ## What this is
 
 10 parts, mostly TypeScript (420 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.
 
-## What changed since 2026-09-25 (d888f86)
+## What changed since 2026-09-30 (4bc808e)
 
-- CI now also builds src/calibration/aggregate-receipt-schema.ts, src/calibration/aggregate.ts, src/calibration/receipt-schema.ts and 3 more.
-- Release now also builds src/calibration/aggregate-receipt-schema.ts, src/calibration/aggregate.ts, src/calibration/receipt-schema.ts and 3 more.
-- 1 file added and 1 changed content, across 2 parts.
+Nothing structural changed since 2026-09-30; 2 files changed content.
 
 ## What comes in
 
