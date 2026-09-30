@@ -13,7 +13,7 @@
           "path": ".github/dependabot.yml"
         },
         {
-          "hash": "4f19440e103f5af83cda12d3cfcc78591ab6486ddcf5d9657d62cbc7d56806c1",
+          "hash": "bcd60d564b807328f22bb626151f0b959a1164b77057bd07f1038afcb33715e8",
           "path": ".github/workflows/ci.yml"
         },
         {
@@ -309,7 +309,7 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "91e5f2097aa80c1b03ad871ae7ebf649970689b6ede682f02bf28a48f07a3207",
+          "hash": "710030910f292073f16a1d8ff1f54073b76a882698ddc8f505b0f00cae7eb0a7",
           "path": "package-lock.json"
         },
         {
@@ -9269,70 +9269,6 @@
       ],
       "elsewhere": [],
       "file": ".github/workflows/ci.yml",
-      "findings": [
-        {
-          "job": "verify",
-          "legs": 2,
-          "lines": [
-            {
-              "file": ".github/workflows/ci.yml",
-              "line": 31
-            },
-            {
-              "file": ".github/workflows/ci.yml",
-              "line": 57
-            },
-            {
-              "file": "package-lock.json",
-              "line": 5514
-            }
-          ],
-          "package": "vitest",
-          "pinnedBy": {
-            "step": "Use Node.js ${{ matrix.node-version }}",
-            "version": "${{ matrix.node-version }}"
-          },
-          "pins": [
-            "20"
-          ],
-          "requires": "^22.12.0 || ^24.0.0 || >=26.0.0",
-          "rule": "D1",
-          "step": "Coverage",
-          "tool": "vitest run",
-          "version": "5.0.0"
-        },
-        {
-          "job": "verify",
-          "legs": 2,
-          "lines": [
-            {
-              "file": ".github/workflows/ci.yml",
-              "line": 31
-            },
-            {
-              "file": ".github/workflows/ci.yml",
-              "line": 54
-            },
-            {
-              "file": "package-lock.json",
-              "line": 5514
-            }
-          ],
-          "package": "vitest",
-          "pinnedBy": {
-            "step": "Use Node.js ${{ matrix.node-version }}",
-            "version": "${{ matrix.node-version }}"
-          },
-          "pins": [
-            "20"
-          ],
-          "requires": "^22.12.0 || ^24.0.0 || >=26.0.0",
-          "rule": "D1",
-          "step": "Test",
-          "tool": "vitest run",
-          "version": "5.0.0"
-        }
-      ],
       "jobs": [
         {
           "basis": "declared",
@@ -9352,10 +9288,6 @@
           "setup": [
             {
               "ranges": [
-                {
-                  "from": "20",
-                  "range": ">=20.0.0 <21.0.0-0"
-                },
                 {
                   "from": "22",
                   "range": ">=22.0.0 <23.0.0-0"
@@ -12111,7 +12043,7 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "4bc808e3760ecfe1424b531bbbb68750597e8546",
+    "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807",
     "tracked": 509
   },
   "landings": [

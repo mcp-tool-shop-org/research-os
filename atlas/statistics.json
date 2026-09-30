@@ -180,8 +180,8 @@
         "path": ".github/dependabot.yml"
       },
       {
-        "commits": 12,
-        "lines": 279,
+        "commits": 14,
+        "lines": 283,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -270,8 +270,8 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 1,
-        "lines": 91,
+        "commits": 3,
+        "lines": 155,
         "path": "atlas/README.md"
       },
       {
@@ -280,18 +280,18 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 1,
-        "lines": 648,
+        "commits": 3,
+        "lines": 842,
         "path": "atlas/page.json"
       },
       {
-        "commits": 1,
-        "lines": 3263,
+        "commits": 3,
+        "lines": 3371,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 1,
-        "lines": 8163,
+        "commits": 3,
+        "lines": 18139,
         "path": "atlas/structure.json"
       },
       {
@@ -490,8 +490,8 @@
         "path": "examples/source-card-override.example.json"
       },
       {
-        "commits": 19,
-        "lines": 7786,
+        "commits": 21,
+        "lines": 7798,
         "path": "package-lock.json"
       },
       {
@@ -2880,17 +2880,17 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-09-30T20:12:16.269Z",
+  "generatedAt": "2026-09-30T22:05:05.245Z",
   "generatedFrom": {
-    "commit": "4bc808e3760ecfe1424b531bbbb68750597e8546"
+    "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807"
   },
   "pairs": [
     {
       "a": ".github/workflows/ci.yml",
       "b": ".github/workflows/pages.yml",
-      "either": 11,
+      "either": 12,
       "shared": 6,
-      "strength": 0.545455
+      "strength": 0.5
     },
     {
       "a": "CHANGELOG.md",
@@ -3098,23 +3098,16 @@
     {
       "a": "package-lock.json",
       "b": "package.json",
-      "either": 27,
+      "either": 28,
       "shared": 18,
-      "strength": 0.666667
-    },
-    {
-      "a": "package-lock.json",
-      "b": "src/mcp/client.ts",
-      "either": 18,
-      "shared": 9,
-      "strength": 0.5
+      "strength": 0.642857
     },
     {
       "a": "package-lock.json",
       "b": "test/pack-publish/manifest.test.ts",
-      "either": 21,
+      "either": 22,
       "shared": 12,
-      "strength": 0.571429
+      "strength": 0.545455
     },
     {
       "a": "package.json",
@@ -3260,16 +3253,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-26T19:45:03-07:00",
+    "headDate": "2026-09-30T14:26:36-07:00",
     "inScopeFiles": 514,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 149,
+    "qualifyingCommits": 151,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-03-31T02:45:03.000Z",
+    "since": "2026-04-03T21:26:36.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
