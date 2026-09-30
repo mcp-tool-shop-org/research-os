@@ -30,7 +30,51 @@
     }
   ],
   "changes": {
-    "first": true
+    "fileCounts": {
+      "added": 1,
+      "changed": 1,
+      "moved": 0,
+      "parts": 2,
+      "removed": 0
+    },
+    "items": [
+      {
+        "kind": "door",
+        "sentence": "CI now also builds src/calibration/aggregate-receipt-schema.ts, src/calibration/aggregate.ts, src/calibration/receipt-schema.ts and 3 more.",
+        "subjects": [
+          ".github/workflows/ci.yml",
+          "src/calibration/aggregate-receipt-schema.ts",
+          "src/calibration/aggregate.ts",
+          "src/calibration/receipt-schema.ts",
+          "src/calibration/receipt.ts",
+          "src/cli.ts",
+          "src/index.ts"
+        ]
+      },
+      {
+        "kind": "door",
+        "sentence": "Release now also builds src/calibration/aggregate-receipt-schema.ts, src/calibration/aggregate.ts, src/calibration/receipt-schema.ts and 3 more.",
+        "subjects": [
+          ".github/workflows/release.yml",
+          "src/calibration/aggregate-receipt-schema.ts",
+          "src/calibration/aggregate.ts",
+          "src/calibration/receipt-schema.ts",
+          "src/calibration/receipt.ts",
+          "src/cli.ts",
+          "src/index.ts"
+        ]
+      },
+      {
+        "kind": "counts",
+        "sentence": "1 file added and 1 changed content, across 2 parts.",
+        "subjects": []
+      }
+    ],
+    "since": {
+      "commit": "d888f86c7265ae1a6964e2b96bc1556280d4c8c6",
+      "generatedAt": "2026-09-25T02:11:45.081Z"
+    },
+    "unchanged": false
   },
   "changesTogether": [
     {
@@ -110,15 +154,23 @@
     }
   ],
   "changesTogetherNote": [
-    "Confidence is low: fewer than 20 source files reach 10 revisions in the window.",
+    "Confidence is low: fewer than 25 source files reach 10 revisions in the window.",
     "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "d888f86c7265ae1a6964e2b96bc1556280d4c8c6",
+  "commit": "4bc808e3760ecfe1424b531bbbb68750597e8546",
   "defaultBranch": "main",
-  "derived": "10 parts, mostly TypeScript (420 files) and JavaScript (7). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. People run research-os. People import @mcptoolshop/research-os.",
+  "derived": "10 parts, mostly TypeScript (420 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
     {
+      "builds": [
+        "src/calibration/aggregate-receipt-schema.ts",
+        "src/calibration/aggregate.ts",
+        "src/calibration/receipt-schema.ts",
+        "src/calibration/receipt.ts",
+        "src/cli.ts",
+        "src/index.ts"
+      ],
       "checks": [
         "src/"
       ],
@@ -292,15 +344,25 @@
       ],
       "runsCount": 147,
       "runsMore": 215,
-      "sends": [],
+      "sends": [
+        "uploads coverage to Codecov"
+      ],
       "stages": [],
       "triggers": [
-        "on a pull request",
+        "on a pull request to main",
         "on a push to main",
         "or by hand"
       ]
     },
     {
+      "builds": [
+        "src/calibration/aggregate-receipt-schema.ts",
+        "src/calibration/aggregate.ts",
+        "src/calibration/receipt-schema.ts",
+        "src/calibration/receipt.ts",
+        "src/cli.ts",
+        "src/index.ts"
+      ],
       "checks": [
         "src/"
       ],
@@ -476,7 +538,7 @@
       "runsMore": 215,
       "sends": [
         "publishes to npm",
-        "creates a GitHub release on a tag push"
+        "creates a GitHub release on a tag push or by hand"
       ],
       "stages": [],
       "triggers": [
@@ -498,7 +560,7 @@
         {
           "boundary": "site",
           "depth": 0,
-          "files": 3
+          "files": 5
         }
       ],
       "runs": [
@@ -579,6 +641,7 @@
       "to": "src"
     }
   ],
+  "engine": "1.24.0",
   "generated": [
     {
       "place": "calibration/reviewer-profiles/",
@@ -587,14 +650,15 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-25T02:11:45.081Z",
+  "generatedAt": "2026-09-30T20:12:16.269Z",
   "limits": [
-    "1 import site could not be resolved.",
+    "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",
     "101 writes and 223 reads go to the directory the command is run in or a path their caller passes, not to this repository.",
     "47 writes and 142 reads go to a path their caller passes, not to this repository.",
-    "1 command is built at run time and not followed, and it is in tests.",
-    "Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window."
+    "2 reads go to the directory the command is run in (README.md), not to this repository.",
+    "2 commands are built at run time and not followed, 1 of them in tests.",
+    "Statistics confidence is low: fewer than 25 source files reach 10 revisions in the window."
   ],
   "mainDoor": ".github/workflows/ci.yml",
   "partLabels": {
@@ -613,11 +677,14 @@
   "readers": [],
   "repo": "mcp-tool-shop-org/research-os",
   "sequences": [],
-  "startDoor": "package.json#research-os",
+  "startDoor": ".github/workflows/ci.yml",
   "startHere": [
-    "src/cli.ts"
+    ".github/workflows/ci.yml",
+    "src/index.ts",
+    "src/intake/scaffold.ts",
+    "src/intake/schema.ts",
+    "src/review/reviewer-options-schema.ts"
   ],
-  "startReason": "This path follows research-os (a command people run) from its entry, since CI runs only tests.",
   "summary": null,
   "summaryFrom": null,
   "testFiles": 219,
