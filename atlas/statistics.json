@@ -180,8 +180,8 @@
         "path": ".github/dependabot.yml"
       },
       {
-        "commits": 9,
-        "lines": 84,
+        "commits": 12,
+        "lines": 279,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -270,6 +270,31 @@
         "path": "SHIP_GATE.md"
       },
       {
+        "commits": 1,
+        "lines": 91,
+        "path": "atlas/README.md"
+      },
+      {
+        "commits": 1,
+        "lines": 42,
+        "path": "atlas/boundaries.yaml"
+      },
+      {
+        "commits": 1,
+        "lines": 648,
+        "path": "atlas/page.json"
+      },
+      {
+        "commits": 1,
+        "lines": 3263,
+        "path": "atlas/statistics.json"
+      },
+      {
+        "commits": 1,
+        "lines": 8163,
+        "path": "atlas/structure.json"
+      },
+      {
         "commits": 2,
         "lines": 154,
         "path": "calibration/reviewer-profiles/hermes-single-pass/seeded-v1.json"
@@ -353,6 +378,11 @@
         "commits": 2,
         "lines": 149,
         "path": "calibration/reviewer-profiles/mistral-nemo-two-pass/seeded-v1.md"
+      },
+      {
+        "commits": 2,
+        "lines": 36,
+        "path": "codecov.yml"
       },
       {
         "commits": 1,
@@ -2848,19 +2878,19 @@
   },
   "confidence": {
     "level": "low",
-    "reason": "fewer than 20 source files reach 10 revisions in the window"
+    "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-09-25T02:11:45.081Z",
+  "generatedAt": "2026-09-30T20:12:16.269Z",
   "generatedFrom": {
-    "commit": "d888f86c7265ae1a6964e2b96bc1556280d4c8c6"
+    "commit": "4bc808e3760ecfe1424b531bbbb68750597e8546"
   },
   "pairs": [
     {
       "a": ".github/workflows/ci.yml",
       "b": ".github/workflows/pages.yml",
-      "either": 9,
+      "either": 11,
       "shared": 6,
-      "strength": 0.666667
+      "strength": 0.545455
     },
     {
       "a": "CHANGELOG.md",
@@ -3230,16 +3260,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-17T11:39:26-07:00",
-    "inScopeFiles": 513,
+    "headDate": "2026-09-26T19:45:03-07:00",
+    "inScopeFiles": 514,
     "pinnedStart": null,
-    "priorFloor": null,
-    "qualifyingCommits": 147,
+    "priorFloor": "fallen",
+    "qualifyingCommits": 149,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-03-21T18:39:26.000Z",
+    "since": "2026-03-31T02:45:03.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
