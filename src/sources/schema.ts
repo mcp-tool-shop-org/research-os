@@ -70,6 +70,12 @@ export const FetchReceiptSchema = z.object({
    * new fetches. See GatherOutcomeSchema for the value semantics.
    */
   gather_outcome: GatherOutcomeSchema.optional(),
+  /**
+   * Count of third-party client keys redacted from the raw text at ingestion.
+   * Optional for back-compat with historical receipts; fetchOnce populates it
+   * on text-like responses (0 when no keys were found).
+   */
+  redaction_count: z.number().int().nonnegative().optional(),
 });
 
 export const SourceCardSchema = z.object({
@@ -95,6 +101,10 @@ export const SourceCardSchema = z.object({
   rule_hint: z.string().optional(),
   /** Precedence level of the rule that fired (2–6). Optional for back-compat with pre-v0.4 cards. */
   precedence_level: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
+  /** Count of third-party client keys redacted from the raw evidence at ingestion. */
+  redaction_count: z.number().int().nonnegative().optional(),
+  /** Audit note documenting any post-hoc or ingestion redaction applied to the raw evidence. */
+  redaction_note: z.string().optional(),
 });
 
 export type FetchReceipt = z.infer<typeof FetchReceiptSchema>;

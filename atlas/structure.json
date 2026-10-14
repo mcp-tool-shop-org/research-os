@@ -445,7 +445,7 @@
           "path": "site/astro.config.mjs"
         },
         {
-          "hash": "909ed4c45f18bed65799627e9af9d4b2cbc437e6ce6ee60f4c9f96e3a5d3eb43",
+          "hash": "bd15e57c9afd80af4ea9fdcdfffe4951583c50219e3877d6c634e49700536f2c",
           "path": "site/package-lock.json"
         },
         {
@@ -4340,10 +4340,10 @@
             {
               "in": "createSectionSourceIdAppender",
               "kind": "catch",
-              "line": 112
+              "line": 117
             }
           ],
-          "hash": "7b9eda30ed6c7b3a137c8e4a1b9d44f996dcf0fa0162c53b03de2e42292f63e0",
+          "hash": "86aa4027ba47f4cd168b169937a2acf252b968eb9385ca502fdb6bad4dd4feb9",
           "importOrder": [
             "src/sources/schema.ts",
             "src/sources/types.ts",
@@ -4512,7 +4512,8 @@
           "exports": [
             "fetchOnce",
             "makeReceiptId",
-            "makeSourceId"
+            "makeSourceId",
+            "redactThirdPartyKeys"
           ],
           "failurePaths": [
             {
@@ -4528,20 +4529,20 @@
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 153
+              "line": 181
             },
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 234
+              "line": 262
             },
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 254
+              "line": 282
             }
           ],
-          "hash": "0c6aaccc37e719d29e091969f0532f3807c9e287e599fb96452d8c62df0a439e",
+          "hash": "654ce9bfa3c098c168f2d03fa1ee3c77c486b2e9f8c99b28bd4519e8bc30ba2f",
           "importOrder": [
             "src/sources/schema.ts",
             "src/index.ts",
@@ -4618,7 +4619,7 @@
           "path": "src/sources/gather.ts"
         },
         {
-          "hash": "35a235bcd48e4df59f1ac829eabcdf8d2d84aa357882fe79b7a0a865b69135a8",
+          "hash": "53295c12e4137ee1978fc146b00a31430b1b9fd7255ad137710a136202cda645",
           "importOrder": [
             "src/sources/gather.ts",
             "src/sources/fetch.ts",
@@ -4710,7 +4711,7 @@
               "line": 312
             }
           ],
-          "hash": "789b7c43b07d6cc30fe42a34d15af991cc973f8ebb40001a8113f7928591b56d",
+          "hash": "82352b56d09669689f21cd0632e533ecfa8e503beb98e5da0c49efa56398be21",
           "importOrder": [
             "src/errors.ts",
             "src/index.ts",
@@ -4736,7 +4737,7 @@
           "path": "src/sources/rebuild-ledger.ts"
         },
         {
-          "hash": "b01d48154d9354ca08611bd69f344887837d838f4bebcc7e5cbc124a834c6ec9",
+          "hash": "a2ea472da46e6000429f711a9758c2bc4e421aee2dcffada6b4984cc02d1d466",
           "path": "src/sources/schema.ts"
         },
         {
@@ -12043,7 +12044,7 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807",
+    "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827",
     "tracked": 509
   },
   "landings": [

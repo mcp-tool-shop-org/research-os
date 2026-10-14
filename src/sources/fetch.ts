@@ -73,6 +73,34 @@ function pickCharset(contentType: string | null, buffer: Buffer): string {
   }
 }
 
+export const GOOGLE_CLIENT_KEY_REDACTED_MARKER = '[REDACTED-THIRD-PARTY-GOOGLE-CLIENT-KEY]';
+export const STRIPE_CLIENT_KEY_REDACTED_MARKER = '[REDACTED-THIRD-PARTY-STRIPE-CLIENT-KEY]';
+
+const GOOGLE_CLIENT_KEY_RE = /AIza[0-9A-Za-z_-]{35}/g;
+const STRIPE_LIVE_PUBLISHABLE_KEY_RE = /\bpk_live_[0-9A-Za-z]{20,}\b/g;
+
+/**
+ * Redacts embedded third-party public client keys (Google API `AIza...` and
+ * Stripe live publishable `pk_live_...` keys) from scraped text at ingestion
+ * so raw evidence files never trigger secret-scanning alerts while preserving
+ * surrounding document structure.
+ */
+export function redactThirdPartyKeys(rawText: string): {
+  text: string;
+  redactionCount: number;
+} {
+  let redactionCount = 0;
+  let text = rawText.replace(GOOGLE_CLIENT_KEY_RE, () => {
+    redactionCount += 1;
+    return GOOGLE_CLIENT_KEY_REDACTED_MARKER;
+  });
+  text = text.replace(STRIPE_LIVE_PUBLISHABLE_KEY_RE, () => {
+    redactionCount += 1;
+    return STRIPE_CLIENT_KEY_REDACTED_MARKER;
+  });
+  return { text, redactionCount };
+}
+
 export interface FetchOptions {
   sectionId: string;
   packPath: string;
@@ -291,18 +319,27 @@ export async function fetchOnce(
     return { receipt, rawText: null, rawTextAbsPath: null };
   }
 
-  const sha256 = createHash('sha256').update(buffer).digest('hex');
-  const byteCount = buffer.byteLength;
+  let sha256 = createHash('sha256').update(buffer).digest('hex');
+  let byteCount = buffer.byteLength;
 
   let rawText: string | null = null;
   let rawTextRelPath: string | null = null;
   let rawTextAbsPath: string | null = null;
+  let redactionCount: number | undefined;
 
   if (isTextLike(contentType)) {
     const charset = pickCharset(contentType, buffer);
-    rawText = new TextDecoder(charset).decode(
+    const decodedText = new TextDecoder(charset).decode(
       new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
     );
+    const redacted = redactThirdPartyKeys(decodedText);
+    rawText = redacted.text;
+    redactionCount = redacted.redactionCount;
+    if (redactionCount > 0) {
+      const redactedBytes = Buffer.from(rawText, 'utf8');
+      sha256 = createHash('sha256').update(redactedBytes).digest('hex');
+      byteCount = redactedBytes.byteLength;
+    }
     const ext = pickExtension(contentType, finalUrl);
     const dir = join(options.packPath, 'evidence', 'raw');
     await mkdir(dir, { recursive: true });
@@ -331,6 +368,7 @@ export async function fetchOnce(
     fetch_outcome: 'ok',
     fetch_error: null,
     fetch_duration_ms: fetchDurationMs,
+    ...(redactionCount !== undefined ? { redaction_count: redactionCount } : {}),
   };
 
   return { receipt, rawText, rawTextAbsPath };

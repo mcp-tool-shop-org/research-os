@@ -1,5 +1,12 @@
 export { gather } from './gather.js';
-export { fetchOnce, makeSourceId, makeReceiptId } from './fetch.js';
+export {
+  fetchOnce,
+  makeSourceId,
+  makeReceiptId,
+  redactThirdPartyKeys,
+  GOOGLE_CLIENT_KEY_REDACTED_MARKER,
+  STRIPE_CLIENT_KEY_REDACTED_MARKER,
+} from './fetch.js';
 export {
   parseUrlsFileText,
   readUrlsFile,
