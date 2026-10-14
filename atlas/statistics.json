@@ -180,8 +180,8 @@
         "path": ".github/dependabot.yml"
       },
       {
-        "commits": 14,
-        "lines": 283,
+        "commits": 16,
+        "lines": 295,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -270,8 +270,8 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 3,
-        "lines": 155,
+        "commits": 5,
+        "lines": 171,
         "path": "atlas/README.md"
       },
       {
@@ -280,18 +280,18 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 3,
-        "lines": 842,
+        "commits": 5,
+        "lines": 926,
         "path": "atlas/page.json"
       },
       {
-        "commits": 3,
-        "lines": 3371,
+        "commits": 5,
+        "lines": 3477,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 3,
-        "lines": 18139,
+        "commits": 5,
+        "lines": 18287,
         "path": "atlas/structure.json"
       },
       {
@@ -535,8 +535,8 @@
         "path": "site/astro.config.mjs"
       },
       {
-        "commits": 3,
-        "lines": 13808,
+        "commits": 5,
+        "lines": 13820,
         "path": "site/package-lock.json"
       },
       {
@@ -2880,18 +2880,11 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-09-30T22:05:05.245Z",
+  "generatedAt": "2026-10-14T19:17:17.809Z",
   "generatedFrom": {
-    "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807"
+    "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827"
   },
   "pairs": [
-    {
-      "a": ".github/workflows/ci.yml",
-      "b": ".github/workflows/pages.yml",
-      "either": 12,
-      "shared": 6,
-      "strength": 0.5
-    },
     {
       "a": "CHANGELOG.md",
       "b": "src/index.ts",
@@ -3253,16 +3246,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-09-30T14:26:36-07:00",
+    "headDate": "2026-10-01T13:53:38-07:00",
     "inScopeFiles": 514,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 151,
+    "qualifyingCommits": 153,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-03T21:26:36.000Z",
+    "since": "2026-04-04T20:53:38.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",

@@ -32,7 +32,7 @@
   "changes": {
     "fileCounts": {
       "added": 0,
-      "changed": 2,
+      "changed": 6,
       "moved": 0,
       "parts": 2,
       "removed": 0
@@ -40,13 +40,13 @@
     "items": [
       {
         "kind": "counts",
-        "sentence": "Nothing structural changed since 2026-09-30; 2 files changed content.",
+        "sentence": "Nothing structural changed since 2026-09-30; 6 files changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "4bc808e3760ecfe1424b531bbbb68750597e8546",
-      "generatedAt": "2026-09-30T20:12:16.269Z"
+      "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807",
+      "generatedAt": "2026-09-30T22:05:05.245Z"
     },
     "unchanged": true
   },
@@ -132,8 +132,8 @@
     "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807",
-  "defaultBranch": "main",
+  "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827",
+  "defaultBranch": "master",
   "derived": "10 parts, mostly TypeScript (420 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
     {
@@ -624,7 +624,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-30T22:05:05.245Z",
+  "generatedAt": "2026-10-14T19:17:17.809Z",
   "limits": [
     "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",

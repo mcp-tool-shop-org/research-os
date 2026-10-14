@@ -20,9 +20,12 @@ export function buildCard(args: {
    * that do not supply a pack path.
    */
   overrides?: SourceCardOverride[];
+  redactionCount?: number;
+  redactionNote?: string;
 }): SourceCard {
   const { receipt, extraction, extractedBy } = args;
   const overrides = args.overrides ?? [];
+  const resolvedRedactionCount = args.redactionCount ?? receipt.redaction_count;
 
   // Run the URL-pattern classifier (Component B, v0.4). When a rule matches
   // (rule_hint !== 'no-rule-match'), the classifier result is authoritative for
@@ -66,6 +69,8 @@ export function buildCard(args: {
     extracted_at: new Date().toISOString(),
     rule_hint: classification.rule_hint,
     precedence_level: classification.precedence_level,
+    ...(resolvedRedactionCount !== undefined ? { redaction_count: resolvedRedactionCount } : {}),
+    ...(args.redactionNote !== undefined ? { redaction_note: args.redactionNote } : {}),
   });
   return card;
 }

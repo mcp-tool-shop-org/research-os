@@ -360,6 +360,8 @@ export async function rebuildSourceCards(args: {
       extraction,
       extractedBy: card.extracted_by,
       overrides,
+      redactionCount: card.redaction_count ?? receipt.redaction_count,
+      redactionNote: card.redaction_note,
     });
 
     // AFTER — raw detectSeverities output on the rebuilt card. The card
