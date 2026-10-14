@@ -4,6 +4,10 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release workflow: dependency install scripts run again.** The workflow installed the newest npm before `npm ci`, and that npm blocks dependency install scripts by default, so better-sqlite3 had no native binding and the v0.15.0 verify gate failed. npm for Trusted Publishing is now pinned to 11 and installed after the verify gate, right before the publish.
+
 ## [0.15.0] - 2026-10-14
 
 ### Security

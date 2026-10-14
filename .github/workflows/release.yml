@@ -60,21 +60,6 @@ jobs:
           node-version: "22"
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm >=11.5 in a sandbox for OIDC trusted-publishing auth
-        run: |
-          # Tokenless OIDC trusted publishing needs npm >= 11.5.1. Node 22 ships
-          # npm 10.x, which races on an in-place `npm i -g npm@latest`
-          # (MODULE_NOT_FOUND: promise-retry). Install npm@latest into a sandbox
-          # dir and shadow the system npm via PATH instead.
-          SANDBOX="$HOME/.npm-cli-sandbox"
-          mkdir -p "$SANDBOX"
-          pushd "$SANDBOX" >/dev/null
-          echo '{"name":"npm-cli-sandbox","version":"0.0.0","private":true}' > package.json
-          npm install --no-save --no-audit --no-fund --silent npm@latest
-          popd >/dev/null
-          echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
-          echo "npm now: $("$SANDBOX/node_modules/.bin/npm" --version)"
-
       - name: Install dependencies
         run: npm ci
 
@@ -132,6 +117,24 @@ jobs:
             echo "has_section=true" >> "$GITHUB_OUTPUT"
             echo "Resolved CHANGELOG section ($(wc -l < .release-notes.md) lines)"
           fi
+
+      - name: Install npm >=11.5 in a sandbox for OIDC trusted-publishing auth
+        run: |
+          # Tokenless OIDC trusted publishing needs npm >= 11.5.1. Node 22 ships
+          # npm 10.x, which races on an in-place `npm i -g npm@latest`
+          # (MODULE_NOT_FOUND: promise-retry). Install npm 11 into a sandbox
+          # dir and shadow the system npm via PATH instead.
+          # Pinned to npm 11 and run only after `npm ci` and the verify gate:
+          # a newer npm before `npm ci` blocks dependency install scripts
+          # (better-sqlite3, esbuild), which failed the v0.15.0 gate.
+          SANDBOX="$HOME/.npm-cli-sandbox"
+          mkdir -p "$SANDBOX"
+          pushd "$SANDBOX" >/dev/null
+          echo '{"name":"npm-cli-sandbox","version":"0.0.0","private":true}' > package.json
+          npm install --no-save --no-audit --no-fund --silent npm@^11.5.1
+          popd >/dev/null
+          echo "$SANDBOX/node_modules/.bin" >> "$GITHUB_PATH"
+          echo "npm now: $("$SANDBOX/node_modules/.bin/npm" --version)"
 
       # The two irreversible release actions are `npm publish` then
       # `gh release create`. If publish succeeds but the release step fails
