@@ -32,7 +32,7 @@
   "changes": {
     "fileCounts": {
       "added": 0,
-      "changed": 6,
+      "changed": 2,
       "moved": 0,
       "parts": 2,
       "removed": 0
@@ -40,13 +40,13 @@
     "items": [
       {
         "kind": "counts",
-        "sentence": "Nothing structural changed since 2026-09-30; 6 files changed content.",
+        "sentence": "Nothing structural changed since 2026-10-14; 2 files changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "d3cd0a884719f7c4d6f9b26fdb9f4fb08bf7f807",
-      "generatedAt": "2026-09-30T22:05:05.245Z"
+      "commit": "6659fceaa9bdc1d3fc62c2cd2236131ff371f2dd",
+      "generatedAt": "2026-10-14T21:59:19.423Z"
     },
     "unchanged": true
   },
@@ -132,9 +132,9 @@
     "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827",
+  "commit": "1339b1eeb4a99df14f56e2ca38dec21d2734925c",
   "defaultBranch": "master",
-  "derived": "10 parts, mostly TypeScript (420 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
+  "derived": "10 parts, mostly TypeScript (422 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
     {
       "builds": [
@@ -164,7 +164,7 @@
         {
           "boundary": "test",
           "depth": 0,
-          "files": 219
+          "files": 221
         }
       ],
       "runs": [
@@ -317,7 +317,7 @@
         "test/util-progress.test.ts"
       ],
       "runsCount": 147,
-      "runsMore": 215,
+      "runsMore": 217,
       "sends": [
         "uploads coverage to Codecov"
       ],
@@ -356,7 +356,7 @@
         {
           "boundary": "test",
           "depth": 0,
-          "files": 219
+          "files": 221
         }
       ],
       "runs": [
@@ -509,7 +509,7 @@
         "test/util-progress.test.ts"
       ],
       "runsCount": 147,
-      "runsMore": 215,
+      "runsMore": 217,
       "sends": [
         "publishes to npm",
         "creates a GitHub release on a tag push or by hand"
@@ -624,7 +624,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-10-14T19:17:17.809Z",
+  "generatedAt": "2026-10-14T22:00:19.372Z",
   "limits": [
     "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",
@@ -661,10 +661,10 @@
   ],
   "summary": null,
   "summaryFrom": null,
-  "testFiles": 219,
+  "testFiles": 221,
   "testedBy": {
     "scripts": 0,
-    "src": 215
+    "src": 217
   },
   "unnamedWrites": 12,
   "unread": [

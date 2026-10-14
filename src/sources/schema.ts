@@ -71,11 +71,18 @@ export const FetchReceiptSchema = z.object({
    */
   gather_outcome: GatherOutcomeSchema.optional(),
   /**
-   * Count of third-party client keys redacted from the raw text at ingestion.
-   * Optional for back-compat with historical receipts; fetchOnce populates it
-   * on text-like responses (0 when no keys were found).
+   * Count of third-party items redacted from the raw text at ingestion: client
+   * keys, home-path account names and personal mailbox addresses. Optional for
+   * back-compat with historical receipts; fetchOnce populates it on text-like
+   * responses (0 when nothing was found).
    */
   redaction_count: z.number().int().nonnegative().optional(),
+  /**
+   * sha256 of the bytes as fetched, kept only when redaction_count > 0. `sha256`
+   * always names the stored (redacted) file; this is the provenance of what the
+   * server sent. Absent when nothing was redacted, because the two are then equal.
+   */
+  fetched_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 
 export const SourceCardSchema = z.object({
@@ -101,7 +108,7 @@ export const SourceCardSchema = z.object({
   rule_hint: z.string().optional(),
   /** Precedence level of the rule that fired (2–6). Optional for back-compat with pre-v0.4 cards. */
   precedence_level: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
-  /** Count of third-party client keys redacted from the raw evidence at ingestion. */
+  /** Count of third-party items (client keys, home-path account names, personal mailbox addresses) redacted from the raw evidence at ingestion. */
   redaction_count: z.number().int().nonnegative().optional(),
   /** Audit note documenting any post-hoc or ingestion redaction applied to the raw evidence. */
   redaction_note: z.string().optional(),

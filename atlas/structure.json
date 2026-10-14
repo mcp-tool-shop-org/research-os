@@ -249,7 +249,7 @@
           "path": ".gitignore"
         },
         {
-          "hash": "d7a4882631472c34b662785697845c8ebd84b151859b7c9da0aef7cde063abe3",
+          "hash": "bed5f57bfdda4c244c70f0a94798a8c976e5de90db25f4cf7fcd576b2f75fa32",
           "path": "CHANGELOG.md"
         },
         {
@@ -4340,10 +4340,10 @@
             {
               "in": "createSectionSourceIdAppender",
               "kind": "catch",
-              "line": 117
+              "line": 128
             }
           ],
-          "hash": "86aa4027ba47f4cd168b169937a2acf252b968eb9385ca502fdb6bad4dd4feb9",
+          "hash": "27af1ffed7cd9adcbb6f79ee1edf9b13819e7fbcd75d46ab0116e0aefd65c710",
           "importOrder": [
             "src/sources/schema.ts",
             "src/sources/types.ts",
@@ -4513,7 +4513,8 @@
             "fetchOnce",
             "makeReceiptId",
             "makeSourceId",
-            "redactThirdPartyKeys"
+            "redactThirdPartyKeys",
+            "redactThirdPartyPersonalData"
           ],
           "failurePaths": [
             {
@@ -4529,20 +4530,20 @@
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 181
+              "line": 263
             },
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 262
+              "line": 344
             },
             {
               "in": "fetchOnce",
               "kind": "catch",
-              "line": 282
+              "line": 364
             }
           ],
-          "hash": "654ce9bfa3c098c168f2d03fa1ee3c77c486b2e9f8c99b28bd4519e8bc30ba2f",
+          "hash": "202f9053fe277e642f0a78eff538e06f368aa6ce0717f20e08f011d1c4895ca8",
           "importOrder": [
             "src/sources/schema.ts",
             "src/index.ts",
@@ -4619,7 +4620,7 @@
           "path": "src/sources/gather.ts"
         },
         {
-          "hash": "53295c12e4137ee1978fc146b00a31430b1b9fd7255ad137710a136202cda645",
+          "hash": "8df5e66e67a9cf9055aeb911129e8622fa78df747a404b7901f21ce30ec5ebee",
           "importOrder": [
             "src/sources/gather.ts",
             "src/sources/fetch.ts",
@@ -4737,7 +4738,7 @@
           "path": "src/sources/rebuild-ledger.ts"
         },
         {
-          "hash": "a2ea472da46e6000429f711a9758c2bc4e421aee2dcffada6b4984cc02d1d466",
+          "hash": "fcec081c1ebe60538077740fb3397ed159d3cd45a54ac39defe9ed16d42fb4d4",
           "path": "src/sources/schema.ts"
         },
         {
@@ -5823,7 +5824,7 @@
       "testRunners": [
         "vitest"
       ],
-      "testedBy": 215,
+      "testedBy": 217,
       "unresolvedNamed": [
         {
           "path": "src/indexer/sync.ts",
@@ -7917,6 +7918,26 @@
           "testFramework": "vitest"
         },
         {
+          "hash": "8a8c0a1c49d3da054da6625e3f49614a05629581eefe904144a202080590edc4",
+          "importsFiles": [
+            "src/intake/index.ts",
+            "src/sections/index.ts",
+            "src/sources/index.ts"
+          ],
+          "path": "test/sources/fetch-personal-data-redaction.test.ts",
+          "testFramework": "vitest"
+        },
+        {
+          "hash": "f3649e7983347df0e1963f28ec32ea7ecec4a5d5784733a3544d2bab781047c6",
+          "importsFiles": [
+            "src/intake/index.ts",
+            "src/sections/index.ts",
+            "src/sources/index.ts"
+          ],
+          "path": "test/sources/fetch-redaction.test.ts",
+          "testFramework": "vitest"
+        },
+        {
           "hash": "97a2932e3211224ac1142a63d5319e61dc2739f0ae92aade0f8376025e359a79",
           "importsFiles": [
             "src/sources/fetch.ts"
@@ -9334,7 +9355,7 @@
         {
           "boundary": "test",
           "depth": 0,
-          "files": 219
+          "files": 221
         }
       ],
       "readers": [],
@@ -10436,7 +10457,7 @@
       "tests": [
         {
           "config": "vitest.config.ts",
-          "files": 218,
+          "files": 220,
           "job": "verify",
           "runner": "vitest",
           "step": "Test",
@@ -10447,7 +10468,7 @@
         {
           "config": "vitest.config.ts",
           "coverage": true,
-          "files": 218,
+          "files": 220,
           "job": "verify",
           "junit": true,
           "runner": "vitest",
@@ -10797,7 +10818,7 @@
         {
           "boundary": "test",
           "depth": 0,
-          "files": 219
+          "files": 221
         }
       ],
       "readers": [],
@@ -11910,7 +11931,7 @@
       "tests": [
         {
           "config": "vitest.config.ts",
-          "files": 218,
+          "files": 220,
           "job": "release",
           "runner": "vitest",
           "step": "Verify gate (build + typecheck + lint + test)",
@@ -12044,8 +12065,8 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827",
-    "tracked": 509
+    "commit": "1339b1eeb4a99df14f56e2ca38dec21d2734925c",
+    "tracked": 511
   },
   "landings": [
     {
@@ -12443,6 +12464,6 @@
   "overlaps": [],
   "submodules": [],
   "symlinks": [],
-  "testFiles": 219,
+  "testFiles": 221,
   "unassigned": []
 }

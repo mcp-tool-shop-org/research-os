@@ -4,8 +4,11 @@ export {
   makeSourceId,
   makeReceiptId,
   redactThirdPartyKeys,
+  redactThirdPartyPersonalData,
   GOOGLE_CLIENT_KEY_REDACTED_MARKER,
   STRIPE_CLIENT_KEY_REDACTED_MARKER,
+  PERSONAL_USER_REDACTED_MARKER,
+  PERSONAL_EMAIL_REDACTED_MARKER,
 } from './fetch.js';
 export {
   parseUrlsFileText,

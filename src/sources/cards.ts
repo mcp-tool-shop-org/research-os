@@ -26,6 +26,17 @@ export function buildCard(args: {
   const { receipt, extraction, extractedBy } = args;
   const overrides = args.overrides ?? [];
   const resolvedRedactionCount = args.redactionCount ?? receipt.redaction_count;
+  // Whenever ingestion redacted something, the card says so. An explicit note
+  // (a post-hoc redaction recorded by an operator) wins.
+  const resolvedRedactionNote =
+    args.redactionNote ??
+    (resolvedRedactionCount !== undefined && resolvedRedactionCount > 0
+      ? `${receipt.fetched_at.slice(0, 10)}: Ingestion redacted ${resolvedRedactionCount} third-party item(s) from the raw text: client keys, home-path account names (C:\\Users\\[redacted-user]) or personal mailbox addresses ([redacted-email]).${
+          receipt.fetched_sha256 !== undefined
+            ? ' The fetch receipt keeps the hash of the bytes as fetched in fetched_sha256; sha256 names the stored file.'
+            : ''
+        }`
+      : undefined);
 
   // Run the URL-pattern classifier (Component B, v0.4). When a rule matches
   // (rule_hint !== 'no-rule-match'), the classifier result is authoritative for
@@ -70,7 +81,7 @@ export function buildCard(args: {
     rule_hint: classification.rule_hint,
     precedence_level: classification.precedence_level,
     ...(resolvedRedactionCount !== undefined ? { redaction_count: resolvedRedactionCount } : {}),
-    ...(args.redactionNote !== undefined ? { redaction_note: args.redactionNote } : {}),
+    ...(resolvedRedactionNote !== undefined ? { redaction_note: resolvedRedactionNote } : {}),
   });
   return card;
 }
