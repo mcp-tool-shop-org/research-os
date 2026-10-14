@@ -4,6 +4,8 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-14
+
 ### Security
 
 - **Ingestion redacts third-party personal data, not only client keys.** Scraped pages quote strangers' tracebacks and issue threads, so the raw evidence carried other people's home-path account names and personal mailbox addresses. `fetchOnce` now replaces the account in a home path with `[redacted-user]` (Windows drive, doubled-separator JSON/repr, MSYS, macOS and percent-encoded forms, keeping the separators and the rest of the path; the shared `Public`, `Default` and `All Users` profiles stay) and an address on a consumer mailbox provider (gmail, googlemail, outlook, hotmail, live, msn, yahoo, icloud, me, mac, proton, protonmail, pm.me, aol) with `[redacted-email]`. Addresses on any other domain, such as `security@project.example`, are an organisation's contact and stay.

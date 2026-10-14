@@ -249,7 +249,7 @@
           "path": ".gitignore"
         },
         {
-          "hash": "bed5f57bfdda4c244c70f0a94798a8c976e5de90db25f4cf7fcd576b2f75fa32",
+          "hash": "e8735f492b122ab008acd24cd1854b47ec4c67b0523f09535aec361ed24ddd12",
           "path": "CHANGELOG.md"
         },
         {
@@ -257,35 +257,35 @@
           "path": "LICENSE"
         },
         {
-          "hash": "87d6e0f564d85c35d669c84c0b3f6b809c40e5a3a7f6007b90b69c3a7e502b24",
+          "hash": "dec059e4184f92840461a8d710352bc6a0b0727113cc34f2c7b7d8a441535e55",
           "path": "README.es.md"
         },
         {
-          "hash": "2c3038c0428e760fdea82a17ae3d68f626fe3f16e2330b6395d1e26466cc28c7",
+          "hash": "e6cacefbfc48db749a9a86cfbe84ed0c89ce7292b72e7dbdbc13289c756deaab",
           "path": "README.fr.md"
         },
         {
-          "hash": "2cebdb19b82e9ec67c841cb5b132ed85171b592b7c204d6e9be3b9c5c450b848",
+          "hash": "b3a42569206e1914a8cd65d71452213df483a52a98486ccb045a7af59cc21e8b",
           "path": "README.hi.md"
         },
         {
-          "hash": "36615197addb134e4aecf003c06ab6460647e915cbf87e57ed11ba38dadf43b8",
+          "hash": "c96d6ee3f111dbe62464ffd3b67883106698b5dc3978a1248f11ed4a95cf1f92",
           "path": "README.it.md"
         },
         {
-          "hash": "3856afddd3d059d71ed2f052afd9d9b091f7c65b5ade0d7b3a68763fdf7f0437",
+          "hash": "9b2de8dae1ac54f2629953d6f9b60dd6fe149845da07223438f3d2d85a191639",
           "path": "README.ja.md"
         },
         {
-          "hash": "aa4db61a3afa63e9c105b564e96994ab31cafd332a2b8b244b806d1ec63a301d",
+          "hash": "2fe757842bd4b9200f4590940203f8d66ef62f59b96b956e7301e787ac7e2040",
           "path": "README.md"
         },
         {
-          "hash": "11f405aed3a8b60d2e71ecc7204cd760542594faf0e22af85d703997b460cc50",
+          "hash": "b8c47b7a1251e013bfd050ce67978ebf4cee648e9ee01fb02131f913ec0e38b4",
           "path": "README.pt-BR.md"
         },
         {
-          "hash": "34e5f39bd7e9e3eaa2a083dbc2116dd73037f9a49ae7aff12a8dc8ff3b86bb5b",
+          "hash": "1eb20c24ac1d71494c3dd5520ed9372d5a3f9db892418ff5891d916786b70fc1",
           "path": "README.zh.md"
         },
         {
@@ -309,11 +309,11 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "710030910f292073f16a1d8ff1f54073b76a882698ddc8f505b0f00cae7eb0a7",
+          "hash": "3485ccbfd92f3a81d0ab5ab4b0a6a60edc95fd0babc9201dd87732dec544bd65",
           "path": "package-lock.json"
         },
         {
-          "hash": "d5842c83427b4ff85fc745e2feefd6038ad8c2524cd1a5a02eadbd8e4833d7d6",
+          "hash": "1f39c927147f77ba8f53a57d089097a56bc5a445b918aa0463d2347e1bcc3ce0",
           "path": "package.json"
         },
         {
@@ -2827,7 +2827,7 @@
           "path": "src/gates/types.ts"
         },
         {
-          "hash": "71eddc8e93de0fb2edcb3d43fa53b7a4f6538ab5f4a5061cfaa4491a36bbf8f0",
+          "hash": "b8683714ef3d9fee9efc55a8820d1238162007a2ddc50a37c25fdc118bfe81b7",
           "importOrder": [
             "src/intake/index.ts",
             "src/sections/index.ts",
@@ -12065,7 +12065,7 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "1339b1eeb4a99df14f56e2ca38dec21d2734925c",
+    "commit": "54d1c38b9ba687e541aa7cde8285eefa6f4d37da",
     "tracked": 511
   },
   "landings": [
