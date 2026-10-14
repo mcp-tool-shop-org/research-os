@@ -101,6 +101,88 @@ export function redactThirdPartyKeys(rawText: string): {
   return { text, redactionCount };
 }
 
+export const PERSONAL_USER_REDACTED_MARKER = '[redacted-user]';
+export const PERSONAL_EMAIL_REDACTED_MARKER = '[redacted-email]';
+
+// The account in a home path, as the studio's identity scanner reads it: word
+// characters, dots and hyphens, never the shared profiles. A marker begins with
+// "[", so none of these patterns can match it again.
+const HOME_SEP = String.raw`[\\/]+`;
+const HOME_ACCOUNT = String.raw`(?!(?:Public|Default|All Users)\b)[\p{L}\p{N}\p{M}_.-]+`;
+const HOME_PATH_RES: RegExp[] = [
+  // C:\Users\<account>, C:/Users/<account>, \\host\C$\Users\<account>, C:\\Users\\<account> as JSON writes it
+  new RegExp(String.raw`([A-Za-z][:$]${HOME_SEP}Users${HOME_SEP})(${HOME_ACCOUNT})`, 'giu'),
+  // /c/Users/<account> (Git Bash, MSYS, Cygwin, WSL), also under /cygdrive or /mnt
+  new RegExp(String.raw`((?<![\\/])${HOME_SEP}[A-Za-z]${HOME_SEP}Users${HOME_SEP})(${HOME_ACCOUNT})`, 'giu'),
+  // macOS /Users/<account>; case-sensitive, so /users/me routes and <host>/Users/<name> URL paths stay
+  new RegExp(String.raw`((?<![\w\\/])${HOME_SEP}Users${HOME_SEP})(${HOME_ACCOUNT})`, 'gu'),
+  // the same with the separators percent-encoded (C%3A%5CUsers%5C<account>)
+  new RegExp(String.raw`([A-Za-z](?::|%3A)(?:[\\/]|%5C|%2F)+Users(?:[\\/]|%5C|%2F)+)(${HOME_ACCOUNT})`, 'giu'),
+];
+
+// Consumer mailbox providers. An address here is one person's. An address on any
+// other domain (security@project.example) is an organisation's contact and is
+// evidence, so it stays.
+const FREE_MAIL_DOMAINS = [
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'yahoo.com', 'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'pm.me', 'aol.com',
+];
+// The domain must end there: a full stop closing a sentence is fine, but a longer domain that merely starts with a provider's name is another domain.
+const PERSONAL_EMAIL_RE = new RegExp(
+  String.raw`\b[A-Za-z0-9._%+-]+@(?:${FREE_MAIL_DOMAINS.map((d) => d.replace('.', String.raw`\.`)).join('|')})(?![\w-]|\.\w)`,
+  'gi',
+);
+
+interface PersonalSpan {
+  start: number;
+  end: number;
+  kind: 'user' | 'email';
+}
+
+/**
+ * Redacts two kinds of third-party personal data from scraped text at
+ * ingestion: the account name in a home path (C:\Users\<name>\... in a pasted
+ * traceback becomes C:\Users\[redacted-user]\..., separators and the rest of
+ * the path kept) and a personal mailbox address (becomes [redacted-email]).
+ * `redactionCount` counts every account name and address replaced.
+ */
+export function redactThirdPartyPersonalData(rawText: string): {
+  text: string;
+  redactionCount: number;
+} {
+  const spans: PersonalSpan[] = [];
+  for (const re of HOME_PATH_RES) {
+    for (const m of rawText.matchAll(re)) {
+      const start = (m.index ?? 0) + m[1]!.length;
+      spans.push({ start, end: start + m[2]!.length, kind: 'user' });
+    }
+  }
+  for (const m of rawText.matchAll(PERSONAL_EMAIL_RE)) {
+    const start = m.index ?? 0;
+    spans.push({ start, end: start + m[0].length, kind: 'email' });
+  }
+  if (spans.length === 0) return { text: rawText, redactionCount: 0 };
+
+  // Patterns can find the same account (a drive path is also a macOS-style path to the macOS pattern). One span each.
+  spans.sort((a, b) => a.start - b.start || b.end - a.end);
+  const merged: PersonalSpan[] = [];
+  for (const span of spans) {
+    const last = merged[merged.length - 1];
+    if (last && span.start < last.end) last.end = Math.max(last.end, span.end);
+    else merged.push({ ...span });
+  }
+
+  let text = '';
+  let at = 0;
+  for (const span of merged) {
+    text += rawText.slice(at, span.start);
+    text += span.kind === 'user' ? PERSONAL_USER_REDACTED_MARKER : PERSONAL_EMAIL_REDACTED_MARKER;
+    at = span.end;
+  }
+  text += rawText.slice(at);
+  return { text, redactionCount: merged.length };
+}
+
 export interface FetchOptions {
   sectionId: string;
   packPath: string;
@@ -326,16 +408,21 @@ export async function fetchOnce(
   let rawTextRelPath: string | null = null;
   let rawTextAbsPath: string | null = null;
   let redactionCount: number | undefined;
+  let fetchedSha256: string | undefined;
 
   if (isTextLike(contentType)) {
     const charset = pickCharset(contentType, buffer);
     const decodedText = new TextDecoder(charset).decode(
       new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
     );
-    const redacted = redactThirdPartyKeys(decodedText);
-    rawText = redacted.text;
-    redactionCount = redacted.redactionCount;
+    const keysRedacted = redactThirdPartyKeys(decodedText);
+    const personalRedacted = redactThirdPartyPersonalData(keysRedacted.text);
+    rawText = personalRedacted.text;
+    redactionCount = keysRedacted.redactionCount + personalRedacted.redactionCount;
     if (redactionCount > 0) {
+      // sha256 always names the stored file; the hash of the bytes as fetched
+      // survives as provenance.
+      fetchedSha256 = sha256;
       const redactedBytes = Buffer.from(rawText, 'utf8');
       sha256 = createHash('sha256').update(redactedBytes).digest('hex');
       byteCount = redactedBytes.byteLength;
@@ -369,6 +456,7 @@ export async function fetchOnce(
     fetch_error: null,
     fetch_duration_ms: fetchDurationMs,
     ...(redactionCount !== undefined ? { redaction_count: redactionCount } : {}),
+    ...(fetchedSha256 !== undefined ? { fetched_sha256: fetchedSha256 } : {}),
   };
 
   return { receipt, rawText, rawTextAbsPath };

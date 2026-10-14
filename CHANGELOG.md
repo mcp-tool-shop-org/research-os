@@ -4,6 +4,12 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- **Ingestion redacts third-party personal data, not only client keys.** Scraped pages quote strangers' tracebacks and issue threads, so the raw evidence carried other people's home-path account names and personal mailbox addresses. `fetchOnce` now replaces the account in a home path with `[redacted-user]` (Windows drive, doubled-separator JSON/repr, MSYS, macOS and percent-encoded forms, keeping the separators and the rest of the path; the shared `Public`, `Default` and `All Users` profiles stay) and an address on a consumer mailbox provider (gmail, googlemail, outlook, hotmail, live, msn, yahoo, icloud, me, mac, proton, protonmail, pm.me, aol) with `[redacted-email]`. Addresses on any other domain, such as `security@project.example`, are an organisation's contact and stay.
+- **`redaction_count` covers all of it, and the card says so.** The receipt and the source card count every key, account name and address replaced, and a card whose count is above zero carries a dated `redaction_note` unless an operator wrote one.
+- **`fetched_sha256` on the fetch receipt.** When `redaction_count` is above zero the receipt keeps the hash of the bytes as fetched, so `sha256` always names the stored file and the provenance of what the server sent survives. Absent when nothing was redacted.
+
 ## [0.14.0] - 2026-06-29 — Hardening pass (bug/security + proactive health)
 
 A two-stage hardening pass over the v0.13.1 surface. **No new pipeline layers, gates, closure ledgers, or reviewer models** — every change is a defect fix or an additive guard/observability field within the locked architecture. Default (no-failure) behavior is byte-identical; the four frozen packs and the locked operator surfaces (error codes, the four help topics, CLI summary labels) are unchanged. 1663 → 1834 tests.

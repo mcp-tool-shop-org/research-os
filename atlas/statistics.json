@@ -128,12 +128,12 @@
           "scripts"
         ]
       },
-      "cohesion": 0.875708,
+      "cohesion": 0.9012,
       "cohesionDropped": false,
       "confidence": "full",
       "highWater": null,
       "name": "src",
-      "qualifyingSourceCommits": 109,
+      "qualifyingSourceCommits": 111,
       "rebaseline": null
     },
     {
@@ -167,7 +167,7 @@
       "confidence": "full",
       "highWater": null,
       "name": "test",
-      "qualifyingSourceCommits": 92,
+      "qualifyingSourceCommits": 94,
       "rebaseline": null
     }
   ],
@@ -205,8 +205,8 @@
         "path": ".gitignore"
       },
       {
-        "commits": 44,
-        "lines": 2067,
+        "commits": 45,
+        "lines": 2073,
         "path": "CHANGELOG.md"
       },
       {
@@ -270,8 +270,8 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 5,
-        "lines": 171,
+        "commits": 7,
+        "lines": 193,
         "path": "atlas/README.md"
       },
       {
@@ -280,18 +280,18 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 5,
-        "lines": 926,
+        "commits": 7,
+        "lines": 970,
         "path": "atlas/page.json"
       },
       {
-        "commits": 5,
-        "lines": 3477,
+        "commits": 7,
+        "lines": 3584,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 5,
-        "lines": 18287,
+        "commits": 7,
+        "lines": 18371,
         "path": "atlas/structure.json"
       },
       {
@@ -1365,8 +1365,8 @@
         "path": "src/sources/canonical-vendors.ts"
       },
       {
-        "commits": 5,
-        "lines": 219,
+        "commits": 7,
+        "lines": 237,
         "path": "src/sources/cards.ts"
       },
       {
@@ -1415,8 +1415,8 @@
         "path": "src/sources/extractors/ollama-intern.ts"
       },
       {
-        "commits": 5,
-        "lines": 497,
+        "commits": 7,
+        "lines": 635,
         "path": "src/sources/fetch.ts"
       },
       {
@@ -1425,18 +1425,18 @@
         "path": "src/sources/gather.ts"
       },
       {
-        "commits": 5,
-        "lines": 68,
+        "commits": 7,
+        "lines": 80,
         "path": "src/sources/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 435,
+        "commits": 3,
+        "lines": 437,
         "path": "src/sources/rebuild-ledger.ts"
       },
       {
-        "commits": 5,
-        "lines": 103,
+        "commits": 7,
+        "lines": 128,
         "path": "src/sources/schema.ts"
       },
       {
@@ -2311,6 +2311,16 @@
       },
       {
         "commits": 1,
+        "lines": 249,
+        "path": "test/sources/fetch-personal-data-redaction.test.ts"
+      },
+      {
+        "commits": 1,
+        "lines": 175,
+        "path": "test/sources/fetch-redaction.test.ts"
+      },
+      {
+        "commits": 1,
         "lines": 65,
         "path": "test/sources/fetch-size-cap.test.ts"
       },
@@ -2880,17 +2890,17 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-10-14T19:17:17.809Z",
+  "generatedAt": "2026-10-14T22:00:19.372Z",
   "generatedFrom": {
-    "commit": "6342b1cbba53a4ea293fc882ae1270b26ee69827"
+    "commit": "1339b1eeb4a99df14f56e2ca38dec21d2734925c"
   },
   "pairs": [
     {
       "a": "CHANGELOG.md",
       "b": "src/index.ts",
-      "either": 48,
+      "either": 49,
       "shared": 30,
-      "strength": 0.625
+      "strength": 0.612245
     },
     {
       "a": "README.es.md",
@@ -3089,6 +3099,48 @@
       "strength": 0.571429
     },
     {
+      "a": "atlas/README.md",
+      "b": "atlas/page.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "atlas/README.md",
+      "b": "atlas/statistics.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "atlas/README.md",
+      "b": "atlas/structure.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "atlas/page.json",
+      "b": "atlas/statistics.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "atlas/page.json",
+      "b": "atlas/structure.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
+      "a": "atlas/statistics.json",
+      "b": "atlas/structure.json",
+      "either": 5,
+      "shared": 5,
+      "strength": 1
+    },
+    {
       "a": "package-lock.json",
       "b": "package.json",
       "either": 28,
@@ -3234,6 +3286,41 @@
       "either": 15,
       "shared": 9,
       "strength": 0.6
+    },
+    {
+      "a": "src/sources/cards.ts",
+      "b": "src/sources/fetch.ts",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
+    },
+    {
+      "a": "src/sources/cards.ts",
+      "b": "src/sources/index.ts",
+      "either": 8,
+      "shared": 5,
+      "strength": 0.625
+    },
+    {
+      "a": "src/sources/cards.ts",
+      "b": "src/sources/schema.ts",
+      "either": 8,
+      "shared": 4,
+      "strength": 0.5
+    },
+    {
+      "a": "src/sources/fetch.ts",
+      "b": "src/sources/index.ts",
+      "either": 8,
+      "shared": 4,
+      "strength": 0.5
+    },
+    {
+      "a": "src/sources/fetch.ts",
+      "b": "src/sources/schema.ts",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
     }
   ],
   "parameters": {
@@ -3246,16 +3333,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-10-01T13:53:38-07:00",
-    "inScopeFiles": 514,
+    "headDate": "2026-10-14T17:59:37-04:00",
+    "inScopeFiles": 516,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 153,
+    "qualifyingCommits": 155,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-04T20:53:38.000Z",
+    "since": "2026-04-17T21:59:37.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
