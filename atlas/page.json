@@ -31,51 +31,31 @@
   ],
   "changes": {
     "fileCounts": {
-      "added": 4,
-      "changed": 10,
+      "added": 0,
+      "changed": 4,
       "moved": 0,
-      "parts": 4,
+      "parts": 2,
       "removed": 0
     },
     "items": [
       {
-        "kind": "door",
-        "sentence": "CI now also runs test/html-text-linear.test.ts, test/sources-heuristic-source-type-host.test.ts and test/util-html-text.test.ts.",
-        "subjects": [
-          ".github/workflows/ci.yml",
-          "test/html-text-linear.test.ts",
-          "test/sources-heuristic-source-type-host.test.ts",
-          "test/util-html-text.test.ts"
-        ]
-      },
-      {
-        "kind": "door",
-        "sentence": "Release now also runs test/html-text-linear.test.ts, test/sources-heuristic-source-type-host.test.ts and test/util-html-text.test.ts.",
-        "subjects": [
-          ".github/workflows/release.yml",
-          "test/html-text-linear.test.ts",
-          "test/sources-heuristic-source-type-host.test.ts",
-          "test/util-html-text.test.ts"
-        ]
-      },
-      {
         "kind": "counts",
-        "sentence": "4 files added and 10 changed content, across 4 parts.",
+        "sentence": "Nothing structural changed since 2026-10-15; 4 files changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "8ff13a502bb2f925a837de8f0ccedc915674e158",
-      "generatedAt": "2026-10-14T22:50:40.940Z"
+      "commit": "c620175e18979020a958385c91ca29573b82bbcb",
+      "generatedAt": "2026-10-15T01:16:21.819Z"
     },
-    "unchanged": false
+    "unchanged": true
   },
   "changesTogether": [],
   "changesTogetherNote": [
     "Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "c620175e18979020a958385c91ca29573b82bbcb",
+  "commit": "d0913387ca4a7b5fa598db4d0c9e3dd80250468c",
   "defaultBranch": "main",
   "derived": "10 parts, mostly TypeScript (426 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
@@ -573,7 +553,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-10-15T01:16:21.819Z",
+  "generatedAt": "2026-10-15T02:36:02.508Z",
   "limits": [
     "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",

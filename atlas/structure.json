@@ -249,7 +249,7 @@
           "path": ".gitignore"
         },
         {
-          "hash": "a8e7fcb43e127e5cf27ca93dfa0130ab15f215851e9df9066e8ae5b964fc10a5",
+          "hash": "b7af7f68bf839c06aa9bd5350aab20a602f039691d18e6bde512b712eb7e945a",
           "path": "CHANGELOG.md"
         },
         {
@@ -309,11 +309,11 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "11a4ff077aad49c0f44812ded3306ec7ad9c5165b9d310da65c11d9b7fe0dac4",
+          "hash": "365c040a410590988c6d75e271a1d22ec13283b326c4a1c658a8ca0da9298679",
           "path": "package-lock.json"
         },
         {
-          "hash": "798ea46478a768b8087e0a20c5be51cd76fd0e560890c0faafe59e0999ea1c6b",
+          "hash": "f33afb866071a85f15a57f9f6a626f34704ec686bbe09304bcc5d8d2e495dd97",
           "path": "package.json"
         },
         {
@@ -2829,7 +2829,7 @@
           "path": "src/gates/types.ts"
         },
         {
-          "hash": "8ba40ab2c33ec1ddd5d162a23d84b4af47c4d20000a206dd07489c6e399a164e",
+          "hash": "2b84508b92cbd1ad263a9f158c797cb88cdffcec317327d1bad8d663d90f964f",
           "importOrder": [
             "src/intake/index.ts",
             "src/sections/index.ts",
@@ -12153,7 +12153,7 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "c620175e18979020a958385c91ca29573b82bbcb",
+    "commit": "d0913387ca4a7b5fa598db4d0c9e3dd80250468c",
     "tracked": 515
   },
   "landings": [
