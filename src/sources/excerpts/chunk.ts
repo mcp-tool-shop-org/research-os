@@ -2,6 +2,8 @@
 // stable ordered list of excerpts. Same input → same output, byte-for-byte.
 // The model never authors evidence spans; this is where they come from.
 
+import { removeHtmlElements, stripHtmlTags } from '../../util/html-text.js';
+
 const MIN_EXCERPT_CHARS = 30;
 const MAX_EXCERPT_CHARS = 800;
 
@@ -23,16 +25,27 @@ function looksLikeHtml(text: string): boolean {
   return /<\/?(p|div|br|li|h[1-6]|article|section|main|body|html)\b/i.test(text);
 }
 
+// Matched against the text between '<' and '>'.
+const BLOCK_CLOSE_TAG = /^\/(p|div|li|h[1-6]|article|section|main|tr|table|blockquote)$/i;
+const BLOCK_OPEN_TAG = /^(p|div|li|h[1-6]|article|section|main|tr|table|blockquote)\b/i;
+const BR_TAG = /^br\s*\/?$/i;
+
+function blockBreak(tag: string): string | null {
+  if (tag.startsWith('/')) return BLOCK_CLOSE_TAG.test(tag) ? '\n\n' : null;
+  if (BR_TAG.test(tag)) return '\n';
+  return BLOCK_OPEN_TAG.test(tag) ? '\n\n' : null;
+}
+
 // Replace block-level HTML tags with paragraph breaks, then strip inline tags.
 // Preserves character flow but forces paragraph boundaries.
 function htmlToParagraphedText(text: string): string {
-  let t = text
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<\/(p|div|li|h[1-6]|article|section|main|tr|table|blockquote)>/gi, '\n\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<(p|div|li|h[1-6]|article|section|main|tr|table|blockquote)\b[^>]*>/gi, '\n\n')
-    .replace(/<[^>]+>/g, ' ');
+  let t = stripHtmlTags(removeHtmlElements(text, ['script', 'style']), (inner) => {
+    // A stray '<' in prose ("a < b <p>") must not swallow the real tag after it.
+    const lastOpen = inner.lastIndexOf('<');
+    const breaker = blockBreak(inner.slice(lastOpen + 1));
+    if (breaker === null) return ' ';
+    return lastOpen < 0 ? breaker : '<' + inner.slice(0, lastOpen) + breaker;
+  });
   t = decodeEntities(t);
   // Normalise within-line whitespace but preserve paragraph breaks (\n\n+).
   t = t.replace(/[ \t]+/g, ' ');

@@ -1,3 +1,4 @@
+import { stripHtmlTags } from '../../util/html-text.js';
 import type { Claim } from '../../claims/schema.js';
 import type { Excerpt } from '../../sources/excerpts/schema.js';
 import type {
@@ -15,7 +16,7 @@ const MIN_BRIEF_LENGTH_FOR_HIDDEN_SYNTHESIS = 600;
 const EVIDENCE_EXCERPT_JOIN = ' … ';
 
 function normalize(text: string): string {
-  return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase().trim();
+  return stripHtmlTags(text).replace(/\s+/g, ' ').toLowerCase().trim();
 }
 
 // Legacy raw-text substring check, kept for claims that pre-date span-first

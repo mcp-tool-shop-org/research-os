@@ -31,110 +31,53 @@
   ],
   "changes": {
     "fileCounts": {
-      "added": 0,
-      "changed": 0,
+      "added": 4,
+      "changed": 10,
       "moved": 0,
-      "parts": 0,
+      "parts": 4,
       "removed": 0
     },
     "items": [
       {
+        "kind": "door",
+        "sentence": "CI now also runs test/html-text-linear.test.ts, test/sources-heuristic-source-type-host.test.ts and test/util-html-text.test.ts.",
+        "subjects": [
+          ".github/workflows/ci.yml",
+          "test/html-text-linear.test.ts",
+          "test/sources-heuristic-source-type-host.test.ts",
+          "test/util-html-text.test.ts"
+        ]
+      },
+      {
+        "kind": "door",
+        "sentence": "Release now also runs test/html-text-linear.test.ts, test/sources-heuristic-source-type-host.test.ts and test/util-html-text.test.ts.",
+        "subjects": [
+          ".github/workflows/release.yml",
+          "test/html-text-linear.test.ts",
+          "test/sources-heuristic-source-type-host.test.ts",
+          "test/util-html-text.test.ts"
+        ]
+      },
+      {
         "kind": "counts",
-        "sentence": "Nothing structural changed since 2026-10-14; no file changed.",
+        "sentence": "4 files added and 10 changed content, across 4 parts.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "54d1c38b9ba687e541aa7cde8285eefa6f4d37da",
-      "generatedAt": "2026-10-14T22:48:15.666Z"
+      "commit": "8ff13a502bb2f925a837de8f0ccedc915674e158",
+      "generatedAt": "2026-10-14T22:50:40.940Z"
     },
-    "unchanged": true
+    "unchanged": false
   },
-  "changesTogether": [
-    {
-      "a": "src/cowork/schema.ts",
-      "b": "src/cowork/types.ts",
-      "either": 5,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/audit/aggregate.ts",
-      "b": "test/audit-aggregate.test.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "test"
-      ],
-      "parts": [
-        "src",
-        "test"
-      ],
-      "relation": "b-imports-a",
-      "shared": 5
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/schema.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/types.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/claims/extract.ts",
-      "b": "src/claims/types.ts",
-      "either": 12,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 9
-    }
-  ],
+  "changesTogether": [],
   "changesTogetherNote": [
-    "Confidence is low: fewer than 25 source files reach 10 revisions in the window.",
-    "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
+    "Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "8ff13a502bb2f925a837de8f0ccedc915674e158",
-  "defaultBranch": "master",
-  "derived": "10 parts, mostly TypeScript (422 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
+  "commit": "c620175e18979020a958385c91ca29573b82bbcb",
+  "defaultBranch": "main",
+  "derived": "10 parts, mostly TypeScript (426 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
     {
       "builds": [
@@ -159,12 +102,12 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 197
+          "files": 198
         },
         {
           "boundary": "test",
           "depth": 0,
-          "files": 221
+          "files": 224
         }
       ],
       "runs": [
@@ -225,6 +168,7 @@
         "test/gates-markdown.test.ts",
         "test/gates-run.test.ts",
         "test/gates-schema.test.ts",
+        "test/html-text-linear.test.ts",
         "test/indexer-build.test.ts",
         "test/indexer-export.test.ts",
         "test/indexer-query.test.ts",
@@ -289,6 +233,7 @@
         "test/sources-fetch.test.ts",
         "test/sources-gather.test.ts",
         "test/sources-heuristic-extractor.test.ts",
+        "test/sources-heuristic-source-type-host.test.ts",
         "test/sources-ollama-intern-extractor.test.ts",
         "test/sources-url-input.test.ts",
         "test/sources/",
@@ -314,10 +259,11 @@
         "test/synth-run.test.ts",
         "test/synth-section.test.ts",
         "test/triage-run.test.ts",
+        "test/util-html-text.test.ts",
         "test/util-progress.test.ts"
       ],
-      "runsCount": 147,
-      "runsMore": 217,
+      "runsCount": 150,
+      "runsMore": 220,
       "sends": [
         "uploads coverage to Codecov"
       ],
@@ -351,12 +297,12 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 197
+          "files": 198
         },
         {
           "boundary": "test",
           "depth": 0,
-          "files": 221
+          "files": 224
         }
       ],
       "runs": [
@@ -417,6 +363,7 @@
         "test/gates-markdown.test.ts",
         "test/gates-run.test.ts",
         "test/gates-schema.test.ts",
+        "test/html-text-linear.test.ts",
         "test/indexer-build.test.ts",
         "test/indexer-export.test.ts",
         "test/indexer-query.test.ts",
@@ -481,6 +428,7 @@
         "test/sources-fetch.test.ts",
         "test/sources-gather.test.ts",
         "test/sources-heuristic-extractor.test.ts",
+        "test/sources-heuristic-source-type-host.test.ts",
         "test/sources-ollama-intern-extractor.test.ts",
         "test/sources-url-input.test.ts",
         "test/sources/",
@@ -506,10 +454,11 @@
         "test/synth-run.test.ts",
         "test/synth-section.test.ts",
         "test/triage-run.test.ts",
+        "test/util-html-text.test.ts",
         "test/util-progress.test.ts"
       ],
-      "runsCount": 147,
-      "runsMore": 217,
+      "runsCount": 150,
+      "runsMore": 220,
       "sends": [
         "publishes to npm",
         "creates a GitHub release on a tag push or by hand"
@@ -566,7 +515,7 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 178
+          "files": 179
         }
       ],
       "runs": [
@@ -592,7 +541,7 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 194
+          "files": 195
         }
       ],
       "runs": [
@@ -624,7 +573,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-10-14T22:50:40.940Z",
+  "generatedAt": "2026-10-15T01:16:21.819Z",
   "limits": [
     "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",
@@ -632,7 +581,7 @@
     "47 writes and 142 reads go to a path their caller passes, not to this repository.",
     "2 reads go to the directory the command is run in (README.md), not to this repository.",
     "2 commands are built at run time and not followed, 1 of them in tests.",
-    "Statistics confidence is low: fewer than 25 source files reach 10 revisions in the window."
+    "Statistics confidence is low: fewer than 30 qualifying commits in the window, and fewer than 25 source files reach 10 revisions."
   ],
   "mainDoor": ".github/workflows/ci.yml",
   "partLabels": {
@@ -661,10 +610,10 @@
   ],
   "summary": null,
   "summaryFrom": null,
-  "testFiles": 221,
+  "testFiles": 224,
   "testedBy": {
     "scripts": 0,
-    "src": 217
+    "src": 220
   },
   "unnamedWrites": 12,
   "unread": [

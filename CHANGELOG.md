@@ -4,9 +4,16 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-14
+
 ### Fixed
 
 - **Release workflow: dependency install scripts run again.** The workflow installed the newest npm before `npm ci`, and that npm blocks dependency install scripts by default, so better-sqlite3 had no native binding and the v0.15.0 verify gate failed. npm for Trusted Publishing is now pinned to 11 and installed after the verify gate, right before the publish.
+
+### Security
+
+- **Source types match a domain, not the end of a host name.** `deriveSourceType` decided a source's type with `host.endsWith('arxiv.org')` and the same test for eight more domains, so a look-alike host such as `fakearxiv.org` or `notanthropic.com` was typed `primary` and could count toward the primary-source floor. A host now matches a domain when it is that domain or a subdomain of it. (CodeQL `js/incomplete-url-substring-sanitization`, eight alerts.)
+- **Stripping HTML from a fetched page takes linear time.** The patterns that removed tags and `<script>` or `<style>` blocks from fetched pages were quadratic: on the old tag pattern, 100,000 `<` characters took 1.7 s and 200,000 took 14 s, and a page may be 25 MB. `claims/extract`, the heuristic reviewer, `gather` and `excerpts/chunk` now share one scan (`src/util/html-text.ts`) that only moves forward and gives up at the first missing `>` or closing tag. A stray `<` in prose no longer swallows the tag after it, so that paragraph break is kept. (CodeQL `js/polynomial-redos` and `js/bad-tag-filter`, five alerts.)
 
 ## [0.15.0] - 2026-10-14
 

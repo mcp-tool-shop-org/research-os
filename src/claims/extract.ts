@@ -23,6 +23,7 @@ import {
   type SourceCard,
 } from '../sources/schema.js';
 import { readOverrides } from '../sources/source-card-overrides.js';
+import { stripHtmlTags } from '../util/html-text.js';
 import { getEffectiveSeverities } from '../sources/effective-card.js';
 import { detectSeverities, resolveSeverityThresholds } from '../sources/severities.js';
 import {
@@ -60,7 +61,7 @@ const EVIDENCE_EXCERPT_JOIN = ' … ';
 const EVIDENCE_EXCERPT_MAX_CHARS = 1200;
 
 function normalize(text: string): string {
-  return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase().trim();
+  return stripHtmlTags(text).replace(/\s+/g, ' ').toLowerCase().trim();
 }
 
 // Legacy text-substring grounding check, retained for callers that still need it
