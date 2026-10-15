@@ -7,6 +7,7 @@ import {
   PackNotFoundError,
   SectionNotFoundError,
 } from '../errors.js';
+import { removeHtmlElements, stripHtmlTags } from '../util/html-text.js';
 import { emitProgress } from '../util/progress.js';
 import { fetchOnce } from './fetch.js';
 import { collectUrls } from './url-input.js';
@@ -48,10 +49,7 @@ function urlHash12(url: string): string {
  * source-card override ledger (clear_severities[]).
  */
 function rawBodyProseWordCount(rawText: string): number {
-  const noScripts = rawText
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ');
+  const noScripts = stripHtmlTags(removeHtmlElements(rawText, ['script', 'style']));
   const normalized = noScripts.replace(/\s+/g, ' ').trim();
   if (normalized.length === 0) return 0;
   return normalized.split(' ').length;

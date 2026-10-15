@@ -9,6 +9,11 @@ import type {
   SourceType,
 } from '../types.js';
 
+// Exact match or a true subdomain: 'fakearxiv.org' must not pass for 'arxiv.org'.
+function hostIs(host: string, domain: string): boolean {
+  return host === domain || host.endsWith('.' + domain);
+}
+
 function deriveSourceType(rawUrl: string, finalUrl: string | null): SourceType {
   const u = finalUrl ?? rawUrl;
   let host: string;
@@ -19,11 +24,11 @@ function deriveSourceType(rawUrl: string, finalUrl: string | null): SourceType {
   }
   if (host.startsWith('docs.') || host.endsWith('.readthedocs.io')) return 'docs';
   if (host === 'github.com' && /\/(issues|pull|discussions)\//.test(u)) return 'forum';
-  if (host === 'news.ycombinator.com' || host.endsWith('reddit.com') || host.endsWith('stackoverflow.com'))
+  if (hostIs(host, 'news.ycombinator.com') || hostIs(host, 'reddit.com') || hostIs(host, 'stackoverflow.com'))
     return 'forum';
-  if (host.endsWith('arxiv.org') || host.endsWith('semanticscholar.org')) return 'primary';
-  if (host.endsWith('paperswithcode.com')) return 'benchmark';
-  if (host.endsWith('anthropic.com') || host.endsWith('openai.com') || host.endsWith('claude.com'))
+  if (hostIs(host, 'arxiv.org') || hostIs(host, 'semanticscholar.org')) return 'primary';
+  if (hostIs(host, 'paperswithcode.com')) return 'benchmark';
+  if (hostIs(host, 'anthropic.com') || hostIs(host, 'openai.com') || hostIs(host, 'claude.com'))
     return 'primary';
   return 'secondary';
 }

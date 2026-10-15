@@ -21,7 +21,7 @@
           "path": ".github/workflows/pages.yml"
         },
         {
-          "hash": "7b0078216d3ecb0999290ee6757c5b8ef7dcc774a6aa8005ad9f37b29a151d29",
+          "hash": "b3ba1c57cf36ce28efbfb868cf6dadac639d4470c4c98118e6a17075eac838a0",
           "path": ".github/workflows/release.yml"
         }
       ],
@@ -249,7 +249,7 @@
           "path": ".gitignore"
         },
         {
-          "hash": "e8735f492b122ab008acd24cd1854b47ec4c67b0523f09535aec361ed24ddd12",
+          "hash": "a8e7fcb43e127e5cf27ca93dfa0130ab15f215851e9df9066e8ae5b964fc10a5",
           "path": "CHANGELOG.md"
         },
         {
@@ -309,11 +309,11 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "3485ccbfd92f3a81d0ab5ab4b0a6a60edc95fd0babc9201dd87732dec544bd65",
+          "hash": "11a4ff077aad49c0f44812ded3306ec7ad9c5165b9d310da65c11d9b7fe0dac4",
           "path": "package-lock.json"
         },
         {
-          "hash": "1f39c927147f77ba8f53a57d089097a56bc5a445b918aa0463d2347e1bcc3ce0",
+          "hash": "798ea46478a768b8087e0a20c5be51cd76fd0e560890c0faafe59e0999ea1c6b",
           "path": "package.json"
         },
         {
@@ -1054,50 +1054,50 @@
             {
               "in": "readSectionPurpose",
               "kind": "catch",
-              "line": 101
+              "line": 102
             },
             {
               "in": "readAuditSeverityThresholdsConfig",
               "kind": "catch",
-              "line": 116
+              "line": 117
             },
             {
               "in": "readSectionSourceIds",
               "kind": "catch",
-              "line": 151
+              "line": 152
             },
             {
               "in": "findLatestReceipt",
               "kind": "catch",
-              "line": 180
+              "line": 181
             },
             {
               "in": "readExistingClaimIds",
               "kind": "catch",
-              "line": 200
+              "line": 201
             },
             {
               "in": "readExistingAssertKeys",
               "kind": "catch",
-              "line": 237
+              "line": 238
             },
             {
               "in": "extract",
               "kind": "throw",
-              "line": 365
+              "line": 366
             },
             {
               "in": "extract",
               "kind": "throw",
-              "line": 367
+              "line": 368
             },
             {
               "in": "extract",
               "kind": "throw",
-              "line": 370
+              "line": 371
             }
           ],
-          "hash": "503ca0d7bfb74035051116f09acba8e981789901c48a7f3aba905b91e8c4c87c",
+          "hash": "85206b1c5b52659c5a4fd0c0b63d686fabacbeb4676e9faa7b30d9b9e73b0ddf",
           "importOrder": [
             "src/errors.ts",
             "src/index.ts",
@@ -1105,6 +1105,7 @@
             "src/sources/excerpts/index.ts",
             "src/sources/schema.ts",
             "src/sources/source-card-overrides.ts",
+            "src/util/html-text.ts",
             "src/sources/effective-card.ts",
             "src/sources/severities.ts",
             "src/claims/extract-completion-ledger.ts",
@@ -1126,7 +1127,8 @@
             "src/sources/excerpts/index.ts",
             "src/sources/schema.ts",
             "src/sources/severities.ts",
-            "src/sources/source-card-overrides.ts"
+            "src/sources/source-card-overrides.ts",
+            "src/util/html-text.ts"
           ],
           "path": "src/claims/extract.ts"
         },
@@ -2827,7 +2829,7 @@
           "path": "src/gates/types.ts"
         },
         {
-          "hash": "b8683714ef3d9fee9efc55a8820d1238162007a2ddc50a37c25fdc118bfe81b7",
+          "hash": "8ba40ab2c33ec1ddd5d162a23d84b4af47c4d20000a206dd07489c6e399a164e",
           "importOrder": [
             "src/intake/index.ts",
             "src/sections/index.ts",
@@ -3996,8 +3998,9 @@
           "path": "src/review/reviewer-options-schema.ts"
         },
         {
-          "hash": "a90936f3b0f359036681e39c9257868570f8f4445e1d99b6674a0751194f9c6c",
+          "hash": "080c363f9487aafdeda3a44fda416c6b3af8117a12c93ab5f23d9ccad026eee6",
           "importOrder": [
+            "src/util/html-text.ts",
             "src/claims/schema.ts",
             "src/sources/excerpts/schema.ts",
             "src/review/types.ts"
@@ -4005,7 +4008,8 @@
           "importsFiles": [
             "src/claims/schema.ts",
             "src/review/types.ts",
-            "src/sources/excerpts/schema.ts"
+            "src/sources/excerpts/schema.ts",
+            "src/util/html-text.ts"
           ],
           "path": "src/review/reviewers/heuristic.ts"
         },
@@ -4385,7 +4389,10 @@
             "chunkKeyPoints",
             "chunkRawText"
           ],
-          "hash": "5b1d4eacb99c0581c0712294f097aff2cf3727a1a5d1f7bbc9a6a74dd389ae33",
+          "hash": "a15c89f574c5f310b3443bc8016f0d340b6270b4585b7819e3e8fdccd4fd928b",
+          "importsFiles": [
+            "src/util/html-text.ts"
+          ],
           "path": "src/sources/excerpts/chunk.ts"
         },
         {
@@ -4442,15 +4449,15 @@
             {
               "in": "deriveSourceType",
               "kind": "catch",
-              "line": 17
+              "line": 22
             },
             {
               "in": "extract",
               "kind": "catch",
-              "line": 92
+              "line": 97
             }
           ],
-          "hash": "adf677f868b208859b9af89f6e1022a933d9e088b00564e37f458adaa52ef2e6",
+          "hash": "71cd76e48f1038c49bf000b46eb0f7ab8122dcef83ec3b4414f9804081af7564",
           "importsFiles": [
             "src/sources/types.ts"
           ],
@@ -4564,37 +4571,38 @@
             {
               "in": "gather",
               "kind": "throw",
+              "line": 134
+            },
+            {
+              "in": "gather",
+              "kind": "throw",
               "line": 136
             },
             {
               "in": "gather",
               "kind": "throw",
-              "line": 138
-            },
-            {
-              "in": "gather",
-              "kind": "throw",
-              "line": 141
+              "line": 139
             },
             {
               "in": "gather",
               "kind": "catch",
-              "line": 331
+              "line": 329
             },
             {
               "in": "gather",
               "kind": "catch",
-              "line": 352
+              "line": 350
             },
             {
               "in": "gather",
               "kind": "catch",
-              "line": 366
+              "line": 364
             }
           ],
-          "hash": "512f294a32e5dd16287c19bb851284aa6fa6c6fe636d02ccf0551e4b83fe25d4",
+          "hash": "f6371184b019640fd2963837994d3cf506675a845d2bab7d6ec51341006a9780",
           "importOrder": [
             "src/errors.ts",
+            "src/util/html-text.ts",
             "src/util/progress.ts",
             "src/sources/fetch.ts",
             "src/sources/url-input.ts",
@@ -4615,6 +4623,7 @@
             "src/sources/source-card-overrides.ts",
             "src/sources/types.ts",
             "src/sources/url-input.ts",
+            "src/util/html-text.ts",
             "src/util/progress.ts"
           ],
           "path": "src/sources/gather.ts"
@@ -5652,6 +5661,14 @@
         },
         {
           "exports": [
+            "removeHtmlElements",
+            "stripHtmlTags"
+          ],
+          "hash": "7d133eaa6a579d7df21658abe34b8f2b3c46d6e85401a21a5968e050277bd0a4",
+          "path": "src/util/html-text.ts"
+        },
+        {
+          "exports": [
             "emitProgress",
             "shouldEmitProgress"
           ],
@@ -5824,7 +5841,7 @@
       "testRunners": [
         "vitest"
       ],
-      "testedBy": 217,
+      "testedBy": 220,
       "unresolvedNamed": [
         {
           "path": "src/indexer/sync.ts",
@@ -6793,6 +6810,19 @@
             "src/gates/schema.ts"
           ],
           "path": "test/gates-schema.test.ts",
+          "testFramework": "vitest"
+        },
+        {
+          "hash": "8b09a08e0f99bef97f1218da1716fec457552fc924795189aca8dfba9abae299",
+          "importOrder": [
+            "src/sources/excerpts/chunk.ts",
+            "src/claims/extract.ts"
+          ],
+          "importsFiles": [
+            "src/claims/extract.ts",
+            "src/sources/excerpts/chunk.ts"
+          ],
+          "path": "test/html-text-linear.test.ts",
           "testFramework": "vitest"
         },
         {
@@ -7891,6 +7921,14 @@
             "src/sources/extractors/heuristic.ts"
           ],
           "path": "test/sources-heuristic-extractor.test.ts",
+          "testFramework": "vitest"
+        },
+        {
+          "hash": "d6e6fdb0579faad7145528ce05ef0f7175545fd6369863204b542f6b5ff06bda",
+          "importsFiles": [
+            "src/sources/extractors/heuristic.ts"
+          ],
+          "path": "test/sources-heuristic-source-type-host.test.ts",
           "testFramework": "vitest"
         },
         {
@@ -9198,6 +9236,14 @@
           "testFramework": "vitest"
         },
         {
+          "hash": "39a8fd81f84169530b63ca8538993e55b3c5d556eff4ac8667f54d5f2cd1157e",
+          "importsFiles": [
+            "src/util/html-text.ts"
+          ],
+          "path": "test/util-html-text.test.ts",
+          "testFramework": "vitest"
+        },
+        {
           "hash": "492287c2c0ddbe7888d383655610be10c22f9e6a39d749cd1b7970086c22ddfb",
           "importsFiles": [
             "src/util/progress.ts"
@@ -9350,12 +9396,12 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 197
+          "files": 198
         },
         {
           "boundary": "test",
           "depth": 0,
-          "files": 221
+          "files": 224
         }
       ],
       "readers": [],
@@ -9802,6 +9848,13 @@
           "job": "verify",
           "matched": true,
           "path": "test/gates-schema.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "verify",
+          "matched": true,
+          "path": "test/html-text-linear.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
         },
@@ -10258,6 +10311,13 @@
         {
           "job": "verify",
           "matched": true,
+          "path": "test/sources-heuristic-source-type-host.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "verify",
+          "matched": true,
           "path": "test/sources-ollama-intern-extractor.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
@@ -10436,12 +10496,19 @@
         {
           "job": "verify",
           "matched": true,
+          "path": "test/util-html-text.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "verify",
+          "matched": true,
           "path": "test/util-progress.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
         }
       ],
-      "runsCount": 154,
+      "runsCount": 157,
       "secrets": [],
       "sends": {
         "deploysPages": false,
@@ -10457,7 +10524,7 @@
       "tests": [
         {
           "config": "vitest.config.ts",
-          "files": 220,
+          "files": 223,
           "job": "verify",
           "runner": "vitest",
           "step": "Test",
@@ -10468,7 +10535,7 @@
         {
           "config": "vitest.config.ts",
           "coverage": true,
-          "files": 220,
+          "files": 223,
           "job": "verify",
           "junit": true,
           "runner": "vitest",
@@ -10662,18 +10729,6 @@
           "dir": "",
           "job": "release",
           "programs": [
-            "echo",
-            "mkdir",
-            "npm",
-            "popd",
-            "pushd"
-          ],
-          "step": "Install npm >=11.5 in a sandbox for OIDC trusted-publishing auth"
-        },
-        {
-          "dir": "",
-          "job": "release",
-          "programs": [
             "npm"
           ],
           "step": "Install dependencies"
@@ -10705,6 +10760,18 @@
             "wc"
           ],
           "step": "Extract CHANGELOG section for this version"
+        },
+        {
+          "dir": "",
+          "job": "release",
+          "programs": [
+            "echo",
+            "mkdir",
+            "npm",
+            "popd",
+            "pushd"
+          ],
+          "step": "Install npm >=11.5 in a sandbox for OIDC trusted-publishing auth"
         },
         {
           "dir": "",
@@ -10813,12 +10880,12 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 197
+          "files": 198
         },
         {
           "boundary": "test",
           "depth": 0,
-          "files": 221
+          "files": 224
         }
       ],
       "readers": [],
@@ -11265,6 +11332,13 @@
           "job": "release",
           "matched": true,
           "path": "test/gates-schema.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "release",
+          "matched": true,
+          "path": "test/html-text-linear.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
         },
@@ -11721,6 +11795,13 @@
         {
           "job": "release",
           "matched": true,
+          "path": "test/sources-heuristic-source-type-host.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "release",
+          "matched": true,
           "path": "test/sources-ollama-intern-extractor.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
@@ -11899,12 +11980,19 @@
         {
           "job": "release",
           "matched": true,
+          "path": "test/util-html-text.test.ts",
+          "runKind": "executes",
+          "via": "vitest vitest.config.ts"
+        },
+        {
+          "job": "release",
+          "matched": true,
           "path": "test/util-progress.test.ts",
           "runKind": "executes",
           "via": "vitest vitest.config.ts"
         }
       ],
-      "runsCount": 154,
+      "runsCount": 157,
       "secrets": [
         "GITHUB_TOKEN"
       ],
@@ -11931,7 +12019,7 @@
       "tests": [
         {
           "config": "vitest.config.ts",
-          "files": 220,
+          "files": 223,
           "job": "release",
           "runner": "vitest",
           "step": "Verify gate (build + typecheck + lint + test)",
@@ -11980,7 +12068,7 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 178
+          "files": 179
         }
       ],
       "readers": [],
@@ -12022,7 +12110,7 @@
         {
           "boundary": "src",
           "depth": 0,
-          "files": 194
+          "files": 195
         }
       ],
       "readers": [],
@@ -12065,8 +12153,8 @@
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "8ff13a502bb2f925a837de8f0ccedc915674e158",
-    "tracked": 511
+    "commit": "c620175e18979020a958385c91ca29573b82bbcb",
+    "tracked": 515
   },
   "landings": [
     {
@@ -12464,6 +12552,6 @@
   "overlaps": [],
   "submodules": [],
   "symlinks": [],
-  "testFiles": 221,
+  "testFiles": 224,
   "unassigned": []
 }

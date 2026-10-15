@@ -81,7 +81,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "root",
-      "qualifyingSourceCommits": 4,
+      "qualifyingSourceCommits": 0,
       "rebaseline": null
     },
     {
@@ -97,7 +97,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "scripts",
-      "qualifyingSourceCommits": 12,
+      "qualifyingSourceCommits": 0,
       "rebaseline": null
     },
     {
@@ -113,7 +113,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "site",
-      "qualifyingSourceCommits": 2,
+      "qualifyingSourceCommits": 1,
       "rebaseline": null
     },
     {
@@ -121,19 +121,18 @@
         "coChangesOnly": [],
         "collapsed": false,
         "confidence": "low",
-        "importsAndCoChanges": [
-          "test"
-        ],
+        "importsAndCoChanges": [],
         "importsOnly": [
-          "scripts"
+          "scripts",
+          "test"
         ]
       },
-      "cohesion": 0.9012,
+      "cohesion": null,
       "cohesionDropped": false,
-      "confidence": "full",
+      "confidence": "low",
       "highWater": null,
       "name": "src",
-      "qualifyingSourceCommits": 112,
+      "qualifyingSourceCommits": 6,
       "rebaseline": null
     },
     {
@@ -154,20 +153,18 @@
     },
     {
       "breakage": {
-        "coChangesOnly": [
-          "src"
-        ],
+        "coChangesOnly": [],
         "collapsed": false,
         "confidence": "low",
         "importsAndCoChanges": [],
         "importsOnly": []
       },
-      "cohesion": 0,
+      "cohesion": null,
       "cohesionDropped": false,
-      "confidence": "full",
+      "confidence": "low",
       "highWater": null,
       "name": "test",
-      "qualifyingSourceCommits": 94,
+      "qualifyingSourceCommits": 4,
       "rebaseline": null
     }
   ],
@@ -175,18 +172,18 @@
     "definition": "commits is how many commits in the window touch the file, including merges and commits dropped from coupling. lines is added plus deleted in those commits.",
     "files": [
       {
-        "commits": 4,
+        "commits": 3,
         "lines": 44,
         "path": ".github/dependabot.yml"
       },
       {
-        "commits": 16,
-        "lines": 295,
+        "commits": 14,
+        "lines": 291,
         "path": ".github/workflows/ci.yml"
       },
       {
-        "commits": 7,
-        "lines": 78,
+        "commits": 5,
+        "lines": 68,
         "path": ".github/workflows/pages.yml"
       },
       {
@@ -195,18 +192,18 @@
         "path": ".github/workflows/publish.yml"
       },
       {
-        "commits": 1,
-        "lines": 4,
+        "commits": 2,
+        "lines": 37,
         "path": ".github/workflows/release.yml"
       },
       {
-        "commits": 4,
+        "commits": 2,
         "lines": 16,
         "path": ".gitignore"
       },
       {
-        "commits": 46,
-        "lines": 2075,
+        "commits": 8,
+        "lines": 1959,
         "path": "CHANGELOG.md"
       },
       {
@@ -215,43 +212,43 @@
         "path": "LICENSE"
       },
       {
-        "commits": 19,
-        "lines": 1405,
+        "commits": 4,
+        "lines": 849,
         "path": "README.es.md"
       },
       {
-        "commits": 19,
-        "lines": 1364,
+        "commits": 4,
+        "lines": 824,
         "path": "README.fr.md"
       },
       {
-        "commits": 19,
-        "lines": 1446,
+        "commits": 4,
+        "lines": 856,
         "path": "README.hi.md"
       },
       {
-        "commits": 19,
-        "lines": 1358,
+        "commits": 4,
+        "lines": 824,
         "path": "README.it.md"
       },
       {
-        "commits": 19,
-        "lines": 1448,
+        "commits": 4,
+        "lines": 894,
         "path": "README.ja.md"
       },
       {
-        "commits": 38,
-        "lines": 1163,
+        "commits": 4,
+        "lines": 513,
         "path": "README.md"
       },
       {
-        "commits": 19,
-        "lines": 1314,
+        "commits": 4,
+        "lines": 822,
         "path": "README.pt-BR.md"
       },
       {
-        "commits": 19,
-        "lines": 1430,
+        "commits": 4,
+        "lines": 866,
         "path": "README.zh.md"
       },
       {
@@ -260,13 +257,13 @@
         "path": "SCORECARD.md"
       },
       {
-        "commits": 3,
-        "lines": 48,
+        "commits": 1,
+        "lines": 46,
         "path": "SECURITY.md"
       },
       {
-        "commits": 7,
-        "lines": 131,
+        "commits": 1,
+        "lines": 99,
         "path": "SHIP_GATE.md"
       },
       {
@@ -281,12 +278,12 @@
       },
       {
         "commits": 8,
-        "lines": 978,
+        "lines": 980,
         "path": "atlas/page.json"
       },
       {
         "commits": 8,
-        "lines": 3679,
+        "lines": 3901,
         "path": "atlas/statistics.json"
       },
       {
@@ -295,13 +292,13 @@
         "path": "atlas/structure.json"
       },
       {
-        "commits": 2,
-        "lines": 154,
+        "commits": 1,
+        "lines": 112,
         "path": "calibration/reviewer-profiles/hermes-single-pass/seeded-v1.json"
       },
       {
-        "commits": 2,
-        "lines": 79,
+        "commits": 1,
+        "lines": 55,
         "path": "calibration/reviewer-profiles/hermes-single-pass/seeded-v1.md"
       },
       {
@@ -345,13 +342,13 @@
         "path": "calibration/reviewer-profiles/hermes-two-pass/runs/run-003.json"
       },
       {
-        "commits": 2,
-        "lines": 370,
+        "commits": 1,
+        "lines": 284,
         "path": "calibration/reviewer-profiles/hermes-two-pass/seeded-v1.json"
       },
       {
-        "commits": 2,
-        "lines": 146,
+        "commits": 1,
+        "lines": 70,
         "path": "calibration/reviewer-profiles/hermes-two-pass/seeded-v1.md"
       },
       {
@@ -370,24 +367,19 @@
         "path": "calibration/reviewer-profiles/mistral-nemo-two-pass/runs/run-003.json"
       },
       {
-        "commits": 2,
-        "lines": 371,
+        "commits": 1,
+        "lines": 281,
         "path": "calibration/reviewer-profiles/mistral-nemo-two-pass/seeded-v1.json"
       },
       {
-        "commits": 2,
-        "lines": 149,
+        "commits": 1,
+        "lines": 69,
         "path": "calibration/reviewer-profiles/mistral-nemo-two-pass/seeded-v1.md"
       },
       {
         "commits": 2,
         "lines": 36,
         "path": "codecov.yml"
-      },
-      {
-        "commits": 1,
-        "lines": 5,
-        "path": "direct-ollama-legacy-extractor.ts}"
       },
       {
         "commits": 1,
@@ -405,8 +397,8 @@
         "path": "docs/dogfood-swarm-proof.md"
       },
       {
-        "commits": 2,
-        "lines": 137,
+        "commits": 1,
+        "lines": 133,
         "path": "docs/experiment-1-proof.md"
       },
       {
@@ -430,8 +422,8 @@
         "path": "docs/pack-publish-dogfood.md"
       },
       {
-        "commits": 3,
-        "lines": 268,
+        "commits": 1,
+        "lines": 258,
         "path": "docs/pack-publish.md"
       },
       {
@@ -450,23 +442,23 @@
         "path": "docs/release-notes/v0.7.0.md"
       },
       {
-        "commits": 2,
-        "lines": 82,
+        "commits": 1,
+        "lines": 78,
         "path": "docs/release-notes/v0.8.0.md"
       },
       {
-        "commits": 2,
-        "lines": 119,
+        "commits": 1,
+        "lines": 117,
         "path": "docs/release-notes/v0.9.0.md"
       },
       {
-        "commits": 13,
-        "lines": 374,
+        "commits": 1,
+        "lines": 270,
         "path": "docs/roadmap.md"
       },
       {
-        "commits": 2,
-        "lines": 321,
+        "commits": 1,
+        "lines": 319,
         "path": "docs/section-scoped-waivers.md"
       },
       {
@@ -475,7 +467,7 @@
         "path": "docs/v0.7.1-section-level-synthesis-need.md"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 317,
         "path": "docs/v1-readiness-packet.md"
       },
@@ -490,13 +482,13 @@
         "path": "examples/source-card-override.example.json"
       },
       {
-        "commits": 22,
-        "lines": 7802,
+        "commits": 9,
+        "lines": 7716,
         "path": "package-lock.json"
       },
       {
-        "commits": 28,
-        "lines": 132,
+        "commits": 6,
+        "lines": 98,
         "path": "package.json"
       },
       {
@@ -505,13 +497,13 @@
         "path": "release.yml}"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 43,
         "path": "scripts/paged-review-oneshot.mjs"
       },
       {
-        "commits": 8,
-        "lines": 961,
+        "commits": 1,
+        "lines": 849,
         "path": "scripts/reviewer-calibration.mjs"
       },
       {
@@ -555,13 +547,13 @@
         "path": "site/src/content.config.ts"
       },
       {
-        "commits": 2,
-        "lines": 156,
+        "commits": 1,
+        "lines": 154,
         "path": "site/src/content/docs/handbook/contradict-map.md"
       },
       {
-        "commits": 3,
-        "lines": 142,
+        "commits": 1,
+        "lines": 140,
         "path": "site/src/content/docs/handbook/getting-started.md"
       },
       {
@@ -570,8 +562,8 @@
         "path": "site/src/content/docs/handbook/index.md"
       },
       {
-        "commits": 2,
-        "lines": 103,
+        "commits": 1,
+        "lines": 101,
         "path": "site/src/content/docs/handbook/known-limitations.md"
       },
       {
@@ -580,42 +572,42 @@
         "path": "site/src/content/docs/handbook/laws.md"
       },
       {
-        "commits": 5,
-        "lines": 233,
+        "commits": 1,
+        "lines": 177,
         "path": "site/src/content/docs/handbook/operator-playbook.md"
       },
       {
-        "commits": 3,
-        "lines": 137,
+        "commits": 1,
+        "lines": 135,
         "path": "site/src/content/docs/handbook/pack-publish.md"
       },
       {
-        "commits": 5,
-        "lines": 326,
+        "commits": 1,
+        "lines": 312,
         "path": "site/src/content/docs/handbook/recovery.md"
       },
       {
-        "commits": 6,
-        "lines": 370,
+        "commits": 1,
+        "lines": 362,
         "path": "site/src/content/docs/handbook/reference.md"
       },
       {
-        "commits": 5,
-        "lines": 279,
+        "commits": 1,
+        "lines": 245,
         "path": "site/src/content/docs/handbook/reviewer-calibration.md"
       },
       {
-        "commits": 3,
-        "lines": 222,
+        "commits": 1,
+        "lines": 220,
         "path": "site/src/content/docs/handbook/section-scoped-waivers.md"
       },
       {
-        "commits": 5,
-        "lines": 244,
+        "commits": 1,
+        "lines": 242,
         "path": "site/src/content/docs/handbook/source-card-audit.md"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 107,
         "path": "site/src/content/docs/handbook/workflow.md"
       },
@@ -645,8 +637,8 @@
         "path": "site/tsconfig.json"
       },
       {
-        "commits": 7,
-        "lines": 1068,
+        "commits": 2,
+        "lines": 970,
         "path": "src/audit/aggregate.ts"
       },
       {
@@ -655,8 +647,8 @@
         "path": "src/audit/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 245,
+        "commits": 1,
+        "lines": 237,
         "path": "src/audit/markdown.ts"
       },
       {
@@ -665,57 +657,57 @@
         "path": "src/audit/missing-policy-sources.ts"
       },
       {
-        "commits": 5,
+        "commits": 2,
         "lines": 332,
         "path": "src/audit/run.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 182,
         "path": "src/audit/schema.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 212,
         "path": "src/audit/types.ts"
       },
       {
-        "commits": 3,
-        "lines": 100,
+        "commits": 1,
+        "lines": 98,
         "path": "src/calibration/aggregate-receipt-schema.ts"
       },
       {
-        "commits": 2,
-        "lines": 504,
+        "commits": 1,
+        "lines": 500,
         "path": "src/calibration/aggregate.ts"
       },
       {
-        "commits": 3,
-        "lines": 192,
+        "commits": 2,
+        "lines": 176,
         "path": "src/calibration/lookup.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 92,
         "path": "src/calibration/receipt-schema.ts"
       },
       {
-        "commits": 2,
-        "lines": 262,
+        "commits": 1,
+        "lines": 260,
         "path": "src/calibration/receipt.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 189,
         "path": "src/claims/critic/mcp-critic.ts"
       },
       {
-        "commits": 3,
-        "lines": 175,
+        "commits": 1,
+        "lines": 171,
         "path": "src/claims/critic/prompt.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 392,
         "path": "src/claims/critic/rescue-critic.ts"
       },
@@ -735,13 +727,13 @@
         "path": "src/claims/density/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 381,
+        "commits": 1,
+        "lines": 379,
         "path": "src/claims/density/run.ts"
       },
       {
-        "commits": 2,
-        "lines": 65,
+        "commits": 1,
+        "lines": 63,
         "path": "src/claims/density/schema.ts"
       },
       {
@@ -750,38 +742,38 @@
         "path": "src/claims/extract-completion-ledger.ts"
       },
       {
-        "commits": 13,
-        "lines": 1213,
+        "commits": 3,
+        "lines": 909,
         "path": "src/claims/extract.ts"
       },
       {
-        "commits": 2,
-        "lines": 110,
+        "commits": 1,
+        "lines": 293,
+        "path": "src/claims/extractors/direct-ollama-legacy-extractor.ts"
+      },
+      {
+        "commits": 1,
+        "lines": 80,
         "path": "src/claims/extractors/heuristic.ts"
       },
       {
-        "commits": 3,
-        "lines": 82,
+        "commits": 2,
+        "lines": 76,
         "path": "src/claims/extractors/index.ts"
       },
       {
-        "commits": 8,
-        "lines": 917,
+        "commits": 3,
+        "lines": 821,
         "path": "src/claims/extractors/mcp.ts"
       },
       {
-        "commits": 5,
-        "lines": 400,
-        "path": "src/claims/extractors/ollama-intern.ts"
-      },
-      {
-        "commits": 3,
+        "commits": 1,
         "lines": 65,
         "path": "src/claims/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 472,
+        "commits": 2,
+        "lines": 426,
         "path": "src/claims/repair-scope.ts"
       },
       {
@@ -790,18 +782,18 @@
         "path": "src/claims/rescue-ledger.ts"
       },
       {
-        "commits": 7,
-        "lines": 115,
+        "commits": 1,
+        "lines": 111,
         "path": "src/claims/schema.ts"
       },
       {
-        "commits": 2,
-        "lines": 183,
+        "commits": 1,
+        "lines": 147,
         "path": "src/claims/scope-proposer.ts"
       },
       {
-        "commits": 2,
-        "lines": 61,
+        "commits": 1,
+        "lines": 59,
         "path": "src/claims/scope-repairs-schema.ts"
       },
       {
@@ -810,13 +802,13 @@
         "path": "src/claims/scope-repairs.ts"
       },
       {
-        "commits": 12,
-        "lines": 458,
+        "commits": 3,
+        "lines": 448,
         "path": "src/claims/types.ts"
       },
       {
-        "commits": 58,
-        "lines": 2530,
+        "commits": 3,
+        "lines": 2302,
         "path": "src/cli.ts"
       },
       {
@@ -830,7 +822,7 @@
         "path": "src/closure-ledger/effective-accepted.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 101,
         "path": "src/contradictions/detectors/heuristic.ts"
       },
@@ -840,23 +832,23 @@
         "path": "src/contradictions/detectors/index.ts"
       },
       {
-        "commits": 8,
-        "lines": 540,
+        "commits": 2,
+        "lines": 450,
         "path": "src/contradictions/detectors/ollama-intern.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 45,
         "path": "src/contradictions/index.ts"
       },
       {
-        "commits": 8,
-        "lines": 485,
+        "commits": 3,
+        "lines": 457,
         "path": "src/contradictions/map.ts"
       },
       {
-        "commits": 2,
-        "lines": 111,
+        "commits": 1,
+        "lines": 109,
         "path": "src/contradictions/markdown.ts"
       },
       {
@@ -880,13 +872,13 @@
         "path": "src/contradictions/scope.ts"
       },
       {
-        "commits": 5,
-        "lines": 161,
+        "commits": 2,
+        "lines": 159,
         "path": "src/contradictions/types.ts"
       },
       {
-        "commits": 7,
-        "lines": 474,
+        "commits": 2,
+        "lines": 452,
         "path": "src/cowork/derive.ts"
       },
       {
@@ -895,27 +887,27 @@
         "path": "src/cowork/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 221,
+        "commits": 1,
+        "lines": 211,
         "path": "src/cowork/markdown.ts"
       },
       {
-        "commits": 3,
-        "lines": 143,
+        "commits": 1,
+        "lines": 139,
         "path": "src/cowork/run.ts"
       },
       {
-        "commits": 5,
+        "commits": 1,
         "lines": 99,
         "path": "src/cowork/schema.ts"
       },
       {
-        "commits": 5,
+        "commits": 1,
         "lines": 113,
         "path": "src/cowork/types.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 42,
         "path": "src/discover/index.ts"
       },
@@ -930,17 +922,17 @@
         "path": "src/discover/relevance.ts"
       },
       {
-        "commits": 4,
-        "lines": 548,
+        "commits": 2,
+        "lines": 520,
         "path": "src/discover/run.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 99,
         "path": "src/discover/schema.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 119,
         "path": "src/discover/types.ts"
       },
@@ -950,8 +942,8 @@
         "path": "src/dispositions/schema.ts"
       },
       {
-        "commits": 8,
-        "lines": 267,
+        "commits": 1,
+        "lines": 245,
         "path": "src/errors.ts"
       },
       {
@@ -975,12 +967,12 @@
         "path": "src/freeze/markdown.ts"
       },
       {
-        "commits": 7,
-        "lines": 828,
+        "commits": 2,
+        "lines": 732,
         "path": "src/freeze/run.ts"
       },
       {
-        "commits": 3,
+        "commits": 2,
         "lines": 126,
         "path": "src/freeze/schema.ts"
       },
@@ -995,13 +987,13 @@
         "path": "src/gates/checks/accepted-claim-floor.ts"
       },
       {
-        "commits": 2,
-        "lines": 187,
+        "commits": 1,
+        "lines": 147,
         "path": "src/gates/checks/claim-integrity.ts"
       },
       {
-        "commits": 2,
-        "lines": 95,
+        "commits": 1,
+        "lines": 93,
         "path": "src/gates/checks/contradiction.ts"
       },
       {
@@ -1010,13 +1002,13 @@
         "path": "src/gates/checks/freshness.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 8,
         "path": "src/gates/checks/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 130,
+        "commits": 1,
+        "lines": 124,
         "path": "src/gates/checks/scope-integrity.ts"
       },
       {
@@ -1025,13 +1017,13 @@
         "path": "src/gates/checks/section-budget.ts"
       },
       {
-        "commits": 3,
-        "lines": 146,
+        "commits": 1,
+        "lines": 120,
         "path": "src/gates/checks/source-floor.ts"
       },
       {
-        "commits": 2,
-        "lines": 212,
+        "commits": 1,
+        "lines": 200,
         "path": "src/gates/checks/waivers.ts"
       },
       {
@@ -1045,28 +1037,28 @@
         "path": "src/gates/markdown.ts"
       },
       {
-        "commits": 8,
-        "lines": 477,
+        "commits": 2,
+        "lines": 439,
         "path": "src/gates/run.ts"
       },
       {
-        "commits": 5,
-        "lines": 118,
+        "commits": 1,
+        "lines": 114,
         "path": "src/gates/schema.ts"
       },
       {
-        "commits": 5,
-        "lines": 139,
+        "commits": 1,
+        "lines": 137,
         "path": "src/gates/types.ts"
       },
       {
-        "commits": 37,
-        "lines": 77,
+        "commits": 5,
+        "lines": 45,
         "path": "src/index.ts"
       },
       {
-        "commits": 6,
-        "lines": 765,
+        "commits": 1,
+        "lines": 583,
         "path": "src/indexer/build.ts"
       },
       {
@@ -1085,12 +1077,12 @@
         "path": "src/indexer/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 151,
+        "commits": 2,
+        "lines": 145,
         "path": "src/indexer/query.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 173,
         "path": "src/indexer/schema.ts"
       },
@@ -1100,8 +1092,8 @@
         "path": "src/indexer/sync.ts"
       },
       {
-        "commits": 3,
-        "lines": 113,
+        "commits": 1,
+        "lines": 111,
         "path": "src/indexer/types.ts"
       },
       {
@@ -1110,12 +1102,12 @@
         "path": "src/intake/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 148,
+        "commits": 1,
+        "lines": 142,
         "path": "src/intake/scaffold.ts"
       },
       {
-        "commits": 8,
+        "commits": 2,
         "lines": 233,
         "path": "src/intake/schema.ts"
       },
@@ -1125,18 +1117,18 @@
         "path": "src/intake/types.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 20,
         "path": "src/invalidate/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 205,
+        "commits": 1,
+        "lines": 201,
         "path": "src/invalidate/review.ts"
       },
       {
-        "commits": 2,
-        "lines": 322,
+        "commits": 1,
+        "lines": 318,
         "path": "src/invalidate/run.ts"
       },
       {
@@ -1150,8 +1142,8 @@
         "path": "src/invalidate/types.ts"
       },
       {
-        "commits": 11,
-        "lines": 367,
+        "commits": 4,
+        "lines": 353,
         "path": "src/mcp/client.ts"
       },
       {
@@ -1170,13 +1162,13 @@
         "path": "src/pack/publish/how-to-read.ts"
       },
       {
-        "commits": 5,
-        "lines": 262,
+        "commits": 1,
+        "lines": 200,
         "path": "src/pack/publish/index.ts"
       },
       {
-        "commits": 5,
-        "lines": 515,
+        "commits": 1,
+        "lines": 389,
         "path": "src/pack/publish/manifest.ts"
       },
       {
@@ -1195,13 +1187,13 @@
         "path": "src/pack/publish/types.ts"
       },
       {
-        "commits": 4,
-        "lines": 238,
+        "commits": 1,
+        "lines": 222,
         "path": "src/pack/publish/verify.ts"
       },
       {
-        "commits": 4,
-        "lines": 483,
+        "commits": 1,
+        "lines": 453,
         "path": "src/recover/action-graph.ts"
       },
       {
@@ -1210,8 +1202,8 @@
         "path": "src/recover/advisor.ts"
       },
       {
-        "commits": 6,
-        "lines": 592,
+        "commits": 2,
+        "lines": 542,
         "path": "src/recover/diagnose.ts"
       },
       {
@@ -1220,18 +1212,18 @@
         "path": "src/recover/fallback-cause.ts"
       },
       {
-        "commits": 2,
-        "lines": 107,
+        "commits": 1,
+        "lines": 103,
         "path": "src/recover/fallback.ts"
       },
       {
-        "commits": 2,
-        "lines": 85,
+        "commits": 1,
+        "lines": 83,
         "path": "src/recover/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 261,
+        "commits": 1,
+        "lines": 257,
         "path": "src/recover/markdown.ts"
       },
       {
@@ -1245,18 +1237,18 @@
         "path": "src/recover/regeneration-ledger.ts"
       },
       {
-        "commits": 6,
-        "lines": 962,
+        "commits": 2,
+        "lines": 638,
         "path": "src/recover/run.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 238,
         "path": "src/recover/schema.ts"
       },
       {
-        "commits": 4,
-        "lines": 356,
+        "commits": 1,
+        "lines": 354,
         "path": "src/recover/types.ts"
       },
       {
@@ -1265,28 +1257,28 @@
         "path": "src/recover/verifier.ts"
       },
       {
-        "commits": 7,
-        "lines": 179,
+        "commits": 1,
+        "lines": 171,
         "path": "src/review/decision.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 45,
         "path": "src/review/index.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 107,
         "path": "src/review/markdown.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 81,
         "path": "src/review/profiles.ts"
       },
       {
-        "commits": 4,
-        "lines": 210,
+        "commits": 2,
+        "lines": 192,
         "path": "src/review/promote.ts"
       },
       {
@@ -1295,33 +1287,33 @@
         "path": "src/review/reviewer-options-schema.ts"
       },
       {
-        "commits": 5,
-        "lines": 508,
+        "commits": 2,
+        "lines": 474,
         "path": "src/review/reviewers/heuristic.ts"
       },
       {
-        "commits": 2,
-        "lines": 26,
+        "commits": 1,
+        "lines": 20,
         "path": "src/review/reviewers/index.ts"
       },
       {
-        "commits": 12,
-        "lines": 500,
+        "commits": 3,
+        "lines": 446,
         "path": "src/review/reviewers/ollama-intern.ts"
       },
       {
-        "commits": 15,
-        "lines": 867,
+        "commits": 2,
+        "lines": 781,
         "path": "src/review/run.ts"
       },
       {
-        "commits": 9,
+        "commits": 3,
         "lines": 120,
         "path": "src/review/schema.ts"
       },
       {
-        "commits": 12,
-        "lines": 166,
+        "commits": 2,
+        "lines": 160,
         "path": "src/review/types.ts"
       },
       {
@@ -1330,8 +1322,8 @@
         "path": "src/section_report/index.ts"
       },
       {
-        "commits": 4,
-        "lines": 423,
+        "commits": 2,
+        "lines": 413,
         "path": "src/section_report/run.ts"
       },
       {
@@ -1345,8 +1337,8 @@
         "path": "src/sections/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 200,
+        "commits": 1,
+        "lines": 196,
         "path": "src/sections/scaffold.ts"
       },
       {
@@ -1365,18 +1357,18 @@
         "path": "src/sources/canonical-vendors.ts"
       },
       {
-        "commits": 7,
-        "lines": 237,
+        "commits": 3,
+        "lines": 153,
         "path": "src/sources/cards.ts"
       },
       {
-        "commits": 3,
+        "commits": 2,
         "lines": 130,
         "path": "src/sources/effective-card.ts"
       },
       {
-        "commits": 3,
-        "lines": 175,
+        "commits": 2,
+        "lines": 173,
         "path": "src/sources/excerpts/chunk.ts"
       },
       {
@@ -1410,23 +1402,23 @@
         "path": "src/sources/extractors/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 154,
+        "commits": 1,
+        "lines": 150,
         "path": "src/sources/extractors/ollama-intern.ts"
       },
       {
-        "commits": 7,
-        "lines": 635,
+        "commits": 4,
+        "lines": 627,
         "path": "src/sources/fetch.ts"
       },
       {
-        "commits": 9,
-        "lines": 510,
+        "commits": 3,
+        "lines": 390,
         "path": "src/sources/gather.ts"
       },
       {
-        "commits": 7,
-        "lines": 80,
+        "commits": 3,
+        "lines": 78,
         "path": "src/sources/index.ts"
       },
       {
@@ -1435,23 +1427,23 @@
         "path": "src/sources/rebuild-ledger.ts"
       },
       {
-        "commits": 7,
-        "lines": 128,
+        "commits": 3,
+        "lines": 126,
         "path": "src/sources/schema.ts"
       },
       {
-        "commits": 3,
-        "lines": 471,
+        "commits": 1,
+        "lines": 459,
         "path": "src/sources/severities.ts"
       },
       {
-        "commits": 6,
-        "lines": 636,
+        "commits": 2,
+        "lines": 566,
         "path": "src/sources/source-card-audit.ts"
       },
       {
-        "commits": 4,
-        "lines": 84,
+        "commits": 1,
+        "lines": 72,
         "path": "src/sources/source-card-overrides-schema.ts"
       },
       {
@@ -1465,13 +1457,13 @@
         "path": "src/sources/source-type-classifier.ts"
       },
       {
-        "commits": 3,
+        "commits": 2,
         "lines": 75,
         "path": "src/sources/types.ts"
       },
       {
-        "commits": 2,
-        "lines": 79,
+        "commits": 1,
+        "lines": 77,
         "path": "src/sources/url-input.ts"
       },
       {
@@ -1485,13 +1477,13 @@
         "path": "src/synth/derive.ts"
       },
       {
-        "commits": 4,
+        "commits": 1,
         "lines": 77,
         "path": "src/synth/index.ts"
       },
       {
-        "commits": 2,
-        "lines": 266,
+        "commits": 1,
+        "lines": 262,
         "path": "src/synth/markdown.ts"
       },
       {
@@ -1505,23 +1497,23 @@
         "path": "src/synth/partial-pack/classifier.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 201,
         "path": "src/synth/partial-pack/drafter.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 66,
         "path": "src/synth/partial-pack/index.ts"
       },
       {
-        "commits": 3,
-        "lines": 365,
+        "commits": 1,
+        "lines": 333,
         "path": "src/synth/partial-pack/markdown.ts"
       },
       {
-        "commits": 2,
-        "lines": 202,
+        "commits": 1,
+        "lines": 186,
         "path": "src/synth/partial-pack/prompt.ts"
       },
       {
@@ -1530,23 +1522,23 @@
         "path": "src/synth/partial-pack/recovery-embed.ts"
       },
       {
-        "commits": 4,
-        "lines": 834,
+        "commits": 2,
+        "lines": 526,
         "path": "src/synth/partial-pack/run.ts"
       },
       {
-        "commits": 3,
-        "lines": 174,
+        "commits": 1,
+        "lines": 172,
         "path": "src/synth/partial-pack/schema.ts"
       },
       {
-        "commits": 3,
-        "lines": 260,
+        "commits": 1,
+        "lines": 258,
         "path": "src/synth/partial-pack/types.ts"
       },
       {
-        "commits": 3,
-        "lines": 130,
+        "commits": 1,
+        "lines": 128,
         "path": "src/synth/prose/drafter.ts"
       },
       {
@@ -1555,38 +1547,38 @@
         "path": "src/synth/prose/index.ts"
       },
       {
-        "commits": 4,
-        "lines": 240,
+        "commits": 1,
+        "lines": 230,
         "path": "src/synth/prose/markdown.ts"
       },
       {
-        "commits": 5,
-        "lines": 264,
+        "commits": 1,
+        "lines": 196,
         "path": "src/synth/prose/planner.ts"
       },
       {
-        "commits": 4,
-        "lines": 272,
+        "commits": 1,
+        "lines": 232,
         "path": "src/synth/prose/prompt.ts"
       },
       {
-        "commits": 7,
-        "lines": 389,
+        "commits": 2,
+        "lines": 335,
         "path": "src/synth/prose/run.ts"
       },
       {
-        "commits": 5,
-        "lines": 385,
+        "commits": 2,
+        "lines": 381,
         "path": "src/synth/prose/types.ts"
       },
       {
-        "commits": 2,
-        "lines": 130,
+        "commits": 1,
+        "lines": 128,
         "path": "src/synth/prose/verifier.ts"
       },
       {
-        "commits": 4,
-        "lines": 222,
+        "commits": 2,
+        "lines": 212,
         "path": "src/synth/run.ts"
       },
       {
@@ -1595,13 +1587,13 @@
         "path": "src/synth/schema.ts"
       },
       {
-        "commits": 6,
-        "lines": 643,
+        "commits": 2,
+        "lines": 613,
         "path": "src/synth/section-run.ts"
       },
       {
-        "commits": 4,
-        "lines": 160,
+        "commits": 1,
+        "lines": 158,
         "path": "src/synth/types.ts"
       },
       {
@@ -1610,8 +1602,8 @@
         "path": "src/triage/index.ts"
       },
       {
-        "commits": 4,
-        "lines": 459,
+        "commits": 3,
+        "lines": 451,
         "path": "src/triage/run.ts"
       },
       {
@@ -1650,13 +1642,13 @@
         "path": "templates/pack/prompts/section-worker.md"
       },
       {
-        "commits": 5,
-        "lines": 1040,
+        "commits": 1,
+        "lines": 1032,
         "path": "test/audit-aggregate.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 290,
+        "commits": 1,
+        "lines": 284,
         "path": "test/audit-run.test.ts"
       },
       {
@@ -1705,28 +1697,28 @@
         "path": "test/claims-extract-severity-quarantine.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 394,
+        "commits": 1,
+        "lines": 368,
         "path": "test/claims-extract.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 538,
+        "commits": 1,
+        "lines": 512,
         "path": "test/claims-extractor-mcp.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 124,
+        "commits": 1,
+        "lines": 112,
         "path": "test/claims-heuristic.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 110,
+        "commits": 1,
+        "lines": 108,
         "path": "test/claims-ollama-intern-null.test.ts"
       },
       {
-        "commits": 4,
-        "lines": 476,
+        "commits": 1,
+        "lines": 438,
         "path": "test/claims-ollama-intern.test.ts"
       },
       {
@@ -1740,13 +1732,13 @@
         "path": "test/claims-repair-scope-interactive.test.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 129,
         "path": "test/claims-schema.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 206,
+        "commits": 1,
+        "lines": 204,
         "path": "test/claims-scope-repairs-ledger.test.ts"
       },
       {
@@ -1800,8 +1792,8 @@
         "path": "test/closure-ledger/effective-accepted.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 445,
+        "commits": 1,
+        "lines": 433,
         "path": "test/contradictions-detector-flag.test.ts"
       },
       {
@@ -1815,8 +1807,8 @@
         "path": "test/contradictions-map-malformed.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 457,
+        "commits": 1,
+        "lines": 441,
         "path": "test/contradictions-map.test.ts"
       },
       {
@@ -1855,8 +1847,8 @@
         "path": "test/contradictions-scope.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 740,
+        "commits": 1,
+        "lines": 714,
         "path": "test/cowork-derive.test.ts"
       },
       {
@@ -1870,13 +1862,13 @@
         "path": "test/cowork-markdown.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 269,
+        "commits": 1,
+        "lines": 267,
         "path": "test/cowork-run.test.ts"
       },
       {
-        "commits": 4,
-        "lines": 557,
+        "commits": 1,
+        "lines": 539,
         "path": "test/critic-claim-routing.test.ts"
       },
       {
@@ -1885,8 +1877,8 @@
         "path": "test/critic-mcp.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 268,
+        "commits": 1,
+        "lines": 258,
         "path": "test/critic-prompt-drift.test.ts"
       },
       {
@@ -1925,8 +1917,8 @@
         "path": "test/freeze-reason-codes.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 387,
+        "commits": 1,
+        "lines": 383,
         "path": "test/freeze-run.test.ts"
       },
       {
@@ -1940,8 +1932,8 @@
         "path": "test/gate-frame-excluded.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 590,
+        "commits": 1,
+        "lines": 586,
         "path": "test/gates-checks.test.ts"
       },
       {
@@ -1955,13 +1947,13 @@
         "path": "test/gates-malformed-resilience.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 87,
+        "commits": 1,
+        "lines": 85,
         "path": "test/gates-markdown.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 823,
+        "commits": 1,
+        "lines": 815,
         "path": "test/gates-run.test.ts"
       },
       {
@@ -1970,8 +1962,8 @@
         "path": "test/gates-schema.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 388,
+        "commits": 1,
+        "lines": 382,
         "path": "test/indexer-build.test.ts"
       },
       {
@@ -1980,8 +1972,8 @@
         "path": "test/indexer-export.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 235,
+        "commits": 1,
+        "lines": 233,
         "path": "test/indexer-query.test.ts"
       },
       {
@@ -1990,7 +1982,7 @@
         "path": "test/indexer/build-malformed-resilience.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 162,
         "path": "test/intake.test.ts"
       },
@@ -2015,13 +2007,13 @@
         "path": "test/mcp-client-discovery.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 201,
+        "commits": 1,
+        "lines": 195,
         "path": "test/pack-publish/f36-admission.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 287,
+        "commits": 1,
+        "lines": 271,
         "path": "test/pack-publish/helpers.ts"
       },
       {
@@ -2030,8 +2022,8 @@
         "path": "test/pack-publish/how-to-read.test.ts"
       },
       {
-        "commits": 15,
-        "lines": 150,
+        "commits": 3,
+        "lines": 108,
         "path": "test/pack-publish/manifest.test.ts"
       },
       {
@@ -2040,8 +2032,8 @@
         "path": "test/pack-publish/publish-force-clears.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 278,
+        "commits": 1,
+        "lines": 260,
         "path": "test/pack-publish/publish.test.ts"
       },
       {
@@ -2075,8 +2067,8 @@
         "path": "test/partial-pack-recovery-embed.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 319,
+        "commits": 1,
+        "lines": 317,
         "path": "test/progress-emission.test.ts"
       },
       {
@@ -2145,8 +2137,8 @@
         "path": "test/r018-planner-timeout-override.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 246,
+        "commits": 1,
+        "lines": 244,
         "path": "test/r019-live-replay.test.ts"
       },
       {
@@ -2235,32 +2227,32 @@
         "path": "test/review-frame-excluded-skip.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 326,
         "path": "test/review-heuristic.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 98,
         "path": "test/review-markdown.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 297,
         "path": "test/review-ollama-intern.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 461,
+        "commits": 1,
+        "lines": 459,
         "path": "test/review-run.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 161,
+        "commits": 1,
+        "lines": 131,
         "path": "test/review-schema.test.ts"
       },
       {
-        "commits": 3,
+        "commits": 1,
         "lines": 804,
         "path": "test/reviewer-options.test.ts"
       },
@@ -2275,17 +2267,17 @@
         "path": "test/section-scoped-waivers.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 174,
+        "commits": 1,
+        "lines": 172,
         "path": "test/sections.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 148,
         "path": "test/sources-fetch.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 247,
         "path": "test/sources-gather.test.ts"
       },
@@ -2295,8 +2287,8 @@
         "path": "test/sources-heuristic-extractor.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 191,
+        "commits": 1,
+        "lines": 189,
         "path": "test/sources-ollama-intern-extractor.test.ts"
       },
       {
@@ -2355,8 +2347,8 @@
         "path": "test/sources/source-card-audit-severities.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 473,
+        "commits": 1,
+        "lines": 469,
         "path": "test/sources/source-card-audit.test.ts"
       },
       {
@@ -2365,13 +2357,13 @@
         "path": "test/sources/source-card-overrides-clear-severities.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 69,
+        "commits": 1,
+        "lines": 67,
         "path": "test/sources/source-card-overrides-schema.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 464,
+        "commits": 1,
+        "lines": 446,
         "path": "test/sources/source-card-overrides.test.ts"
       },
       {
@@ -2680,12 +2672,12 @@
         "path": "test/synth-partial-pack-integration.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 433,
+        "commits": 1,
+        "lines": 429,
         "path": "test/synth-partial-pack-retry.test.ts"
       },
       {
-        "commits": 2,
+        "commits": 1,
         "lines": 264,
         "path": "test/synth-partial-pack-schema.test.ts"
       },
@@ -2705,28 +2697,28 @@
         "path": "test/synth-prose-drafter.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 271,
+        "commits": 1,
+        "lines": 263,
         "path": "test/synth-prose-hard-ban.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 490,
+        "commits": 1,
+        "lines": 484,
         "path": "test/synth-prose-integration.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 184,
+        "commits": 1,
+        "lines": 178,
         "path": "test/synth-prose-planner-chunk.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 185,
+        "commits": 1,
+        "lines": 173,
         "path": "test/synth-prose-planner.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 369,
+        "commits": 1,
+        "lines": 361,
         "path": "test/synth-prose-status.test.ts"
       },
       {
@@ -2735,8 +2727,8 @@
         "path": "test/synth-prose-verifier.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 336,
+        "commits": 1,
+        "lines": 334,
         "path": "test/synth-run.test.ts"
       },
       {
@@ -2755,127 +2747,12 @@
         "path": "test/util-progress.test.ts"
       },
       {
-        "commits": 2,
-        "lines": 124,
-        "path": "tmp/reviewer-calibration/fixture/CLAUDE.md"
-      },
-      {
-        "commits": 2,
-        "lines": 42,
-        "path": "tmp/reviewer-calibration/fixture/audits/01-calibration-claim-triage.json"
-      },
-      {
-        "commits": 2,
-        "lines": 26,
-        "path": "tmp/reviewer-calibration/fixture/audits/01-calibration-findings.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 974,
-        "path": "tmp/reviewer-calibration/fixture/audits/01-calibration-review.json"
-      },
-      {
-        "commits": 2,
-        "lines": 538,
-        "path": "tmp/reviewer-calibration/fixture/audits/01-calibration-review.md"
-      },
-      {
-        "commits": 2,
-        "lines": 0,
-        "path": "tmp/reviewer-calibration/fixture/evidence/citation-ledger.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 22,
-        "path": "tmp/reviewer-calibration/fixture/evidence/excerpts/src_aaaaaaaaaaaa.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 2,
-        "path": "tmp/reviewer-calibration/fixture/evidence/fetch-log.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 2,
-        "path": "tmp/reviewer-calibration/fixture/evidence/raw/src_aaaaaaaaaaaa.html"
-      },
-      {
-        "commits": 2,
-        "lines": 2,
-        "path": "tmp/reviewer-calibration/fixture/evidence/source-cards/src_aaaaaaaaaaaa.json"
-      },
-      {
-        "commits": 2,
-        "lines": 94,
-        "path": "tmp/reviewer-calibration/fixture/prompts/adversarial-reviewer.md"
-      },
-      {
-        "commits": 2,
-        "lines": 78,
-        "path": "tmp/reviewer-calibration/fixture/prompts/cowork-master.md"
-      },
-      {
-        "commits": 2,
-        "lines": 96,
-        "path": "tmp/reviewer-calibration/fixture/prompts/section-worker.md"
-      },
-      {
-        "commits": 2,
-        "lines": 84,
-        "path": "tmp/reviewer-calibration/fixture/research.yaml"
-      },
-      {
-        "commits": 2,
-        "lines": 40,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/brief.md"
-      },
-      {
-        "commits": 2,
-        "lines": 36,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/claim-reviews.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 36,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/claim-triage.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 96,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/claim-triage.md"
-      },
-      {
-        "commits": 2,
-        "lines": 36,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/claims.jsonl"
-      },
-      {
-        "commits": 2,
-        "lines": 28,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/contradictions.md"
-      },
-      {
-        "commits": 2,
-        "lines": 16,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/gates.yaml"
-      },
-      {
-        "commits": 2,
-        "lines": 18,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/open_questions.md"
-      },
-      {
-        "commits": 2,
-        "lines": 2,
-        "path": "tmp/reviewer-calibration/fixture/sections/01-calibration/sources.jsonl"
-      },
-      {
         "commits": 1,
         "lines": 19,
         "path": "tsconfig.json"
       },
       {
-        "commits": 4,
+        "commits": 1,
         "lines": 19,
         "path": "tsup.config.ts"
       },
@@ -2888,216 +2765,13 @@
   },
   "confidence": {
     "level": "low",
-    "reason": "fewer than 25 source files reach 10 revisions in the window"
+    "reason": "fewer than 30 qualifying commits in the window, and fewer than 25 source files reach 10 revisions"
   },
-  "generatedAt": "2026-10-14T22:50:40.940Z",
+  "generatedAt": "2026-10-15T01:16:21.819Z",
   "generatedFrom": {
-    "commit": "8ff13a502bb2f925a837de8f0ccedc915674e158"
+    "commit": "c620175e18979020a958385c91ca29573b82bbcb"
   },
   "pairs": [
-    {
-      "a": "CHANGELOG.md",
-      "b": "src/index.ts",
-      "either": 50,
-      "shared": 31,
-      "strength": 0.62
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.fr.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.hi.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.it.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.ja.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.pt-BR.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.es.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.fr.md",
-      "b": "README.hi.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.fr.md",
-      "b": "README.it.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.fr.md",
-      "b": "README.ja.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.fr.md",
-      "b": "README.pt-BR.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.fr.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.fr.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.hi.md",
-      "b": "README.it.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.hi.md",
-      "b": "README.ja.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.hi.md",
-      "b": "README.pt-BR.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.hi.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.hi.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.it.md",
-      "b": "README.ja.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.it.md",
-      "b": "README.pt-BR.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.it.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.it.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.ja.md",
-      "b": "README.pt-BR.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.ja.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.ja.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.pt-BR.md",
-      "b": "README.zh.md",
-      "either": 19,
-      "shared": 19,
-      "strength": 1
-    },
-    {
-      "a": "README.pt-BR.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
-    {
-      "a": "README.zh.md",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 22,
-      "shared": 12,
-      "strength": 0.545455
-    },
     {
       "a": "atlas/README.md",
       "b": "atlas/page.json",
@@ -3143,184 +2817,9 @@
     {
       "a": "package-lock.json",
       "b": "package.json",
-      "either": 29,
-      "shared": 19,
-      "strength": 0.655172
-    },
-    {
-      "a": "package-lock.json",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 23,
-      "shared": 12,
-      "strength": 0.521739
-    },
-    {
-      "a": "package.json",
-      "b": "src/index.ts",
-      "either": 42,
-      "shared": 22,
-      "strength": 0.52381
-    },
-    {
-      "a": "site/src/content/docs/handbook/recovery.md",
-      "b": "site/src/content/docs/handbook/reference.md",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
-    },
-    {
-      "a": "site/src/content/docs/handbook/recovery.md",
-      "b": "site/src/content/docs/handbook/source-card-audit.md",
-      "either": 6,
-      "shared": 4,
-      "strength": 0.666667
-    },
-    {
-      "a": "src/audit/aggregate.ts",
-      "b": "test/audit-aggregate.test.ts",
       "either": 6,
       "shared": 5,
       "strength": 0.833333
-    },
-    {
-      "a": "src/claims/extract.ts",
-      "b": "src/claims/schema.ts",
-      "either": 12,
-      "shared": 6,
-      "strength": 0.5
-    },
-    {
-      "a": "src/claims/extract.ts",
-      "b": "src/claims/types.ts",
-      "either": 12,
-      "shared": 9,
-      "strength": 0.75
-    },
-    {
-      "a": "src/claims/extractors/mcp.ts",
-      "b": "src/claims/schema.ts",
-      "either": 8,
-      "shared": 5,
-      "strength": 0.625
-    },
-    {
-      "a": "src/claims/extractors/mcp.ts",
-      "b": "src/claims/types.ts",
-      "either": 10,
-      "shared": 6,
-      "strength": 0.6
-    },
-    {
-      "a": "src/claims/schema.ts",
-      "b": "src/claims/types.ts",
-      "either": 10,
-      "shared": 7,
-      "strength": 0.7
-    },
-    {
-      "a": "src/contradictions/detectors/ollama-intern.ts",
-      "b": "src/contradictions/map.ts",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/schema.ts",
-      "either": 6,
-      "shared": 5,
-      "strength": 0.833333
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/types.ts",
-      "either": 6,
-      "shared": 5,
-      "strength": 0.833333
-    },
-    {
-      "a": "src/cowork/schema.ts",
-      "b": "src/cowork/types.ts",
-      "either": 5,
-      "shared": 5,
-      "strength": 1
-    },
-    {
-      "a": "src/gates/run.ts",
-      "b": "src/gates/schema.ts",
-      "either": 8,
-      "shared": 4,
-      "strength": 0.5
-    },
-    {
-      "a": "src/gates/run.ts",
-      "b": "src/gates/types.ts",
-      "either": 7,
-      "shared": 5,
-      "strength": 0.714286
-    },
-    {
-      "a": "src/mcp/client.ts",
-      "b": "test/pack-publish/manifest.test.ts",
-      "either": 16,
-      "shared": 8,
-      "strength": 0.5
-    },
-    {
-      "a": "src/recover/diagnose.ts",
-      "b": "src/recover/run.ts",
-      "either": 6,
-      "shared": 4,
-      "strength": 0.666667
-    },
-    {
-      "a": "src/review/decision.ts",
-      "b": "src/review/schema.ts",
-      "either": 10,
-      "shared": 5,
-      "strength": 0.5
-    },
-    {
-      "a": "src/review/run.ts",
-      "b": "src/review/types.ts",
-      "either": 15,
-      "shared": 9,
-      "strength": 0.6
-    },
-    {
-      "a": "src/sources/cards.ts",
-      "b": "src/sources/fetch.ts",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
-    },
-    {
-      "a": "src/sources/cards.ts",
-      "b": "src/sources/index.ts",
-      "either": 8,
-      "shared": 5,
-      "strength": 0.625
-    },
-    {
-      "a": "src/sources/cards.ts",
-      "b": "src/sources/schema.ts",
-      "either": 8,
-      "shared": 4,
-      "strength": 0.5
-    },
-    {
-      "a": "src/sources/fetch.ts",
-      "b": "src/sources/index.ts",
-      "either": 8,
-      "shared": 4,
-      "strength": 0.5
-    },
-    {
-      "a": "src/sources/fetch.ts",
-      "b": "src/sources/schema.ts",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
     }
   ],
   "parameters": {
@@ -3332,17 +2831,17 @@
     "fallenShared": 3,
     "floor": "fallen",
     "floorHeld": false,
-    "floorTrigger": "revision-depth",
-    "headDate": "2026-10-14T18:48:24-04:00",
-    "inScopeFiles": 516,
+    "floorTrigger": "both",
+    "headDate": "2026-10-14T16:18:53-07:00",
+    "inScopeFiles": 520,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 156,
+    "qualifyingCommits": 27,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-17T22:48:24.000Z",
+    "since": "2026-04-17T23:18:53.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",
@@ -3358,7 +2857,7 @@
     ],
     "sourceFileReach": 20,
     "sourceFileRise": 25,
-    "sourceFilesReachingStrongFloor": 7,
+    "sourceFilesReachingStrongFloor": 0,
     "strength": 0.5,
     "windowDays": 180
   },
