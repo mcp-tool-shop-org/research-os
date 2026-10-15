@@ -4,6 +4,12 @@ All notable changes to `research-os` are documented here.
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-10-15
+
+### Security
+
+- **Dependency updates; no code changed.** Lockfile only, within the declared ranges: `@modelcontextprotocol/sdk` 1.30.0 to 1.32.1 (a high advisory, fixed in 1.31.0), `fast-uri` 3.1.8, `ip-address` 10.7.4, `proxy-addr` 2.0.8 and `source-map-js` 1.2.2. One low advisory stays open: `esbuild` 0.27.x (GHSA-g7r4-m6w7-qqqr, an arbitrary file read in esbuild's own development server on Windows), dev-only; its fix needs a newer `vite`.
+
 ## [0.15.1] - 2026-10-14
 
 ### Fixed

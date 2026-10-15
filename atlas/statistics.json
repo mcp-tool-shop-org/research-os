@@ -203,7 +203,7 @@
       },
       {
         "commits": 8,
-        "lines": 1959,
+        "lines": 1966,
         "path": "CHANGELOG.md"
       },
       {
@@ -212,43 +212,43 @@
         "path": "LICENSE"
       },
       {
-        "commits": 4,
-        "lines": 849,
+        "commits": 3,
+        "lines": 847,
         "path": "README.es.md"
       },
       {
-        "commits": 4,
-        "lines": 824,
+        "commits": 3,
+        "lines": 822,
         "path": "README.fr.md"
       },
       {
-        "commits": 4,
-        "lines": 856,
+        "commits": 3,
+        "lines": 854,
         "path": "README.hi.md"
       },
       {
-        "commits": 4,
-        "lines": 824,
+        "commits": 3,
+        "lines": 822,
         "path": "README.it.md"
       },
       {
-        "commits": 4,
-        "lines": 894,
+        "commits": 3,
+        "lines": 892,
         "path": "README.ja.md"
       },
       {
-        "commits": 4,
-        "lines": 513,
+        "commits": 3,
+        "lines": 509,
         "path": "README.md"
       },
       {
-        "commits": 4,
-        "lines": 822,
+        "commits": 3,
+        "lines": 820,
         "path": "README.pt-BR.md"
       },
       {
-        "commits": 4,
-        "lines": 866,
+        "commits": 3,
+        "lines": 864,
         "path": "README.zh.md"
       },
       {
@@ -267,8 +267,8 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 8,
-        "lines": 199,
+        "commits": 9,
+        "lines": 229,
         "path": "atlas/README.md"
       },
       {
@@ -277,18 +277,18 @@
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 8,
-        "lines": 980,
+        "commits": 9,
+        "lines": 1135,
         "path": "atlas/page.json"
       },
       {
-        "commits": 8,
-        "lines": 3901,
+        "commits": 9,
+        "lines": 5232,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 8,
-        "lines": 18397,
+        "commits": 9,
+        "lines": 18597,
         "path": "atlas/structure.json"
       },
       {
@@ -742,8 +742,8 @@
         "path": "src/claims/extract-completion-ledger.ts"
       },
       {
-        "commits": 3,
-        "lines": 909,
+        "commits": 4,
+        "lines": 912,
         "path": "src/claims/extract.ts"
       },
       {
@@ -1142,8 +1142,8 @@
         "path": "src/invalidate/types.ts"
       },
       {
-        "commits": 4,
-        "lines": 353,
+        "commits": 3,
+        "lines": 351,
         "path": "src/mcp/client.ts"
       },
       {
@@ -1287,8 +1287,8 @@
         "path": "src/review/reviewer-options-schema.ts"
       },
       {
-        "commits": 2,
-        "lines": 474,
+        "commits": 3,
+        "lines": 477,
         "path": "src/review/reviewers/heuristic.ts"
       },
       {
@@ -1367,8 +1367,8 @@
         "path": "src/sources/effective-card.ts"
       },
       {
-        "commits": 2,
-        "lines": 173,
+        "commits": 3,
+        "lines": 200,
         "path": "src/sources/excerpts/chunk.ts"
       },
       {
@@ -1392,8 +1392,8 @@
         "path": "src/sources/extractor.ts"
       },
       {
-        "commits": 1,
-        "lines": 134,
+        "commits": 2,
+        "lines": 147,
         "path": "src/sources/extractors/heuristic.ts"
       },
       {
@@ -1412,8 +1412,8 @@
         "path": "src/sources/fetch.ts"
       },
       {
-        "commits": 3,
-        "lines": 390,
+        "commits": 4,
+        "lines": 396,
         "path": "src/sources/gather.ts"
       },
       {
@@ -1615,6 +1615,11 @@
         "commits": 1,
         "lines": 23,
         "path": "src/triage/types.ts"
+      },
+      {
+        "commits": 1,
+        "lines": 68,
+        "path": "src/util/html-text.ts"
       },
       {
         "commits": 1,
@@ -1963,6 +1968,11 @@
       },
       {
         "commits": 1,
+        "lines": 48,
+        "path": "test/html-text-linear.test.ts"
+      },
+      {
+        "commits": 1,
         "lines": 382,
         "path": "test/indexer-build.test.ts"
       },
@@ -2022,8 +2032,8 @@
         "path": "test/pack-publish/how-to-read.test.ts"
       },
       {
-        "commits": 3,
-        "lines": 108,
+        "commits": 2,
+        "lines": 106,
         "path": "test/pack-publish/manifest.test.ts"
       },
       {
@@ -2285,6 +2295,11 @@
         "commits": 1,
         "lines": 86,
         "path": "test/sources-heuristic-extractor.test.ts"
+      },
+      {
+        "commits": 1,
+        "lines": 46,
+        "path": "test/sources-heuristic-source-type-host.test.ts"
       },
       {
         "commits": 1,
@@ -2743,6 +2758,11 @@
       },
       {
         "commits": 1,
+        "lines": 63,
+        "path": "test/util-html-text.test.ts"
+      },
+      {
+        "commits": 1,
         "lines": 155,
         "path": "test/util-progress.test.ts"
       },
@@ -2767,51 +2787,51 @@
     "level": "low",
     "reason": "fewer than 30 qualifying commits in the window, and fewer than 25 source files reach 10 revisions"
   },
-  "generatedAt": "2026-10-15T01:16:21.819Z",
+  "generatedAt": "2026-10-15T02:36:02.508Z",
   "generatedFrom": {
-    "commit": "c620175e18979020a958385c91ca29573b82bbcb"
+    "commit": "d0913387ca4a7b5fa598db4d0c9e3dd80250468c"
   },
   "pairs": [
     {
       "a": "atlas/README.md",
       "b": "atlas/page.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
       "a": "atlas/README.md",
       "b": "atlas/statistics.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
       "a": "atlas/README.md",
       "b": "atlas/structure.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
       "a": "atlas/page.json",
       "b": "atlas/statistics.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
       "a": "atlas/page.json",
       "b": "atlas/structure.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
       "a": "atlas/statistics.json",
       "b": "atlas/structure.json",
-      "either": 6,
-      "shared": 6,
+      "either": 7,
+      "shared": 7,
       "strength": 1
     },
     {
@@ -2832,7 +2852,7 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "both",
-    "headDate": "2026-10-14T16:18:53-07:00",
+    "headDate": "2026-10-14T18:33:06-07:00",
     "inScopeFiles": 520,
     "pinnedStart": null,
     "priorFloor": "fallen",
@@ -2841,7 +2861,7 @@
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-17T23:18:53.000Z",
+    "since": "2026-04-18T01:33:06.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",

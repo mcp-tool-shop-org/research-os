@@ -36,4 +36,4 @@ export {
   NoReviewerAvailableError,
 } from './errors.js';
 
-export const RESEARCH_OS_VERSION = '0.15.1';
+export const RESEARCH_OS_VERSION = '0.15.2';
