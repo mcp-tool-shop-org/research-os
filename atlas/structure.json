@@ -13,7 +13,7 @@
           "path": ".github/dependabot.yml"
         },
         {
-          "hash": "bcd60d564b807328f22bb626151f0b959a1164b77057bd07f1038afcb33715e8",
+          "hash": "dfed0d64c53e74385275ff5b940fd2dba6b59a640822c61fcda4703ea9ed3115",
           "path": ".github/workflows/ci.yml"
         },
         {
@@ -309,11 +309,11 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "365c040a410590988c6d75e271a1d22ec13283b326c4a1c658a8ca0da9298679",
+          "hash": "96002f215f883ab0c0a3bc00d334ba34cdde3fc3681ef56d8a58c180b3cbaa8f",
           "path": "package-lock.json"
         },
         {
-          "hash": "f33afb866071a85f15a57f9f6a626f34704ec686bbe09304bcc5d8d2e495dd97",
+          "hash": "1981cfa8bded58ea96f6123f5873a0cb0e9914fd8d3c3a5fe9ac1a7a6b99cd3f",
           "path": "package.json"
         },
         {
@@ -445,11 +445,11 @@
           "path": "site/astro.config.mjs"
         },
         {
-          "hash": "bd15e57c9afd80af4ea9fdcdfffe4951583c50219e3877d6c634e49700536f2c",
+          "hash": "6cf2cc0e835d1b7dd48c7058a6cc06c07c385e98697077debe7bd62eb0f11486",
           "path": "site/package-lock.json"
         },
         {
-          "hash": "9c39e620ebae2c5718ecd8c6188bd3451409a614ec8f5308dc15d5fd886e5b91",
+          "hash": "3d6a0ba855f8b5fdd67cf410eca7311b73b2cc857a2758f8899d0b4c8e9528d9",
           "path": "site/package.json"
         },
         {
@@ -12151,9 +12151,9 @@
       "to": "src"
     }
   ],
-  "engine": "1.24.0",
+  "engine": "1.26.0",
   "generatedFrom": {
-    "commit": "d0913387ca4a7b5fa598db4d0c9e3dd80250468c",
+    "commit": "b95c12a83de1b9719916572a5027ef8df36fc24a",
     "tracked": 515
   },
   "landings": [
@@ -12207,7 +12207,8 @@
           "by": "scripts/reviewer-calibration.mjs",
           "confidence": "ast"
         }
-      ]
+      ],
+      "writesInto": true
     },
     {
       "readers": [
