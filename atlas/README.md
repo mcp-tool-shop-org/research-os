@@ -1,14 +1,14 @@
 # research-os: how it works
 
-Mapped at 2026-10-15 from commit d091338 by Atlas 1.24.0.
+Mapped at 2026-11-11 from commit b95c12a by Atlas 1.26.0.
 
 ## What this is
 
 10 parts, mostly TypeScript (426 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.
 
-## What changed since 2026-10-15 (c620175)
+## What changed since 2026-10-15 (d091338)
 
-Nothing structural changed since 2026-10-15; 4 files changed content.
+Nothing structural changed since 2026-10-15; 5 files changed content.
 
 ## What comes in
 
@@ -44,9 +44,15 @@ CI writes nothing this map can see.
 
 ## What tends to change together
 
-No two source files changed together often enough to name.
+- **src/cowork/schema.ts** and **src/cowork/types.ts** changed together in 5 of 5 commits, inside the src part.
+- **src/audit/aggregate.ts** and **test/audit-aggregate.test.ts** changed together in 5 of 6 commits, and the test part imports the src part.
+- **src/cowork/derive.ts** and **src/cowork/schema.ts** changed together in 5 of 6 commits, inside the src part.
+- **src/cowork/derive.ts** and **src/cowork/types.ts** changed together in 5 of 6 commits, inside the src part.
+- **src/gates/run.ts** and **src/gates/types.ts** changed together in 5 of 7 commits, inside the src part.
 
-Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits.
+Confidence is low: fewer than 25 source files reach 10 revisions in the window.
+
+Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do.
 
 ## What no test touches
 
@@ -54,7 +60,7 @@ Window: 180 days; a pair counts from 3 shared commits, since the window holds fe
 
 ## Written but never read
 
-- **calibration/reviewer-profiles/** is written by scripts/reviewer-calibration.mjs and read by nothing else in this repository.
+- **calibration/reviewer-profiles/** holds files written by scripts/reviewer-calibration.mjs and read by nothing else in this repository.
 
 ## Helpers that look duplicated
 
@@ -62,7 +68,7 @@ No two parts export a helper that looks alike.
 
 ## Generated, never hand-edited
 
-- **calibration/reviewer-profiles/** is written by scripts/reviewer-calibration.mjs.
+- **calibration/reviewer-profiles/** holds files written by scripts/reviewer-calibration.mjs.
 
 ## Hand-authored
 
@@ -82,6 +88,6 @@ Read those in order to follow one pull request end to end.
 - 47 writes and 142 reads go to a path their caller passes, not to this repository.
 - 2 reads go to the directory the command is run in (README.md), not to this repository.
 - 2 commands are built at run time and not followed, 1 of them in tests.
-- Statistics confidence is low: fewer than 30 qualifying commits in the window, and fewer than 25 source files reach 10 revisions.
+- Statistics confidence is low: fewer than 25 source files reach 10 revisions in the window.
 
 Regenerate with `npx --yes @dogfood-lab/atlas map`.
