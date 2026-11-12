@@ -309,11 +309,11 @@
           "path": "eslint.config.js"
         },
         {
-          "hash": "96002f215f883ab0c0a3bc00d334ba34cdde3fc3681ef56d8a58c180b3cbaa8f",
+          "hash": "24a8ff790be4f4b4a17e41cb77a451d8a67a11e558ed8a74d230260680ca82a4",
           "path": "package-lock.json"
         },
         {
-          "hash": "1981cfa8bded58ea96f6123f5873a0cb0e9914fd8d3c3a5fe9ac1a7a6b99cd3f",
+          "hash": "e445d600d7f83a3dc9ada746eeb8b66e9d12dc16be98e30600f184d63080312e",
           "path": "package.json"
         },
         {
@@ -445,7 +445,7 @@
           "path": "site/astro.config.mjs"
         },
         {
-          "hash": "6cf2cc0e835d1b7dd48c7058a6cc06c07c385e98697077debe7bd62eb0f11486",
+          "hash": "314f7e04e4200034406290e5b29d1d911c158b16b5cca2c01d2f98b1781d5151",
           "path": "site/package-lock.json"
         },
         {
@@ -12153,7 +12153,7 @@
   ],
   "engine": "1.26.0",
   "generatedFrom": {
-    "commit": "b95c12a83de1b9719916572a5027ef8df36fc24a",
+    "commit": "f1d1e3dd388b32653b2371871fbe792f6abb7aa8",
     "tracked": 515
   },
   "landings": [

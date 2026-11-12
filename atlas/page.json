@@ -32,107 +32,30 @@
   "changes": {
     "fileCounts": {
       "added": 0,
-      "changed": 5,
+      "changed": 3,
       "moved": 0,
-      "parts": 3,
+      "parts": 2,
       "removed": 0
     },
     "items": [
       {
         "kind": "counts",
-        "sentence": "Nothing structural changed since 2026-10-15; 5 files changed content.",
+        "sentence": "Nothing structural changed since 2026-11-11; 3 files changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "d0913387ca4a7b5fa598db4d0c9e3dd80250468c",
-      "generatedAt": "2026-10-15T02:36:02.508Z"
+      "commit": "b95c12a83de1b9719916572a5027ef8df36fc24a",
+      "generatedAt": "2026-11-11T22:34:28.927Z"
     },
     "unchanged": true
   },
-  "changesTogether": [
-    {
-      "a": "src/cowork/schema.ts",
-      "b": "src/cowork/types.ts",
-      "either": 5,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/audit/aggregate.ts",
-      "b": "test/audit-aggregate.test.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "test"
-      ],
-      "parts": [
-        "src",
-        "test"
-      ],
-      "relation": "b-imports-a",
-      "shared": 5
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/schema.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/cowork/derive.ts",
-      "b": "src/cowork/types.ts",
-      "either": 6,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    },
-    {
-      "a": "src/gates/run.ts",
-      "b": "src/gates/types.ts",
-      "either": 7,
-      "partLabels": [
-        "src",
-        "src"
-      ],
-      "parts": [
-        "src",
-        "src"
-      ],
-      "relation": "inside",
-      "shared": 5
-    }
-  ],
+  "changesTogether": [],
   "changesTogetherNote": [
-    "Confidence is low: fewer than 25 source files reach 10 revisions in the window.",
-    "Window: 180 days; a pair counts from 3 shared commits, since 7 source files reach 10 revisions; the floor rises to 10 when 25 do."
+    "Window: 180 days; a pair counts from 3 shared commits, since 0 source files reach 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "b95c12a83de1b9719916572a5027ef8df36fc24a",
+  "commit": "f1d1e3dd388b32653b2371871fbe792f6abb7aa8",
   "defaultBranch": "main",
   "derived": "10 parts, mostly TypeScript (426 files), JavaScript (7), CSS (2) and Astro (1). Work enters through 5 doors; CI and Release each reach 2 parts, and CI is followed because a pull request goes through it. It publishes to npm. It deploys a site to GitHub Pages. People run research-os. People import @mcptoolshop/research-os.",
   "doors": [
@@ -631,7 +554,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-11-11T22:34:28.927Z",
+  "generatedAt": "2026-11-12T23:54:07.251Z",
   "limits": [
     "1 import could not be resolved: `src/indexer/sync.ts` loads `@mcptoolshop/repo-knowledge` when it is installed, which is not declared.",
     "12 writes and 7 reads use paths built at run time and are not named here.",
